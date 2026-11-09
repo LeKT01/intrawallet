@@ -228,3 +228,16 @@ form input::placeholder { color: #56657a; opacity: 1; }
 .asset-market { color: var(--muted); font-size: .83rem; padding: 0 6px 10px; }
 .asset-market strong { color: var(--ink); }
 .asset-market small { display: block; margin-top: 3px; }
+.page-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.currency-picker { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: .8rem; }
+.currency-picker select { min-height: 42px; border: 1px solid var(--line); border-radius: 9px; background: white; color: var(--ink); padding: 5px 8px; }
+.fx-note { margin: -7px 0 12px; }
+.asset-history { margin: 5px 0 0; padding: 14px 6px 12px; border-top: 1px solid var(--line); }
+.asset-history h3 { margin: 0; font-size: 1rem; }
+.daily-table { margin-top: 12px; }
+.daily-table summary, .asset .daily-table summary { display: list-item; cursor: pointer; padding: 4px 0; min-height: 26px; color: var(--accent); font-size: .84rem; font-weight: 700; }
+.daily-table summary::-webkit-details-marker, .asset .daily-table summary::-webkit-details-marker { display: revert; }
+.daily-table-scroll { overflow: auto; max-height: 300px; margin-top: 5px; }
+.daily-table table { width: 100%; border-collapse: collapse; font-size: .83rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.daily-table th, .daily-table td { padding: 8px 10px 8px 2px; border-bottom: 1px solid var(--line); text-align: left; }
+.daily-table th { color: var(--muted); }

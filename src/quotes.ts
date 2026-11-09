@@ -2,6 +2,7 @@ import { Decimal } from 'decimal.js'
 import { catalogEntry } from './catalog'
 import { quoteTarget, type Mark } from './ledger'
 import type { Position } from './portfolio'
+import { dayKey, type FxRate } from './currency'
 
 type QuoteAsset = Pick<Position, 'category' | 'reference' | 'name' | 'listing'>
 
@@ -129,4 +130,41 @@ export async function fetchQuotes(assets: QuoteAsset[], apiKey = '') {
   const results = await Promise.allSettled(providers)
   const marks = results.flatMap(result => result.status === 'fulfilled' ? result.value : [])
   return { marks, unavailable: unique.length - new Set(marks.map(mark => mark.target)).size }
+}
+
+export const historyDays = 90
+
+export async function fetchDailyPrices(asset: QuoteAsset) {
+  const coin = catalogEntry(asset.category, asset.reference)?.coinId
+  if (!coin) return []
+  const url = new URL('https://api.coingecko.com/api/v3/coins/' + encodeURIComponent(coin) + '/market_chart')
+  url.search = new URLSearchParams({ vs_currency: 'chf', days: String(historyDays), interval: 'daily' }).toString()
+  const data = await json(url)
+  const today = dayKey(Date.now())
+  if (!Array.isArray(data?.prices)) return []
+  const byDay = new Map<string, Mark>()
+  for (const row of data.prices) {
+    if (!Array.isArray(row)) continue
+    const [at, raw] = row
+    const price = positive(raw)
+    if (!price || !Number.isSafeInteger(at) || at <= 0 || at > Date.now()) continue
+    const day = dayKey(at)
+    if (day >= today) continue
+    const mark = marketMark(asset, price, 'CoinGecko · historique quotidien', at, at)
+    const previous = byDay.get(day)
+    if (!previous || previous.at < at) byDay.set(day, mark)
+  }
+  return [...byDay.values()].sort((a, b) => a.at - b.at)
+}
+
+export async function fetchFxRates(from: string) {
+  const url = new URL('https://api.frankfurter.dev/v2/rates')
+  url.search = new URLSearchParams({ base: 'CHF', quotes: 'EUR,USD', from }).toString()
+  const data = await json(url)
+  if (!Array.isArray(data)) return []
+  return data.flatMap((row): FxRate[] => {
+    const rate = positive(row?.rate)
+    if (!rate || (row.quote !== 'EUR' && row.quote !== 'USD') || !/^\d{4}-\d{2}-\d{2}$/.test(row.date)) return []
+    return [{ date: row.date, quote: row.quote, rate: rate.toFixed() }]
+  })
 }

@@ -1,15 +1,35 @@
 import { Dexie, type EntityTable } from 'dexie'
 import { assetKey, type Position } from './portfolio'
+import { dayKey } from './currency'
 import { firstTrackingDate, replay, unitMark, type Mark, type Operation, type PortfolioData } from './ledger'
+
+export interface DailySeries { target: string; fetchedAt: number; marks: Mark[] }
 
 const db = new Dexie('portefeuille-local') as Dexie & {
   positions: EntityTable<Position, 'id'>
   operations: EntityTable<Operation, 'id'>
   marks: EntityTable<Mark, 'id'>
+  dailyPrices: EntityTable<DailySeries, 'target'>
 }
 
 db.version(1).stores({ positions: 'id,createdAt' })
 db.version(2).stores({ positions: 'id,createdAt', operations: 'id,at', marks: 'id,[kind+target]' })
+db.version(3).stores({ dailyPrices: 'target' })
+
+export const loadDailyPrices = () => db.dailyPrices.toArray()
+export function saveDailyPrices(series: DailySeries) {
+  return db.transaction('rw', db.dailyPrices, async () => {
+    const existing = await db.dailyPrices.get(series.target)
+    const byDay = new Map(existing?.marks.map(mark => [dayKey(mark.at), mark]))
+    for (const mark of series.marks) {
+      const day = dayKey(mark.at)
+      const previous = byDay.get(day)
+      if (!previous || previous.sourceAt <= mark.sourceAt) byDay.set(day, mark)
+    }
+    return db.dailyPrices.put({ target: series.target, fetchedAt: Math.max(series.fetchedAt, existing?.fetchedAt ?? 0),
+      marks: [...byDay.values()] })
+  })
+}
 
 export async function loadPortfolio(): Promise<PortfolioData> {
   return db.transaction('r', [db.positions, db.operations, db.marks], async () => {

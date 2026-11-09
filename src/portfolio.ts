@@ -1,5 +1,6 @@
 import { Decimal } from 'decimal.js'
 import { catalogEntry } from './catalog.ts'
+import type { Currency } from './currency.ts'
 
 Decimal.set({ precision: 64 })
 
@@ -34,22 +35,23 @@ export function estimatedCost(value: Decimal, percent: Decimal) {
   return value.div(new Decimal(1).plus(percent.div(100)))
 }
 
-const chfFormatter = new Intl.NumberFormat('fr-CH', {
-  style: 'currency', currency: 'CHF', currencyDisplay: 'code',
-})
+const currencyFormats = new Map<Currency, Intl.NumberFormat>()
 
-export function money(value: Decimal.Value, digits = 2) {
+export function money(value: Decimal.Value, digits = 2, currency: Currency = 'CHF') {
   const rounded = new Decimal(value).toDecimalPlaces(digits, Decimal.ROUND_HALF_UP)
   const [whole, fraction] = rounded.abs().toFixed(digits).split('.')
   const signedWhole = BigInt(whole) * (rounded.isNegative() ? -1n : 1n)
-  const parts = chfFormatter.formatToParts(rounded.isNegative() && signedWhole === 0n ? -0 : signedWhole)
+  if (!currencyFormats.has(currency)) {
+    currencyFormats.set(currency, new Intl.NumberFormat('fr-CH', { style: 'currency', currency, currencyDisplay: 'code' }))
+  }
+  const parts = currencyFormats.get(currency)!.formatToParts(rounded.isNegative() && signedWhole === 0n ? -0 : signedWhole)
   return parts.map(part => part.type === 'fraction' ? fraction : part.value).join('')
 }
 
-export function unitPrice(value: Decimal.Value) {
+export function unitPrice(value: Decimal.Value, currency: Currency = 'CHF') {
   const price = new Decimal(value)
   const digits = price.gt(0) && price.lt(1) ? Math.min(18, 3 - price.e) : 2
-  return money(price, digits)
+  return money(price, digits, currency)
 }
 
 export function signedMoney(value: Decimal) {

@@ -1,6 +1,6 @@
 # Portefeuille Local
 
-Application de suivi local pour les actions, ETF et cryptos, avec regroupement par actif et par plateforme. La devise de référence est le CHF.
+Application de suivi local pour les actions, ETF et cryptos, avec regroupement par actif et par plateforme. La devise de référence est le CHF. Le sélecteur du portefeuille affiche aussi les montants en EUR ou USD. Les champs de saisie restent en CHF.
 
 ## Démarrer
 
@@ -22,10 +22,12 @@ Ouvre http://127.0.0.1:4173/. Utilise la même adresse et le même profil de nav
 
 ## Cotations et historique
 
-- [CoinGecko](https://docs.coingecko.com/demo/reference/simple-price) fournit les cours en CHF des cryptos reconnues. L’app récupère les cours à l’ouverture puis au plus toutes les 15 minutes pendant la consultation. Le bouton d’actualisation permet une demande manuelle. Le dernier cours connu reste affiché avec sa date lorsque le fournisseur est indisponible. L’heure de la dernière vérification indique quand l’app a contacté les sources. La date du cours indique à quand remonte le prix utilisé.
+- [CoinGecko](https://docs.coingecko.com/demo/reference/simple-price) fournit les cours en CHF des cryptos reconnues. L’app récupère les cours à l’ouverture puis environ toutes les 60 secondes tant que l’onglet est visible. Le bouton d’actualisation permet une demande manuelle. Le dernier cours connu reste affiché avec sa date lorsque le fournisseur est indisponible. L’heure de la dernière vérification indique quand l’app a contacté les sources. La date du cours indique à quand remonte le prix utilisé.
 - Les actions et ETF cotés aux États-Unis utilisent [Finnhub](https://finnhub.io/docs/api) avec une clé personnelle gratuite facultative, saisie et appliquée dans **Données**. Elle est conservée dans le stockage de session du navigateur pour permettre l’actualisation après rechargement dans le même onglet. La valorisation des ETF suisses et européens est manuelle. [Frankfurter](https://frankfurter.dev/) convertit les cours en CHF au taux de référence du jour de cotation ou au dernier taux disponible.
 - Les requêtes de marché contiennent les identifiants ou symboles, ainsi que la clé si elle est fournie au service concerné. Le journal, les quantités et les montants restent dans IndexedDB.
-- Le graphique utilise les opérations et les valorisations enregistrées depuis le début du suivi. Les cours antérieurs ne sont pas reconstruits. Le résultat en CHF isole les flux d’achat et de vente, hors opérations qui n’ont pas pu être valorisées. Les transferts internes ne sont pas des flux externes. La v0.1 ne conservait que la dernière saisie de valorisation de chaque position.
+- La courbe du portefeuille et son tableau journalier commencent à la première position ou opération. Les jours manquants peuvent être estimés avec le journal et les cours du jour de tous les actifs détenus. Les points estimés et les relevés utilisant des cours antérieurs sont indiqués. Le résultat en CHF isole les flux d’achat et de vente. Les transferts internes ne sont pas des flux externes.
+- Chaque actif a sa courbe unitaire et son tableau des variations. Les cryptos du catalogue chargent environ 90 jours de cours quotidiens CoinGecko. Les actions et ETF utilisent les cours et prix d’opération disponibles dans l’app.
+- Les montants et cours historiques affichés en EUR ou USD utilisent le taux de référence Frankfurter de leur date, ou le dernier taux disponible dans les sept jours précédents. La performance affichée est le résultat calculé en CHF, converti au taux de la date. Les historiques de marché et taux téléchargés sont mis en cache localement.
 
 ## Exporter et restaurer
 

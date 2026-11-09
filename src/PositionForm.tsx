@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import AssetPicker, { type AssetInput } from './AssetPicker'
-import { estimatedCost, money, parseAmount, platformKey, unitPrice, type Category, type Cost, type Position } from './portfolio'
+import { estimatedCost, parseAmount, platformKey, type Category, type Cost, type Position } from './portfolio'
 import { quoteTarget, type Mark } from './ledger'
 import { fetchQuotes, quoteAccess } from './quotes'
+import type { CurrencyDisplay } from './currency'
 
 type CostMode = 'none' | 'exact' | 'percent'
 const quoteTime = new Intl.DateTimeFormat('fr-CH', { dateStyle: 'short', timeStyle: 'short' })
@@ -32,12 +33,13 @@ interface Props {
   positions: Position[]
   platforms: string[]
   marks: Mark[]
+  display: CurrencyDisplay
   quoteKey: string
   onClose: () => void
   onSave: (position: Position, quote?: Mark) => Promise<unknown>
 }
 
-export default function PositionForm({ current, positions, platforms, marks, quoteKey, onClose, onSave }: Props) {
+export default function PositionForm({ current, positions, platforms, marks, display, quoteKey, onClose, onSave }: Props) {
   const dialog = useModal()
   const [category, setCategory] = useState<Category>(current?.category ?? 'etf')
   const [selected, setSelected] = useState<AssetInput | null>(current)
@@ -169,7 +171,7 @@ export default function PositionForm({ current, positions, platforms, marks, quo
                 <div aria-live="polite">
                   <p className="quote-caption">Dernier cours unitaire connu</p>
                   {quote?.price != null
-                    ? <><strong className="quote-price">{unitPrice(quote.price)}</strong>
+                    ? <><strong className="quote-price">{display.format(quote.price, { unit: true })}</strong>
                       <small>{quote.source} · {quoteTime.format(quote.sourceAt)}</small></>
                     : <strong className="quote-price">{requesting ? 'Recherche du cours…'
                       : access === 'available' && !result ? 'Cours à récupérer' : 'Cours indisponible'}</strong>}
@@ -207,7 +209,7 @@ export default function PositionForm({ current, positions, platforms, marks, quo
             </div>
             {currentValue?.gte(0) && <dl className="estimate" aria-live="polite">
               <div><dt>{valuation.trim() ? 'Valeur détenue · saisie manuelle' : 'Valeur détenue · quantité × cours'}</dt>
-                <dd>{money(currentValue)}</dd></div>
+                <dd>{display.format(currentValue)}</dd></div>
             </dl>}
             {quote?.price != null && !qty?.gt(0) && !valuation.trim()
               && <p className="hint">Saisis ta quantité pour calculer la valeur détenue.</p>}
@@ -228,7 +230,7 @@ export default function PositionForm({ current, positions, platforms, marks, quo
                 onChange={event => setCostInput(event.target.value.replaceAll('−', '-'))} />
             </label>}
             {estimate && <dl className="estimate" aria-live="polite">
-              <div><dt>Coût d’acquisition estimé</dt><dd>{money(estimate)}</dd></div>
+              <div><dt>Coût d’acquisition estimé</dt><dd>{display.format(estimate)}</dd></div>
             </dl>}
           </>}
         </fieldset>

@@ -96,7 +96,7 @@ export default function DataSettings({ quoteKey, onKey, onRefresh, refreshing, r
       </form>
       <p className="hint">Pour les ETF suisses ou européens, ouvre l’actif et saisis son prix unitaire en CHF.</p>
       <button className="secondary" onClick={onRefresh} disabled={refreshing}>{refreshing ? 'Actualisation…' : 'Actualiser les cours'}</button>
-      <p className="hint">Vérification à l’ouverture et au rechargement, puis environ toutes les 15 minutes pendant la consultation.</p>
+      <p className="hint">Vérification à l’ouverture et au rechargement, puis environ toutes les 60 secondes pendant la consultation.</p>
       {lastChecked !== null && <p className="hint">Dernière vérification · {new Date(lastChecked).toLocaleString('fr-CH')}</p>}
       {refreshStatus && <p className="hint" role="status">{refreshStatus}</p>}
     </section>

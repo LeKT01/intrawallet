@@ -1,7 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { replay } from '../src/ledger.ts'
+import { dailyPortfolioHistory, replay } from '../src/ledger.ts'
 import { consolidate, summarize, unitPrice } from '../src/portfolio.ts'
+import { currencyDisplay } from "../src/currency.ts"
 import { searchCatalog } from '../src/catalog.ts'
 import { backupText, readBackup } from '../src/backup.ts'
 
@@ -124,4 +125,33 @@ test('des prix différents sur une plateforme donnent un prix moyen clairement i
   const partial = replay(data([opening('a', '100', '80'), opening('b', null, '90')])).holdings[0]
   assert.equal(partial.unitPrice, null)
   assert.equal(partial.valuation.amount, '100')
+})
+
+test('un jour est reconstitué avec les cours de tous les actifs détenus', () => {
+  const positions = [opening('p', '100', '80')]
+  const day3 = quote('known', 3, '140')
+  const input = data(positions, [], [day3])
+  const recorded = replay(input).history
+  const history = dailyPortfolioHistory(input, recorded, [quote('old', 1, '70'), quote('missing', 2, '120')])
+  assert.deepEqual(history.map(point => point.value.toFixed()), ['100', '120', '140'])
+  assert.deepEqual(history.map(point => point.result.toFixed()), ['0', '20', '40'])
+  assert.deepEqual(history.map(point => Boolean(point.reconstructed)), [false, true, false])
+  const other = { ...opening('etf', '100', '90'), category: 'etf', reference: 'IE00B53SZB19' }
+  const mixed = data([...positions, other], [], [day3])
+  const incomplete = dailyPortfolioHistory(mixed, replay(mixed).history, [quote('missing', 2, '120')])
+  assert.equal(incomplete.length, 2)
+  assert.equal(incomplete.at(-1).usedOlderPrices, true)
+})
+
+test('les devises historiques utilisent le taux du jour ou un taux antérieur récent', () => {
+  const display = currencyDisplay('EUR', [
+    { date: '2025-11-03', quote: 'EUR', rate: '1.04' },
+    { date: '2025-11-06', quote: 'EUR', rate: '1.1' },
+  ])
+  assert.equal(display.convert('100', '2025-11-03').toFixed(), '104')
+  assert.equal(display.convert('100', '2025-11-04').toFixed(), '104')
+  assert.equal(display.convert('100', '2025-11-06').toFixed(), '110')
+  assert.equal(display.convert('100', '2025-11-01'), null)
+  assert.equal(display.convert('100', '2025-11-14'), null)
+  assert.match(display.format('100', { day: '2025-11-06' }), /EUR/)
 })

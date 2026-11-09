@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { deleteOperation, deletePosition, loadPortfolio, saveMarks, saveOperation, savePosition } from './database'
-import { assetKey, categories, consolidate, money, platformKey, quantity, signedMoney, summarize, unitPrice, type Position } from './portfolio'
-import { firstTrackingDate, operationNames, replay, type Holding, type Mark, type Operation, type PortfolioData } from './ledger'
+import { assetKey, categories, consolidate, platformKey, quantity, summarize, type Position } from './portfolio'
+import { assetChartMarks, dailyPortfolioHistory, firstTrackingDate, operationNames, replay, type Holding, type Mark, type Operation, type PortfolioData } from './ledger'
 import PositionForm from './PositionForm'
 import OperationForm from './OperationForm'
 import DataSettings, { ConfirmDialog } from './DataSettings'
@@ -10,11 +10,16 @@ import HistoryChart from './HistoryChart'
 import ManualQuoteForm from './ManualQuoteForm'
 import { fetchQuotes, quoteAccess, readSessionQuoteKey, saveSessionQuoteKey } from './quotes'
 import { catalogEntry } from './catalog'
+import { currencies, dayKey, type Currency, type CurrencyDisplay } from './currency'
+import useCurrency from './useCurrency'
+import useDailyPrices from './useDailyPrices'
+import AssetHistory from './AssetHistory'
 
 type Section = 'overview' | 'positions' | 'journal' | 'data'
 type IconName = Section | 'plus' | 'lock' | 'chevron'
 const sections = { overview: 'Vue d’ensemble', positions: 'Positions', journal: 'Journal', data: 'Données' } as const
 const emptyData: PortfolioData = { positions: [], operations: [], marks: [] }
+const quoteInterval = 60 * 1000
 const timestamp = new Intl.DateTimeFormat('fr-CH', { dateStyle: 'medium', timeStyle: 'short' })
 
 function Icon({ name }: { name: IconName }) {
@@ -31,10 +36,10 @@ function Icon({ name }: { name: IconName }) {
     strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d={paths[name]} /></svg>
 }
 
-function ReadableValue({ position }: { position: Holding }) {
+function ReadableValue({ position, display }: { position: Holding; display: CurrencyDisplay }) {
   if (!position.valuation) return <span className="muted">Valorisation incomplète</span>
-  return <><strong>{money(position.valuation.amount)}</strong>
-    {position.unitPrice !== null && <small>{position.averageUnitPrice ? 'Prix moyen utilisé' : 'Prix unitaire utilisé'} {unitPrice(position.unitPrice)}</small>}
+  return <><strong>{display.format(position.valuation.amount)}</strong>
+    {position.unitPrice !== null && <small>{position.averageUnitPrice ? 'Prix moyen utilisé' : 'Prix unitaire utilisé'} {display.format(position.unitPrice, { unit: true })}</small>}
     <small>{position.partiallyValued ? 'Valeur partielle · ' : ''}{position.source?.source ?? 'Saisie manuelle'} · {
       timestamp.format(position.valuation.updatedAt)
     }</small></>
@@ -45,6 +50,7 @@ function labelReference(reference: string) {
 }
 
 export default function App() {
+  const [expanded, setExpanded] = useState(new Set<string>())
   const [section, setSection] = useState<Section>('overview')
   const [editor, setEditor] = useState<Position | 'new' | null>(null)
   const [tradeEditor, setTradeEditor] = useState<Operation | 'new' | null>(null)
@@ -89,7 +95,8 @@ export default function App() {
   }
   const unpriced = holdings.filter(item => item.partiallyValued).length
   const start = firstTrackingDate(data)
-  const history = loaded?.view.history.filter(point => point.at >= start) ?? []
+  const { display, loading: fxLoading, choose: chooseCurrency } = useCurrency(start)
+  const fx = display.reference()
   const symbols = useMemo(() => {
     const byAsset = new Map<string, Holding>()
     for (const holding of holdings) {
@@ -98,6 +105,12 @@ export default function App() {
     }
     return [...byAsset.values()].map(({ category, reference, name, listing }) => ({ category, reference, name, listing }))
   }, [holdings])
+  const dailyPrices = useDailyPrices(symbols)
+  const history = useMemo(() => {
+    if (!loaded) return []
+    const recorded = loaded.view.history.filter(point => point.at >= start)
+    return dailyPortfolioHistory(loaded.data, recorded, dailyPrices.flatMap(series => series.marks))
+  }, [loaded, start, dailyPrices])
   const latest = useRef({ symbols, quoteKey })
   latest.current = { symbols, quoteKey }
   const trackedAssets = symbols.map(assetKey).sort().join('|')
@@ -137,13 +150,13 @@ export default function App() {
 
   useEffect(() => {
     const auto = () => {
-      if (document.visibilityState === 'visible' && Date.now() - lastAuto.current >= 15 * 60 * 1000
+      if (document.visibilityState === 'visible' && Date.now() - lastAuto.current >= quoteInterval
         && latest.current.symbols.some(asset => quoteAccess(asset, latest.current.quoteKey) === 'available')) {
         void refreshQuotes(false)
       }
     }
     auto()
-    const interval = window.setInterval(auto, 60 * 1000)
+    const interval = window.setInterval(auto, 10 * 1000)
     document.addEventListener('visibilitychange', auto)
     return () => {
       window.clearInterval(interval)
@@ -184,38 +197,51 @@ export default function App() {
       const sharedPrice = firstPrice !== null && entries.every(entry => !entry.averageUnitPrice && entry.unitPrice?.eq(firstPrice))
         ? firstPrice : null
       const hasValue = entries.some(entry => entry.valuation !== null)
-      return <details className="asset" key={asset.key}>
+      const chart = expanded.has(asset.key)
+        ? assetChartMarks(data, asset.key, dailyPrices.find(series => series.target === asset.key)?.marks ?? []) : null
+      return <details className="asset" key={asset.key} onToggle={event => {
+        if (event.target !== event.currentTarget) return
+        const isOpen = event.currentTarget.open
+        setExpanded(previous => {
+          if (previous.has(asset.key) === isOpen) return previous
+          const next = new Set(previous)
+          if (isOpen) next.add(asset.key)
+          else next.delete(asset.key)
+          return next
+        })
+      }}>
         <summary>
           <span className="asset-mark" aria-hidden="true">{categories[asset.category].slice(0, 2).toUpperCase()}</span>
           <span className="asset-title"><strong>{asset.name}</strong><small>{[categories[asset.category], listed?.detail, listed?.aliases?.split(' ')[0] ?? labelReference(asset.reference)].filter(Boolean).join(' · ')}</small>
             <small>Détenu <strong className="quantity-inline">{quantity(asset.quantity)}</strong> unité(s)</small></span>
           <span className="asset-platforms">{asset.platformCount} plateforme{asset.platformCount !== 1 ? 's' : ''}</span>
-          <span className="asset-value asset-unit"><strong>{sharedPrice !== null ? unitPrice(sharedPrice) : '—'}</strong>
+          <span className="asset-value asset-unit"><strong>{sharedPrice !== null ? display.format(sharedPrice, { unit: true }) : '—'}</strong>
             <small>{sharedPrice !== null ? 'Prix unitaire utilisé' : hasValue ? 'Cours dans le détail' : 'Cours indisponible'}</small></span>
-          <span className="asset-value asset-total"><strong>{asset.priced ? money(asset.amount) : '—'}</strong>
+          <span className="asset-value asset-total"><strong>{asset.priced ? display.format(asset.amount) : '—'}</strong>
             <small>{entries.some(entry => entry.partiallyValued) ? 'Valeur détenue partielle' : 'Valeur détenue'}</small></span>
           <span className="disclosure"><Icon name="chevron" /></span>
         </summary>
         <div className="asset-body">
           <div className="asset-rollup">
             <span>Quantité totale <strong>{quantity(asset.quantity)}</strong></span>
-            <span>Gain latent <strong>{asset.gain === null ? 'Indéterminé' : signedMoney(asset.gain)}</strong>
+            <span>Gain latent <strong>{asset.gain === null ? 'Indéterminé' : display.format(asset.gain, { signed: true })}</strong>
               {asset.gain !== null && asset.estimated && <small> · coût estimé</small>}</span>
             <button className="text-button" onClick={() => setManualQuote(entries[0])}>Saisir un cours</button>
           </div>
           {lastMarket?.price != null && <p className="asset-market">
-            Dernier cours du marché <strong>{unitPrice(lastMarket.price)}</strong>
+            Dernier cours du marché <strong>{display.format(lastMarket.price, { unit: true })}</strong>
             <small>{lastMarket.source} · {timestamp.format(lastMarket.sourceAt)}</small>
           </p>}
           {entries.map(position => {
             const result = summarize([position])
             return <div className="entry holding-entry" key={position.id}>
               <span><strong>{position.platform}</strong><small>{quantity(position.quantity)} unité(s)</small></span>
-              <span><ReadableValue position={position} />
-                {result.gain !== null && <small>Gain latent {signedMoney(result.gain)}{result.estimated ? ' · estimé' : ''}</small>}</span>
-              <span className="cost-summary">{position.cost ? <><strong>{money(position.cost.amount)}</strong><small>Coût d’acquisition</small></> : <small>Coût inconnu</small>}</span>
+              <span><ReadableValue position={position} display={display} />
+                {result.gain !== null && <small>Gain latent {display.format(result.gain, { signed: true })}{result.estimated ? ' · estimé' : ''}</small>}</span>
+              <span className="cost-summary">{position.cost ? <><strong>{display.format(position.cost.amount)}</strong><small>Coût d’acquisition</small></> : <small>Coût inconnu</small>}</span>
             </div>
           })}
+          {chart && <AssetHistory {...chart} name={asset.name} display={display} />}
         </div>
       </details>
     })}
@@ -243,8 +269,17 @@ export default function App() {
     <main className="shell main">
       <div className="page-title">
         <div><p className="eyebrow">SUIVI DES INVESTISSEMENTS</p><h1 ref={heading} tabIndex={-1}>{sections[section]}</h1></div>
-        <span className="local-badge"><Icon name="lock" /> Stockage local</span>
+        <div className="page-actions">
+          <label className="currency-picker">Devise <select value={display.currency}
+            onChange={event => chooseCurrency(event.target.value as Currency)}>
+            {currencies.map(currency => <option key={currency}>{currency}</option>)}
+          </select></label>
+          <span className="local-badge"><Icon name="lock" /> Stockage local</span>
+        </div>
       </div>
+      {display.currency !== 'CHF' && <p className="hint fx-note" role="status">{fxLoading && !fx ? 'Chargement des taux de change…'
+        : fx ? `Taux de référence CHF → ${display.currency} du ${fx.date} · Frankfurter`
+          : 'Taux de change indisponible. Tu peux revenir au CHF.'}</p>}
       <div role="status" className={message ? 'status-message' : 'sr-only'}>{message}</div>
       {actionError && <p className="error" role="alert">{actionError}</p>}
       {!loaded ? <p className="panel blank" role="status">Ouverture du portefeuille…</p> : loaded.failed ? (
@@ -266,10 +301,10 @@ export default function App() {
               <span><strong>{value.name}</strong><small>{operation ? operationNames[operation.kind] : 'Position de départ'} · {timestamp.format(item.at)}</small></span>
               <span><strong>{quantity(value.quantity)} unité(s)</strong>
                 <small>{value.platform}{operation?.destination ? ' → ' + operation.destination : ''}</small>
-                {operation && operation.kind !== 'transfer' && <small>Montant hors frais {money(operation.gross)}</small>}
-                {operation && operation.fee !== '0' && <small>Frais {money(operation.fee)}</small>}
+                {operation && operation.kind !== 'transfer' && <small>Montant hors frais {display.format(operation.gross, { day: dayKey(operation.at) })}</small>}
+                {operation && operation.fee !== '0' && <small>Frais {display.format(operation.fee, { day: dayKey(operation.at) })}</small>}
                 {operation?.feeUnits && operation.feeUnits !== '0' && <small>Frais {quantity(operation.feeUnits)} unité(s)</small>}
-                {gain !== undefined && <small>Gain réalisé {gain === null ? 'indéterminé' : signedMoney(gain)}</small>}</span>
+                {gain !== undefined && <small>Gain réalisé {gain === null ? 'indéterminé' : display.format(gain, { day: dayKey(operation!.at), signed: true })}</small>}</span>
               <span className="entry-actions">
                 <button className="text-button" onClick={() => item.type === 'position' ? setEditor(item.value) : setTradeEditor(item.value)}>Modifier</button>
                 <button className="text-button danger" onClick={() => setToDelete({ id: value.id, name: value.name, type: item.type })}>Supprimer</button>
@@ -285,11 +320,11 @@ export default function App() {
         {section === 'overview' && <>
           <section className="overview-grid" aria-label="Synthèse du portefeuille">
             <div className="panel total-panel">
-              <div className="total-header"><h2>Valeur {unpriced ? 'connue' : 'totale'}</h2><span className="chip">CHF</span></div>
-              <p className="total-number">{total.priced || holdings.length === 0 ? money(total.amount) : '—'}</p>
+              <div className="total-header"><h2>Valeur {unpriced ? 'connue' : 'totale'}</h2><span className="chip">{display.currency}</span></div>
+              <p className="total-number">{total.priced || holdings.length === 0 ? display.format(total.amount) : '—'}</p>
               <p className="muted counts">{assets.length} actif(s) · {activePlatforms.length} plateforme(s)</p>
               {unpriced > 0 && <p className="notice">{unpriced} position(s) à valoriser.</p>}
-              <p className="hint">Gain réalisé connu <strong>{signedMoney(loaded.view.realized)}</strong>
+              <p className="hint">Gain réalisé connu <strong>{display.format(loaded.view.realized, { signed: true })}</strong>
                 {loaded.view.unknownSales > 0 && ` · ${loaded.view.unknownSales} vente(s) sans coût connu`}</p>
               <button className="text-button" onClick={() => void refreshQuotes(true)} disabled={refreshing}>{refreshing ? 'Actualisation…' : 'Actualiser les cours'}</button>
               {lastChecked !== null && <p className="hint">Dernière vérification des cours · {timestamp.format(lastChecked)}</p>}
@@ -309,16 +344,16 @@ export default function App() {
               </ul>}
             </div>
           </section>
-          <HistoryChart history={history} />
+          <HistoryChart history={history} display={display} />
         </>}
         <section className="panel positions-panel">
-          <header className="panel-header"><h2>Positions consolidées</h2><p>Ouvre un actif pour voir les cours utilisés, leur source et le détail par plateforme.</p></header>
+          <header className="panel-header"><h2>Positions consolidées</h2><p>Ouvre un actif pour voir sa courbe, ses cours et le détail par plateforme.</p></header>
           {holdings.length ? assetList : <p className="hint journal-empty">Aucune position ouverte.</p>}
         </section>
       </>}
     </main>
     {editor !== null && <PositionForm current={editor === 'new' ? null : editor} positions={data.positions}
-      platforms={platforms} marks={data.marks} quoteKey={quoteKey.trim()} onClose={() => setEditor(null)}
+      platforms={platforms} marks={data.marks} display={display} quoteKey={quoteKey.trim()} onClose={() => setEditor(null)}
       onSave={async (position, quote) => { await savePosition(position, editor !== 'new', quote); setMessage('Position enregistrée.') }} />}
     {tradeEditor !== null && <OperationForm current={tradeEditor === 'new' ? null : tradeEditor} data={data} platforms={platforms}
       onClose={() => setTradeEditor(null)} onSave={async operation => {
