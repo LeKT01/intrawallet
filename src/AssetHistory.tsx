@@ -4,6 +4,7 @@ import type { CurrencyDisplay } from './currency'
 import type { Mark } from './ledger'
 import { dayKey, daysBefore } from './currency'
 import { unitPrice } from './portfolio'
+import { demoMode } from './demo'
 import DailyChart, { formatDay, inPeriod, PeriodButtons } from './DailyChart'
 
 const percent = new Intl.NumberFormat('fr-CH', { style: 'percent', maximumFractionDigits: 2, signDisplay: 'exceptZero' })
@@ -40,7 +41,7 @@ export default function AssetHistory({ marks, display, name, official }: {
     ? latest.dailyChange : null
   return <section className="asset-history" aria-labelledby={id}>
     <div className="section-heading"><div><h3 id={id}>Cours de {name}</h3>
-      <p className="hint">{official ? 'Prix de marché par jour. Le dernier point peut être la cotation du jour.' : 'Cours et prix d’opération enregistrés dans l’app.'}</p></div>
+      <p className="hint">{demoMode ? 'Cours fictifs par jour.' : official ? 'Prix de marché par jour. Le dernier point peut être la cotation du jour.' : 'Cours et prix d’opération enregistrés dans l’app.'}</p></div>
       <PeriodButtons range={range} choose={setRange} />
     </div>
     <DailyChart points={points} label={'Courbe du cours de ' + name + ' en ' + display.currency}

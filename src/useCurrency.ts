@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { currencyDisplay, dayKey, daysBefore, initialCurrency, persistCurrency, type Currency, type FxRate } from './currency'
 import { fetchFxRates, historyDays } from './quotes'
+import { demoFxRates, demoMode } from './demo'
 
 type Cache = { from: string; checkedAt: number; rates: FxRate[] }
 const cacheKey = 'portefeuille.reference-fx'
@@ -16,8 +17,8 @@ function readCache(): Cache | null {
 }
 
 export default function useCurrency(start: number) {
-  const [currency, setCurrency] = useState(initialCurrency)
-  const [cache, setCache] = useState(readCache)
+  const [currency, setCurrency] = useState<Currency>(() => demoMode ? 'CHF' : initialCurrency())
+  const [cache, setCache] = useState(() => demoMode ? null : readCache())
   const [loading, setLoading] = useState(false)
   const today = dayKey(Date.now())
   const marketStart = daysBefore(today, historyDays + 7)
@@ -25,7 +26,7 @@ export default function useCurrency(start: number) {
   const from = journalStart < marketStart ? journalStart : marketStart
 
   useEffect(() => {
-    if (currency === 'CHF' || (cache && cache.from <= from && Date.now() - cache.checkedAt < 3600000)) {
+    if (demoMode || currency === 'CHF' || (cache && cache.from <= from && Date.now() - cache.checkedAt < 3600000)) {
       setLoading(false)
       return
     }
@@ -43,8 +44,8 @@ export default function useCurrency(start: number) {
   }, [currency, from, today, cache?.from, cache?.checkedAt])
 
   return {
-    display: currencyDisplay(currency, cache?.rates ?? []),
+    display: currencyDisplay(currency, demoMode ? demoFxRates(today) : cache?.rates ?? []),
     loading: currency !== 'CHF' && loading,
-    choose: (value: Currency) => { persistCurrency(value); setLoading(false); setCurrency(value) },
+    choose: (value: Currency) => { if (!demoMode) persistCurrency(value); setLoading(false); setCurrency(value) },
   }
 }

@@ -241,3 +241,8 @@ form input::placeholder { color: #56657a; opacity: 1; }
 .daily-table table { width: 100%; border-collapse: collapse; font-size: .83rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .daily-table th, .daily-table td { padding: 8px 10px 8px 2px; border-bottom: 1px solid var(--line); text-align: left; }
 .daily-table th { color: var(--muted); }
+.demo-banner { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 18px; padding: 12px 14px; border: 1px solid #b9c4f7; border-radius: 10px; background: var(--accent-pale); }
+.demo-banner p { margin-top: 4px; color: var(--muted); font-size: .85rem; }
+.demo-banner a, .empty-actions a, .settings-panel a { text-decoration: none; }
+.empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.settings-panel > a { margin-top: 10px; }

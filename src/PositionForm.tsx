@@ -4,6 +4,7 @@ import { estimatedCost, parseAmount, platformKey, type Category, type Cost, type
 import { quoteTarget, type Mark } from './ledger'
 import { fetchQuotes, quoteAccess } from './quotes'
 import type { CurrencyDisplay } from './currency'
+import { demoMode } from './demo'
 
 type CostMode = 'none' | 'exact' | 'percent'
 const quoteTime = new Intl.DateTimeFormat('fr-CH', { dateStyle: 'short', timeStyle: 'short' })
@@ -66,7 +67,7 @@ export default function PositionForm({ current, positions, platforms, marks, dis
     .sort((a, b) => b.sourceAt - a.sourceAt || b.at - a.at)[0] : undefined
   const fresh = requested && requested.target === target ? requested : undefined
   const quote = fresh && (!cached || fresh.sourceAt >= cached.sourceAt) ? fresh : cached
-  const access = asset ? quoteAccess(asset, quoteKey) : 'manual'
+  const access = asset && !demoMode ? quoteAccess(asset, quoteKey) : 'manual'
   const result = quoteResult?.target === target ? quoteResult : undefined
   const qty = parseAmount(units)
   const amount = parseAmount(valuation)
@@ -179,7 +180,7 @@ export default function PositionForm({ current, positions, platforms, marks, dis
                 {access === 'available' && <button type="button" className="secondary"
                   onClick={requestQuote} disabled={requesting}>{requesting ? 'Recherche…' : 'Récupérer le cours'}</button>}
               </div>
-              {access === 'manual' && <p className="hint">Cet actif se valorise manuellement dans l’app.</p>}
+              {access === 'manual' && <p className="hint">{demoMode ? 'La démo utilise des cours fictifs.' : 'Cet actif se valorise manuellement dans l’app.'}</p>}
               {access === 'key' && <p className="hint">Ajoute une clé Finnhub dans Données pour récupérer ce cours.</p>}
               {result && !result.found && <p className="hint" role="status">{quote
                 ? 'Aucun cours reçu. Le dernier cours connu reste affiché.'

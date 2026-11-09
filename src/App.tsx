@@ -14,6 +14,7 @@ import { currencies, dayKey, type Currency, type CurrencyDisplay } from './curre
 import useCurrency from './useCurrency'
 import useDailyPrices from './useDailyPrices'
 import AssetHistory from './AssetHistory'
+import { demoLink, demoMode } from './demo'
 
 type Section = 'overview' | 'positions' | 'journal' | 'data'
 type IconName = Section | 'plus' | 'lock' | 'chevron'
@@ -59,7 +60,7 @@ export default function App() {
   const [deleting, setDeleting] = useState(false)
   const [actionError, setActionError] = useState('')
   const [message, setMessage] = useState('')
-  const [quoteKey, setQuoteKey] = useState(readSessionQuoteKey)
+  const [quoteKey, setQuoteKey] = useState(() => demoMode ? '' : readSessionQuoteKey())
   const [refreshing, setRefreshing] = useState(false)
   const [refreshStatus, setRefreshStatus] = useState('')
   const [lastChecked, setLastChecked] = useState<number | null>(null)
@@ -105,7 +106,7 @@ export default function App() {
     }
     return [...byAsset.values()].map(({ category, reference, name, listing }) => ({ category, reference, name, listing }))
   }, [holdings])
-  const dailyPrices = useDailyPrices(symbols)
+  const dailyPrices = useDailyPrices(demoMode ? [] : symbols)
   const history = useMemo(() => {
     if (!loaded) return []
     const recorded = loaded.view.history.filter(point => point.at >= start)
@@ -121,7 +122,7 @@ export default function App() {
   }
 
   async function refreshQuotes(userInitiated: boolean) {
-    if (quotePending.current) return
+    if (demoMode || quotePending.current) return
     const { symbols, quoteKey } = latest.current
     if (symbols.length === 0) {
       if (userInitiated) setRefreshStatus('Ajoute d’abord une position pour récupérer un cours.')
@@ -149,6 +150,7 @@ export default function App() {
   }
 
   useEffect(() => {
+    if (demoMode) return
     const auto = () => {
       if (document.visibilityState === 'visible' && Date.now() - lastAuto.current >= quoteInterval
         && latest.current.symbols.some(asset => quoteAccess(asset, latest.current.quoteKey) === 'available')) {
@@ -267,6 +269,10 @@ export default function App() {
     </div></header>
 
     <main className="shell main">
+      {demoMode && <aside className="demo-banner" aria-label="Mode démo">
+        <div><strong>Mode démo · données fictives</strong><p>Tu peux tester les positions, les opérations et les courbes dans ce portefeuille de démonstration.</p></div>
+        <a className="secondary" href={demoLink(false)}>Revenir à mon portefeuille</a>
+      </aside>}
       <div className="page-title">
         <div><p className="eyebrow">SUIVI DES INVESTISSEMENTS</p><h1 ref={heading} tabIndex={-1}>{sections[section]}</h1></div>
         <div className="page-actions">
@@ -278,7 +284,7 @@ export default function App() {
         </div>
       </div>
       {display.currency !== 'CHF' && <p className="hint fx-note" role="status">{fxLoading && !fx ? 'Chargement des taux de change…'
-        : fx ? `Taux de référence CHF → ${display.currency} du ${fx.date} · Frankfurter`
+        : fx ? `Taux ${demoMode ? 'simulé' : 'de référence'} CHF → ${display.currency} du ${fx.date}${demoMode ? '' : ' · Frankfurter'}`
           : 'Taux de change indisponible. Tu peux revenir au CHF.'}</p>}
       <div role="status" className={message ? 'status-message' : 'sr-only'}>{message}</div>
       {actionError && <p className="error" role="alert">{actionError}</p>}
@@ -315,7 +321,11 @@ export default function App() {
       ) : journal.length === 0 ? (
         <section className="panel empty"><span className="empty-icon"><Icon name={section} /></span><h2>Ajoute ta première position</h2>
           <p>Retrouve tes actions, ETF et cryptos au même endroit.</p>
-          <button className="primary" onClick={() => setEditor('new')}><Icon name="plus" /> Ajouter une position</button></section>
+          <div className="empty-actions">
+            <button className="primary" onClick={() => setEditor('new')}><Icon name="plus" /> Ajouter une position</button>
+            {!demoMode && <a className="secondary" href={demoLink(true)}>Ouvrir la démo</a>}
+          </div>
+        </section>
       ) : <>
         {section === 'overview' && <>
           <section className="overview-grid" aria-label="Synthèse du portefeuille">
@@ -326,7 +336,7 @@ export default function App() {
               {unpriced > 0 && <p className="notice">{unpriced} position(s) à valoriser.</p>}
               <p className="hint">Gain réalisé connu <strong>{display.format(loaded.view.realized, { signed: true })}</strong>
                 {loaded.view.unknownSales > 0 && ` · ${loaded.view.unknownSales} vente(s) sans coût connu`}</p>
-              <button className="text-button" onClick={() => void refreshQuotes(true)} disabled={refreshing}>{refreshing ? 'Actualisation…' : 'Actualiser les cours'}</button>
+              {!demoMode && <button className="text-button" onClick={() => void refreshQuotes(true)} disabled={refreshing}>{refreshing ? 'Actualisation…' : 'Actualiser les cours'}</button>}
               {lastChecked !== null && <p className="hint">Dernière vérification des cours · {timestamp.format(lastChecked)}</p>}
               {refreshStatus && <p className="hint" role="status">{refreshStatus}</p>}
             </div>

@@ -3,6 +3,7 @@ import { backupText, readBackup } from './backup'
 import { loadPortfolio, restorePortfolio } from './database'
 import type { PortfolioData } from './ledger'
 import { useModal } from './PositionForm'
+import { demoLink, demoMode } from './demo'
 
 export function ConfirmDialog({ title, description, confirm, busy, onClose, onConfirm, danger = false }: {
   title: string
@@ -82,6 +83,12 @@ export default function DataSettings({ quoteKey, onKey, onRefresh, refreshing, r
     })
   }
 
+  if (demoMode) return <section className="panel settings-panel">
+    <h2>Données de démonstration</h2>
+    <p className="hint">Les cours et taux de change sont simulés. Tes essais sont enregistrés dans ce portefeuille de démonstration.</p>
+    <a className="secondary" href={demoLink(false)}>Revenir aux données de mon portefeuille</a>
+  </section>
+
   return <div className="settings-grid">
     <section className="panel settings-panel"><h2>Cotations automatiques</h2>
       <p className="hint">Les cryptos du catalogue utilisent CoinGecko. Pour les titres cotés aux États-Unis, tu peux utiliser une clé gratuite Finnhub.</p>
@@ -109,6 +116,10 @@ export default function DataSettings({ quoteKey, onKey, onRefresh, refreshing, r
       </div>
       {error && <p className="error" role="alert">{error}</p>}
       {message && <p className="hint" role="status">{message}</p>}
+    </section>
+    <section className="panel settings-panel"><h2>Portefeuille de démonstration</h2>
+      <p className="hint">Découvre les courbes et le journal avec 30 jours de données fictives.</p>
+      <a className="secondary" href={demoLink(true)}>Ouvrir la démo</a>
     </section>
     {pending && <ConfirmDialog title="Restaurer cette sauvegarde ?"
       description={`Le portefeuille actuel sera remplacé par ${pending.positions.length} position(s) de départ et ${pending.operations.length} opération(s) du fichier.`}
