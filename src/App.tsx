@@ -1,56 +1,134 @@
-import { useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { deletePosition, loadPositions, savePosition } from './database'
-import {
-  categories, consolidate, money, platformKey, quantity, signedMoney, summarize, type Position,
-} from './portfolio'
+import { deleteOperation, deletePosition, loadPortfolio, saveMarks, saveOperation, savePosition } from './database'
+import { assetKey, categories, consolidate, money, platformKey, quantity, signedMoney, summarize, type Position } from './portfolio'
+import { firstTrackingDate, operationNames, replay, type Holding, type Operation, type PortfolioData } from './ledger'
 import PositionForm from './PositionForm'
+import OperationForm from './OperationForm'
+import DataSettings, { ConfirmDialog } from './DataSettings'
+import HistoryChart from './HistoryChart'
+import ManualQuoteForm from './ManualQuoteForm'
+import { fetchQuotes } from './quotes'
+import { catalogEntry } from './catalog'
 
-type Section = 'overview' | 'positions' | 'journal'
-type IconName = 'overview' | 'positions' | 'journal' | 'plus' | 'lock' | 'chevron'
-const sections = { overview: 'Vue d’ensemble', positions: 'Positions', journal: 'Journal' } as const
+type Section = 'overview' | 'positions' | 'journal' | 'data'
+type IconName = Section | 'plus' | 'lock' | 'chevron'
+const sections = { overview: 'Vue d’ensemble', positions: 'Positions', journal: 'Journal', data: 'Données' } as const
+const emptyData: PortfolioData = { positions: [], operations: [], marks: [] }
+const timestamp = new Intl.DateTimeFormat('fr-CH', { dateStyle: 'medium', timeStyle: 'short' })
 
 function Icon({ name }: { name: IconName }) {
   const paths = {
     overview: 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
     positions: 'M3 7h18v13H3z M8 7V5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2 M3 12h18 M10 12v2h4v-2',
     journal: 'M5 3h14v18H5z M9 8h6 M9 12h6 M9 16h4',
+    data: 'M4 4h16v16H4z M8 9h8 M8 14h8',
     plus: 'M12 5v14 M5 12h14',
     lock: 'M5 11h14v10H5z M8 11V7a4 4 0 0 1 8 0v4',
     chevron: 'm9 6 6 6-6 6',
   }
-  return <svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d={paths[name]} /></svg>
+  return <svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d={paths[name]} /></svg>
 }
 
-const timestamp = new Intl.DateTimeFormat('fr-CH', { dateStyle: 'medium', timeStyle: 'short' })
+function ReadableValue({ position }: { position: Holding }) {
+  if (!position.valuation) return <span className="muted">Valorisation incomplète</span>
+  return <><strong>{money(position.valuation.amount)}</strong>
+    <small>{position.partiallyValued ? 'Valeur partielle · ' : ''}{position.source?.source ?? 'Saisie manuelle'} · {
+      timestamp.format(position.valuation.updatedAt)
+    }</small></>
+}
 
-function ReadableValue({ position }: { position: Position }) {
-  if (!position.valuation) return <span className="muted">Non valorisée</span>
-  return <><strong>{money(position.valuation.amount)}</strong><small>Saisie manuelle · {timestamp.format(position.valuation.updatedAt)}</small></>
+function labelReference(reference: string) {
+  return reference.startsWith('MANUAL:') ? 'Ajout manuel' : reference
 }
 
 export default function App() {
   const [section, setSection] = useState<Section>('overview')
   const [editor, setEditor] = useState<Position | 'new' | null>(null)
-  const [toDelete, setToDelete] = useState<Position | null>(null)
+  const [tradeEditor, setTradeEditor] = useState<Operation | 'new' | null>(null)
+  const [manualQuote, setManualQuote] = useState<Holding | null>(null)
+  const [toDelete, setToDelete] = useState<{ id: string; name: string; type: 'position' | 'operation' } | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [actionError, setActionError] = useState('')
   const [message, setMessage] = useState('')
+  const [quoteKey, setQuoteKey] = useState('')
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshStatus, setRefreshStatus] = useState('')
+  const [allocationMode, setAllocationMode] = useState<'category' | 'platform'>('category')
   const heading = useRef<HTMLHeadingElement>(null)
+  const quotePending = useRef(false)
+  const lastAuto = useRef(0)
 
   const loaded = useLiveQuery(async () => {
     try {
-      return { positions: await loadPositions(), failed: false }
+      const data = await loadPortfolio()
+      return { data, view: replay(data), failed: false } as const
     } catch (cause) {
       console.error(cause)
-      return { positions: [], failed: true }
+      return { data: emptyData, view: replay(emptyData), failed: true } as const
     }
   })
-  const positions = loaded?.positions ?? []
-  const total = summarize(positions)
-  const assets = consolidate(positions)
-  const platformCount = new Set(positions.map(item => platformKey(item.platform))).size
-  const unpriced = positions.length - total.priced
+  const data = loaded?.data ?? emptyData
+  const holdings = loaded?.view.holdings ?? []
+  const total = summarize(holdings)
+  const assets = consolidate(holdings)
+  const platforms = [...new Map([...data.positions, ...data.operations].flatMap(item => [
+    item.platform, 'destination' in item ? item.destination : undefined,
+  ]).filter((name): name is string => Boolean(name)).map(name => [platformKey(name), name])).values()]
+  const activePlatforms = [...new Map(holdings.map(item => [platformKey(item.platform), item.platform])).values()]
+  const unpriced = holdings.filter(item => item.partiallyValued).length
+  const start = firstTrackingDate(data)
+  const history = loaded?.view.history.filter(point => point.at >= start) ?? []
+  const symbols = useMemo(() => {
+    const byAsset = new Map<string, Holding>()
+    for (const holding of holdings) {
+      const key = assetKey(holding)
+      if (!byAsset.has(key) || (!byAsset.get(key)?.listing && holding.listing)) byAsset.set(key, holding)
+    }
+    return [...byAsset.values()].map(({ category, reference, name, listing }) => ({ category, reference, name, listing }))
+  }, [holdings])
+  const latest = useRef({ symbols, quoteKey })
+  latest.current = { symbols, quoteKey }
+
+  async function refreshQuotes(userInitiated: boolean) {
+    if (quotePending.current) return
+    const { symbols, quoteKey } = latest.current
+    if (symbols.length === 0) {
+      if (userInitiated) setRefreshStatus('Ajoute d’abord une position pour récupérer un cours.')
+      return
+    }
+    lastAuto.current = Date.now()
+    quotePending.current = true
+    setRefreshing(true)
+    try {
+      const result = await fetchQuotes(symbols, quoteKey.trim())
+      if (result.marks.length) await saveMarks(result.marks)
+      setRefreshStatus(result.marks.length === 0 ? 'Aucun nouveau cours disponible. Les valeurs enregistrées restent affichées.'
+        : `${result.marks.length} cours récupéré(s).${result.unavailable ? ` ${result.unavailable} actif(s) sans cours récupéré.` : ''}`)
+    } catch {
+      setRefreshStatus('Les cours n’ont pas pu être enregistrés.')
+    } finally {
+      quotePending.current = false
+      setRefreshing(false)
+    }
+  }
+
+  useEffect(() => {
+    const auto = () => {
+      if (document.visibilityState === 'visible' && Date.now() - lastAuto.current >= 15 * 60 * 1000
+        && latest.current.symbols.some(asset => asset.category === 'crypto' || latest.current.quoteKey.trim())) {
+        void refreshQuotes(false)
+      }
+    }
+    auto()
+    const interval = window.setInterval(auto, 60 * 1000)
+    document.addEventListener('visibilitychange', auto)
+    return () => {
+      window.clearInterval(interval)
+      document.removeEventListener('visibilitychange', auto)
+    }
+  }, [symbols.length])
 
   function navigate(destination: Section) {
     setSection(destination)
@@ -65,165 +143,155 @@ export default function App() {
     setDeleting(true)
     setActionError('')
     try {
-      await deletePosition(toDelete.id)
-      setToDelete(null)
-      setMessage('Position supprimée.')
+      if (toDelete.type === 'position') await deletePosition(toDelete.id)
+      else await deleteOperation(toDelete.id)
+      setMessage('Entrée supprimée.')
     } catch (cause) {
-      console.error(cause)
-      setActionError('La suppression a échoué. Réessaie depuis le journal.')
-      setToDelete(null)
+      setActionError(cause instanceof Error ? cause.message : 'La suppression a échoué.')
     } finally {
+      setToDelete(null)
       setDeleting(false)
     }
   }
 
-  const assetList = (
-    <div className="asset-list">
-      {assets.map(asset => (
-        <details className="asset" key={asset.key}>
-          <summary>
-            <span className="asset-mark" aria-hidden="true">{asset.reference.slice(0, 2)}</span>
-            <span className="asset-title"><strong>{asset.name}</strong><small>{categories[asset.category]} · {asset.reference}</small></span>
-            <span className="asset-platforms">{asset.platformCount} plateforme{asset.platformCount !== 1 ? 's' : ''}</span>
-            <span className="asset-value"><strong>{asset.priced > 0 ? money(asset.amount) : '—'}</strong>
-              <small>{asset.priced < asset.entries.length ? 'Valorisation incomplète' : 'Valeur saisie'}</small>
-            </span>
-            <span className="disclosure"><Icon name="chevron" /></span>
-          </summary>
-          <div className="asset-body">
-            <div className="asset-rollup">
-              <span>Quantité totale <strong>{quantity(asset.quantity)}</strong></span>
-              <span>Gain latent <strong>{asset.gain === null ? 'Indéterminé' : signedMoney(asset.gain)}</strong>
-                {asset.gain !== null && asset.estimated && <small> Coût estimé</small>}
+  const assetList = <div className="asset-list">
+    {assets.map(asset => {
+      const entries = asset.entries
+      const listed = catalogEntry(asset.category, asset.reference)
+      return <details className="asset" key={asset.key}>
+        <summary>
+          <span className="asset-mark" aria-hidden="true">{categories[asset.category].slice(0, 2).toUpperCase()}</span>
+          <span className="asset-title"><strong>{asset.name}</strong><small>{[categories[asset.category], listed?.detail, listed?.aliases?.split(' ')[0] ?? labelReference(asset.reference)].filter(Boolean).join(' · ')}</small></span>
+          <span className="asset-platforms">{asset.platformCount} plateforme{asset.platformCount !== 1 ? 's' : ''}</span>
+          <span className="asset-value"><strong>{asset.priced ? money(asset.amount) : '—'}</strong>
+            <small>{entries.some(entry => entry.partiallyValued) ? 'Valorisation incomplète' : 'Valeur estimée'}</small></span>
+          <span className="disclosure"><Icon name="chevron" /></span>
+        </summary>
+        <div className="asset-body">
+          <div className="asset-rollup">
+            <span>Quantité totale <strong>{quantity(asset.quantity)}</strong></span>
+            <span>Gain latent <strong>{asset.gain === null ? 'Indéterminé' : signedMoney(asset.gain)}</strong>
+              {asset.gain !== null && asset.estimated && <small> · coût estimé</small>}</span>
+            <button className="text-button" onClick={() => setManualQuote(entries[0])}>Saisir un cours</button>
+          </div>
+          {entries.map(position => {
+            const result = summarize([position])
+            return <div className="entry holding-entry" key={position.id}>
+              <span><strong>{position.platform}</strong><small>{quantity(position.quantity)} unité(s)</small></span>
+              <span><ReadableValue position={position} />
+                {result.gain !== null && <small>Gain latent {signedMoney(result.gain)}{result.estimated ? ' · estimé' : ''}</small>}</span>
+              <span className="cost-summary">{position.cost ? <><strong>{money(position.cost.amount)}</strong><small>Coût d’acquisition</small></> : <small>Coût inconnu</small>}</span>
+            </div>
+          })}
+        </div>
+      </details>
+    })}
+  </div>
+
+  const allocation = allocationMode === 'category'
+    ? Object.entries(categories).map(([key, label]) => ({ label, amount: summarize(holdings.filter(item => item.category === key)).amount }))
+    : activePlatforms.map(label => ({ label, amount: summarize(holdings.filter(item => platformKey(item.platform) === platformKey(label))).amount }))
+  const journal = [
+    ...data.positions.map(value => ({ type: 'position' as const, value, at: value.createdAt })),
+    ...data.operations.map(value => ({ type: 'operation' as const, value, at: value.at })),
+  ].sort((a, b) => b.at - a.at)
+
+  return <>
+    <header className="site-header"><div className="shell header-content">
+      <button className="brand" onClick={() => navigate('overview')}><span aria-hidden="true">P</span>Portefeuille</button>
+      <nav aria-label="Navigation principale">
+        {(Object.keys(sections) as Section[]).map(item => <button key={item} className={section === item ? 'selected' : ''}
+          aria-current={section === item ? 'page' : undefined} onClick={() => navigate(item)}><Icon name={item} /><span>{sections[item]}</span></button>)}
+      </nav>
+      <button className="primary header-add" disabled={!loaded || loaded.failed} onClick={() => setEditor('new')}>
+        <Icon name="plus" /><span className="wide-label">Ajouter une position</span><span className="short-label">Ajouter</span></button>
+    </div></header>
+
+    <main className="shell main">
+      <div className="page-title">
+        <div><p className="eyebrow">SUIVI DES INVESTISSEMENTS</p><h1 ref={heading} tabIndex={-1}>{sections[section]}</h1></div>
+        <span className="local-badge"><Icon name="lock" /> Stockage local</span>
+      </div>
+      <div role="status" className={message ? 'status-message' : 'sr-only'}>{message}</div>
+      {actionError && <p className="error" role="alert">{actionError}</p>}
+      {!loaded ? <p className="panel blank" role="status">Ouverture du portefeuille…</p> : loaded.failed ? (
+        <div className="panel blank"><h2>Stockage local indisponible</h2><p>Vérifie que ce navigateur autorise le stockage du site, puis recharge la page.</p></div>
+      ) : section === 'data' ? (
+        <DataSettings quoteKey={quoteKey} onKey={setQuoteKey} onRefresh={() => void refreshQuotes(true)} refreshing={refreshing}
+          refreshStatus={refreshStatus} onRestored={() => { setRefreshStatus(''); setMessage('Portefeuille restauré.'); lastAuto.current = Date.now() }} />
+      ) : section === 'journal' ? (
+        <section className="panel"><header className="panel-header section-heading">
+          <div><h2>Journal du portefeuille</h2><p>Positions de départ, achats, ventes et transferts.</p></div>
+          <button className="primary" onClick={() => setTradeEditor('new')}><Icon name="plus" /> Enregistrer une opération</button>
+        </header>
+          {journal.length === 0 && <p className="hint journal-empty">Aucune entrée pour l’instant.</p>}
+          {journal.map(item => {
+            const value = item.value
+            const operation = item.type === 'operation' ? item.value : null
+            const gain = operation?.kind === 'sell' ? loaded.view.sales.get(operation.id) : undefined
+            return <div className="entry journal-entry" key={item.type + '/' + value.id}>
+              <span><strong>{value.name}</strong><small>{operation ? operationNames[operation.kind] : 'Position de départ'} · {timestamp.format(item.at)}</small></span>
+              <span><strong>{quantity(value.quantity)} unité(s)</strong>
+                <small>{value.platform}{operation?.destination ? ' → ' + operation.destination : ''}</small>
+                {operation && operation.kind !== 'transfer' && <small>Montant hors frais {money(operation.gross)}</small>}
+                {operation && operation.fee !== '0' && <small>Frais {money(operation.fee)}</small>}
+                {operation?.feeUnits && operation.feeUnits !== '0' && <small>Frais {quantity(operation.feeUnits)} unité(s)</small>}
+                {gain !== undefined && <small>Gain réalisé {gain === null ? 'indéterminé' : signedMoney(gain)}</small>}</span>
+              <span className="entry-actions">
+                <button className="text-button" onClick={() => item.type === 'position' ? setEditor(item.value) : setTradeEditor(item.value)}>Modifier</button>
+                <button className="text-button danger" onClick={() => setToDelete({ id: value.id, name: value.name, type: item.type })}>Supprimer</button>
               </span>
             </div>
-            {asset.entries.map(position => {
-              const result = summarize([position])
-              return (
-                <div className="entry" key={position.id}>
-                  <span><strong>{position.platform}</strong><small>{quantity(position.quantity)} unité(s)</small></span>
-                  <span><ReadableValue position={position} />
-                    {result.gain !== null && <small>Gain latent {signedMoney(result.gain)}{result.estimated ? ' · estimé' : ''}</small>}
-                  </span>
-                  <button className="text-button" onClick={() => setEditor(position)}>Modifier</button>
-                </div>
-              )
-            })}
-          </div>
-        </details>
-      ))}
-    </div>
-  )
-
-  return (
-    <>
-      <header className="site-header">
-        <div className="shell header-content">
-          <button className="brand" onClick={() => navigate('overview')}><span aria-hidden="true">P</span>Portefeuille</button>
-          <nav aria-label="Navigation principale">
-            {(Object.keys(sections) as Section[]).map(item => (
-              <button key={item} className={section === item ? 'selected' : ''}
-                aria-current={section === item ? 'page' : undefined} onClick={() => navigate(item)}>
-                <Icon name={item} /><span>{sections[item]}</span>
-              </button>
-            ))}
-          </nav>
-          <button className="primary header-add" disabled={!loaded || loaded.failed} onClick={() => setEditor('new')}>
-            <Icon name="plus" /><span className="wide-label">Ajouter une position</span><span className="short-label">Ajouter</span>
-          </button>
-        </div>
-      </header>
-
-      <main className="shell main">
-        <div className="page-title">
-          <div><p className="eyebrow">SUIVI DES INVESTISSEMENTS</p><h1 ref={heading} tabIndex={-1}>{sections[section]}</h1></div>
-          <span className="local-badge"><Icon name="lock" /> Stockage local</span>
-        </div>
-        <div role="status" className={message ? 'status-message' : 'sr-only'}>{message}</div>
-        {actionError && <p className="error" role="alert">{actionError}</p>}
-        {!loaded ? <p className="panel blank" role="status">Ouverture du portefeuille…</p> : loaded.failed ? (
-          <div className="panel blank"><h2>Stockage local indisponible</h2><p>Vérifie que ce navigateur autorise le stockage du site, puis recharge la page.</p></div>
-        ) : positions.length === 0 ? (
-          <section className="panel empty">
-            <span className="empty-icon"><Icon name={section} /></span>
-            <h2>{section === 'journal' ? 'Aucune entrée dans le journal' : 'Ajoute ta première position'}</h2>
-            <p>Rassemble ici tes actions, ETF et cryptos. Choisis un actif, une plateforme et une quantité pour commencer.</p>
-            <button className="primary" onClick={() => setEditor('new')}><Icon name="plus" /> Ajouter une position</button>
+          })}
+        </section>
+      ) : journal.length === 0 ? (
+        <section className="panel empty"><span className="empty-icon"><Icon name={section} /></span><h2>Ajoute ta première position</h2>
+          <p>Retrouve tes actions, ETF et cryptos au même endroit.</p>
+          <button className="primary" onClick={() => setEditor('new')}><Icon name="plus" /> Ajouter une position</button></section>
+      ) : <>
+        {section === 'overview' && <>
+          <section className="overview-grid" aria-label="Synthèse du portefeuille">
+            <div className="panel total-panel">
+              <div className="total-header"><h2>Valeur {unpriced ? 'connue' : 'totale'}</h2><span className="chip">CHF</span></div>
+              <p className="total-number">{total.priced || holdings.length === 0 ? money(total.amount) : '—'}</p>
+              <p className="muted counts">{assets.length} actif(s) · {activePlatforms.length} plateforme(s)</p>
+              {unpriced > 0 && <p className="notice">{unpriced} position(s) à valoriser.</p>}
+              <p className="hint">Gain réalisé connu <strong>{signedMoney(loaded.view.realized)}</strong>
+                {loaded.view.unknownSales > 0 && ` · ${loaded.view.unknownSales} vente(s) sans coût connu`}</p>
+              <button className="text-button" onClick={() => void refreshQuotes(true)} disabled={refreshing}>{refreshing ? 'Actualisation…' : 'Actualiser les cours'}</button>
+              {refreshStatus && <p className="hint" role="status">{refreshStatus}</p>}
+            </div>
+            <div className="panel allocation">
+              <div className="section-heading"><h2>Répartition</h2>
+                <select aria-label="Répartition par" value={allocationMode} onChange={event => setAllocationMode(event.target.value as 'category' | 'platform')}>
+                  <option value="category">Par catégorie</option><option value="platform">Par plateforme</option></select></div>
+              {total.amount.lte(0) ? <p className="muted">Disponible avec une valorisation positive.</p> : <ul>
+                {allocation.filter(item => item.amount.gt(0)).map(item => {
+                  const weight = item.amount.div(total.amount).times(100).toNumber()
+                  return <li key={item.label}><div><span>{item.label}</span>
+                    <strong>{weight.toLocaleString('fr-CH', { maximumFractionDigits: 1 })} %</strong></div>
+                    <div className="bar" aria-hidden="true"><span style={{ width: `${weight}%` }} /></div></li>
+                })}
+              </ul>}
+            </div>
           </section>
-        ) : section === 'journal' ? (
-          <section className="panel">
-            <header className="panel-header"><h2>Positions ajoutées</h2><p>Les saisies de positions existantes, dans l’ordre d’ajout.</p></header>
-            {[...positions].reverse().map(position => (
-              <div className="entry journal-entry" key={position.id}>
-                <span><strong>{position.name}</strong><small>{position.platform} · {timestamp.format(position.createdAt)}</small></span>
-                <span><ReadableValue position={position} /></span>
-                <span className="entry-actions">
-                  <button className="text-button" onClick={() => setEditor(position)}>Modifier</button>
-                  <button className="text-button danger" onClick={() => setToDelete(position)}>Supprimer</button>
-                </span>
-              </div>
-            ))}
-          </section>
-        ) : (
-          <>
-            {section === 'overview' && (
-              <section className="overview-grid" aria-label="Synthèse du portefeuille">
-                <div className="panel total-panel">
-                  <div className="total-header"><h2>Valeur {unpriced && total.priced ? 'connue' : 'totale'}</h2><span className="chip">CHF</span></div>
-                  <p className="total-number">{total.priced ? money(total.amount) : '—'}</p>
-                  <p className="muted counts">{assets.length} actif{assets.length !== 1 ? 's' : ''} · {platformCount} plateforme{platformCount !== 1 ? 's' : ''}</p>
-                  {unpriced > 0 && <p className="notice">{unpriced === 1 ? 'Une position est sans valeur saisie.' : `${unpriced} positions sont sans valeur saisie.`}</p>}
-                  {total.priced > 0 && unpriced === 0 && <p className="hint">Valeurs saisies manuellement.</p>}
-                </div>
-                <div className="panel allocation">
-                  <h2>Répartition</h2><p className="hint">Par catégorie, sur la valeur connue.</p>
-                  {total.amount.lte(0) ? <p className="muted">Disponible avec une valorisation positive.</p> : (
-                    <ul>
-                      {Object.entries(categories).map(([key, label]) => {
-                        const categoryTotal = summarize(positions.filter(item => item.category === key)).amount
-                        if (categoryTotal.lte(0)) return null
-                        const weight = categoryTotal.div(total.amount).times(100).toNumber()
-                        return <li key={key}><div><span>{label}</span><strong>{weight.toLocaleString('fr-CH', { maximumFractionDigits: 1 })} %</strong></div>
-                          <div className="bar" aria-hidden="true"><span style={{ width: `${weight}%` }} /></div></li>
-                      })}
-                    </ul>
-                  )}
-                </div>
-              </section>
-            )}
-            <section className="panel positions-panel">
-              <header className="panel-header"><h2>Positions consolidées</h2><p>Ouvre un actif pour voir son détail par plateforme.</p></header>
-              {assetList}
-            </section>
-          </>
-        )}
-      </main>
-      {editor !== null && <PositionForm current={editor === 'new' ? null : editor} positions={positions}
-        onClose={() => setEditor(null)} onSave={async position => {
-          await savePosition(position, editor !== 'new')
-          setMessage(editor === 'new' ? 'Position ajoutée au portefeuille.' : 'Position mise à jour.')
-        }} />}
-      {toDelete && <DeleteDialog position={toDelete} busy={deleting} onClose={() => setToDelete(null)} onDelete={confirmDelete} />}
-    </>
-  )
-}
-
-function DeleteDialog({ position, busy, onClose, onDelete }: {
-  position: Position
-  busy: boolean
-  onClose: () => void
-  onDelete: () => void
-}) {
-  const open = useRef(false)
-  return <dialog className="delete-dialog" aria-labelledby="delete-title" ref={element => {
-    if (!element) { open.current = false; return }
-    if (!open.current) { element.showModal(); open.current = true }
-  }} onCancel={event => { event.preventDefault(); if (!busy) onClose() }}>
-    <h2 id="delete-title">Supprimer cette position ?</h2>
-    <p>{position.name} sur {position.platform} sera retiré du portefeuille.</p>
-    <div className="dialog-actions">
-      <button className="secondary" onClick={onClose} disabled={busy} autoFocus>Annuler</button>
-      <button className="primary danger-button" onClick={onDelete} disabled={busy}>Supprimer</button>
-    </div>
-  </dialog>
+          <HistoryChart history={history} />
+        </>}
+        <section className="panel positions-panel">
+          <header className="panel-header"><h2>Positions consolidées</h2><p>Ouvre un actif pour voir son détail par plateforme.</p></header>
+          {holdings.length ? assetList : <p className="hint journal-empty">Aucune position ouverte.</p>}
+        </section>
+      </>}
+    </main>
+    {editor !== null && <PositionForm current={editor === 'new' ? null : editor} positions={data.positions}
+      platforms={platforms} marks={data.marks} quoteKey={quoteKey.trim()} onClose={() => setEditor(null)}
+      onSave={async (position, quote) => { await savePosition(position, editor !== 'new', quote); setMessage('Position enregistrée.') }} />}
+    {tradeEditor !== null && <OperationForm current={tradeEditor === 'new' ? null : tradeEditor} data={data} platforms={platforms}
+      onClose={() => setTradeEditor(null)} onSave={async operation => {
+        await saveOperation(operation, tradeEditor !== 'new'); setMessage('Opération enregistrée.')
+      }} />}
+    {manualQuote && <ManualQuoteForm asset={manualQuote} onClose={() => setManualQuote(null)} onSave={() => setMessage('Cours enregistré.')} />}
+    {toDelete && <ConfirmDialog title="Supprimer cette entrée ?" description={`L’entrée de ${toDelete.name} sera retirée du journal.`}
+      confirm="Supprimer" busy={deleting} danger onClose={() => setToDelete(null)} onConfirm={() => void confirmDelete()} />}
+  </>
 }

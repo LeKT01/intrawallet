@@ -1,28 +1,46 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import {
-  categories, estimatedCost, money, parseAmount, platformKey,
-  type Category, type Cost, type Position,
-} from './portfolio'
+import AssetPicker, { type AssetInput } from './AssetPicker'
+import { estimatedCost, money, parseAmount, platformKey, type Category, type Cost, type Position } from './portfolio'
+import { quoteTarget, type Mark } from './ledger'
+import { fetchQuotes } from './quotes'
 
 type CostMode = 'none' | 'exact' | 'percent'
 
-function newPositionId() {
+export function newId() {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)),
     byte => byte.toString(16).padStart(2, '0')).join('')
+}
+
+export function platformName(value: string, options: string[]) {
+  const cleaned = value.trim().replace(/\s+/g, ' ')
+  return options.find(item => platformKey(item) === platformKey(cleaned)) ?? cleaned
+}
+
+export function useModal() {
+  const dialog = useRef<HTMLDialogElement>(null)
+  useEffect(() => {
+    const element = dialog.current
+    element?.showModal()
+    return () => element?.close()
+  }, [])
+  return dialog
 }
 
 interface Props {
   current: Position | null
   positions: Position[]
+  platforms: string[]
+  marks: Mark[]
+  quoteKey: string
   onClose: () => void
-  onSave: (position: Position) => Promise<unknown>
+  onSave: (position: Position, quote?: Mark) => Promise<unknown>
 }
 
-export default function PositionForm({ current, positions, onClose, onSave }: Props) {
-  const dialog = useRef<HTMLDialogElement>(null)
-  const [category, setCategory] = useState<Category>(current?.category ?? 'crypto')
-  const [name, setName] = useState(current?.name ?? '')
-  const [reference, setReference] = useState(current?.reference ?? '')
+export default function PositionForm({ current, positions, platforms, marks, quoteKey, onClose, onSave }: Props) {
+  const dialog = useModal()
+  const [category, setCategory] = useState<Category>(current?.category ?? 'etf')
+  const [selected, setSelected] = useState<AssetInput | null>(current)
+  const [custom, setCustom] = useState<AssetInput | null>(null)
   const [platform, setPlatform] = useState(current?.platform ?? '')
   const [units, setUnits] = useState(current?.quantity ?? '')
   const [valuation, setValuation] = useState(current?.valuation?.amount ?? '')
@@ -34,42 +52,52 @@ export default function PositionForm({ current, positions, onClose, onSave }: Pr
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const savePending = useRef(false)
+  const [requested, setRequested] = useState<Mark>()
+  const [requesting, setRequesting] = useState(false)
+  const [quoteMessage, setQuoteMessage] = useState('')
 
-  useEffect(() => {
-    const element = dialog.current
-    element?.showModal()
-    return () => element?.close()
-  }, [])
-
-  const normalizedRef = reference.trim().toUpperCase()
-  const knownAsset = positions.find(item => item.category === category && item.reference === normalizedRef && item.id !== current?.id)
-  const platformOptions = [...new Map(positions.map(item => [platformKey(item.platform), item.platform])).values()]
+  const asset = selected ?? custom
+  const sameAsset = current && asset && quoteTarget(current) === quoteTarget(asset)
+  const target = asset && quoteTarget(asset)
+  const cached = target ? marks.filter(mark => mark.kind === 'market' && mark.target === target && mark.price !== null)
+    .sort((a, b) => b.sourceAt - a.sourceAt || b.at - a.at)[0] : undefined
+  const quote = requested?.target === target ? requested : cached
+  const qty = parseAmount(units)
   const amount = parseAmount(valuation)
+  const currentValue = valuation.trim() ? amount : (qty?.gt(0) && quote?.price ? qty.times(quote.price) : null)
   const enteredCost = parseAmount(costInput)
-  const sameAsset = current?.category === category && current.reference === normalizedRef
   const sameEstimate = costMode === 'percent' && sameAsset && current.cost?.kind === 'estimated'
     && enteredCost?.eq(current.cost.initialPercent)
   const estimate = costMode === 'percent' && enteredCost?.gt(-100)
     ? sameEstimate && current?.cost?.kind === 'estimated'
       ? current.cost.amount
-      : amount?.gt(0) ? estimatedCost(amount, enteredCost).toFixed() : null
+      : currentValue?.gt(0) ? estimatedCost(currentValue, enteredCost).toFixed() : null
     : null
+
+  async function requestQuote() {
+    if (!asset || requesting) return
+    setRequesting(true)
+    setQuoteMessage('')
+    try {
+      const result = await fetchQuotes([asset], quoteKey)
+      if (result.marks[0]) {
+        setRequested(result.marks[0])
+        setQuoteMessage('Cours récupéré. Laisse la valeur manuelle vide pour l’utiliser.')
+      } else {
+        setQuoteMessage('Cours automatique indisponible pour cet actif. Tu peux saisir sa valeur.')
+      }
+    } finally {
+      setRequesting(false)
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (savePending.current) return
     setError('')
-    const trimmedName = knownAsset?.name ?? name.trim()
-    const trimmedPlatform = platform.trim().replace(/\s+/g, ' ')
-    const qty = parseAmount(units)
-    const validReference = category === 'crypto'
-      ? /^[A-Z0-9][A-Z0-9._-]{0,49}$/.test(normalizedRef)
-      : /^(?:[A-Z]{2}[A-Z0-9]{9}[0-9]|[A-Z0-9._-]{1,18}:[A-Z0-9._-]{1,25})$/.test(normalizedRef)
-
-    if (!trimmedName || !trimmedPlatform) return setError('Renseigne le nom de l’actif et la plateforme.')
-    if (!validReference) return setError(category === 'crypto'
-      ? 'Renseigne un identifiant crypto, par exemple BTC.'
-      : 'Renseigne un ISIN ou une référence marché:symbole, par exemple XSWX:NESN.')
+    if (!asset) return setError('Choisis un actif dans la liste ou ajoute son nom manuellement.')
+    const selectedPlatform = platformName(platform, platforms)
+    if (!selectedPlatform) return setError('Renseigne la plateforme, par exemple Revolut ou ta banque.')
     if (!qty?.gt(0)) return setError('La quantité doit être un nombre supérieur à zéro.')
     if (valuation.trim() && (!amount || amount.lt(0))) return setError('La valeur en CHF doit être un nombre positif ou nul.')
 
@@ -80,33 +108,36 @@ export default function PositionForm({ current, positions, onClose, onSave }: Pr
     }
     if (costMode === 'percent') {
       if (!enteredCost?.gt(-100)) return setError('Indique un pourcentage supérieur à −100 %. Pour une perte totale, saisis le coût d’acquisition.')
-      if (!estimate) return setError('Renseigne une valeur positive en CHF pour calculer le coût estimé.')
+      if (!estimate) return setError('Renseigne une valeur positive en CHF ou récupère le cours pour calculer le coût estimé.')
       cost = sameEstimate && current?.cost?.kind === 'estimated' ? current.cost : {
-        kind: 'estimated', amount: estimate, initialPercent: enteredCost.toFixed(), initialValue: amount!.toFixed(),
+        kind: 'estimated', amount: estimate, initialPercent: enteredCost.toFixed(), initialValue: currentValue!.toFixed(),
       }
     }
 
     const now = Date.now()
     const cleanValue = amount?.toFixed()
+    const known = positions.find(item => quoteTarget(item) === target && item.id !== current?.id)
+    const originalValue = current?.initialValue ?? (current?.valuation?.updatedAt === current?.createdAt
+      ? current?.valuation?.amount : null)
+    const initialValue = sameAsset && current ? originalValue ?? null : currentValue?.toFixed() ?? null
     const entry: Position = {
-      id: current?.id ?? newPositionId(),
-      category, name: trimmedName, reference: normalizedRef,
-      platform: platformOptions.find(item => platformKey(item) === platformKey(trimmedPlatform)) ?? trimmedPlatform,
-      quantity: qty.toFixed(), cost, createdAt: current?.createdAt ?? now,
+      id: current?.id ?? newId(), category: asset.category, name: known?.name ?? asset.name,
+      reference: asset.reference, listing: asset.listing, platform: selectedPlatform, quantity: qty.toFixed(),
+      cost, createdAt: current?.createdAt ?? now, initialValue,
       valuation: cleanValue === undefined ? null : {
         amount: cleanValue,
-        updatedAt: sameAsset && current.valuation?.amount === cleanValue ? current.valuation.updatedAt : now,
+        updatedAt: sameAsset && current?.valuation?.amount === cleanValue && current.quantity === qty.toFixed()
+          ? current.valuation.updatedAt : now,
       },
     }
 
     savePending.current = true
     setBusy(true)
     try {
-      await onSave(entry)
+      await onSave(entry, requested?.target === target ? requested : undefined)
       onClose()
     } catch (cause) {
-      console.error(cause)
-      setError('L’enregistrement a échoué. Vérifie que le stockage de ce navigateur est disponible, puis réessaie.')
+      setError(cause instanceof Error ? cause.message : 'L’enregistrement a échoué. Réessaie.')
     } finally {
       savePending.current = false
       setBusy(false)
@@ -120,84 +151,67 @@ export default function PositionForm({ current, positions, onClose, onSave }: Pr
     }}>
       <form className="position-form" onSubmit={submit} noValidate>
         <header className="dialog-header">
-          <div>
-            <p className="eyebrow">POSITION EXISTANTE</p>
+          <div><p className="eyebrow">PORTEFEUILLE</p>
             <h2 id="position-title">{current ? 'Modifier la position' : 'Ajouter une position'}</h2>
-          </div>
+            <p className="hint">Pour des titres ou cryptos que tu détiens déjà.</p></div>
           <button type="button" className="icon-button" aria-label="Fermer" onClick={onClose} disabled={busy}>×</button>
         </header>
         <fieldset disabled={busy} className="form-fields">
-          <div className="form-grid">
-            <label>Catégorie
-              <select value={category} onChange={event => {
-                setCategory(event.target.value as Category)
-                setReference('')
-              }}>
-                {Object.entries(categories).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
-            </label>
-            <label>Identifiant de l’actif
-              <input autoFocus value={reference} maxLength={50} required
-                placeholder={category === 'crypto' ? 'Ex. BTC' : 'ISIN ou marché:symbole'}
-                onChange={event => setReference(event.target.value)} />
-            </label>
-            <label className="full">Nom de l’actif
-              <input value={knownAsset?.name ?? name} readOnly={Boolean(knownAsset)} maxLength={100} required
-                placeholder={category === 'crypto' ? 'Ex. Bitcoin' : 'Ex. ETF S&P 500'}
-                onChange={event => setName(event.target.value)} />
-            </label>
-            <label>Plateforme
-              <input value={platform} list="plateformes" maxLength={80} required
-                placeholder="Ex. Revolut" onChange={event => setPlatform(event.target.value)} />
-              <datalist id="plateformes">
-                {platformOptions.map(item => <option key={item} value={item} />)}
-              </datalist>
-            </label>
-            <label>Quantité
-              <input value={units} inputMode="decimal" maxLength={38} required
-                placeholder="Ex. 0,005" onChange={event => setUnits(event.target.value)} />
-            </label>
-            <label className="full">Valeur totale de la position en CHF <small>facultatif</small>
-              <input value={valuation} inputMode="decimal" maxLength={38}
-                placeholder="Ex. 500" onChange={event => setValuation(event.target.value)} />
-            </label>
-          </div>
-          <fieldset className="cost-fields">
-            <legend>Coût ou performance initiale <small>facultatif</small></legend>
-            <div className="segments">
-              {([['none', 'Ignorer'], ['exact', 'Coût d’achat'], ['percent', 'Gain ou perte en %']] as const).map(([mode, label]) => (
-                <label key={mode}>
-                  <input type="radio" name="costMode" checked={costMode === mode} onChange={() => {
-                    setCostMode(mode)
-                    setCostInput(mode === 'percent' && current?.cost?.kind === 'estimated' ? current.cost.initialPercent
-                      : mode === 'exact' && current?.cost?.kind === 'exact' ? current.cost.amount : '')
-                  }} />
-                  <span>{label}</span>
-                </label>
+          <div className="step"><span>1</span><h3>Choisis ton investissement</h3></div>
+          <AssetPicker category={category} selected={selected} onCategory={setCategory} onChoose={value => {
+            setSelected(value)
+            setQuoteMessage('')
+          }} onCustom={setCustom} />
+
+          {asset && <>
+            <div className="step"><span>2</span><h3>Indique ce que tu détiens</h3></div>
+            <div className="form-grid">
+              <label>Plateforme
+                <input value={platform} list="plateformes" maxLength={80} placeholder="Ex. Revolut"
+                  onChange={event => setPlatform(event.target.value)} />
+                <datalist id="plateformes">{platforms.map(item => <option key={item} value={item} />)}</datalist>
+              </label>
+              <label>Quantité détenue
+                <input value={units} inputMode="decimal" maxLength={38} placeholder="Ex. 2,5"
+                  onChange={event => setUnits(event.target.value)} />
+              </label>
+              <label className="full">Valeur actuelle de toute la position (CHF) <small>facultatif</small>
+                <input value={valuation} inputMode="decimal" maxLength={38} placeholder="Ex. 500"
+                  onChange={event => setValuation(event.target.value)} />
+              </label>
+            </div>
+            <div className="quote-form-row">
+              <p className="hint">Montant total affiché par ta plateforme. Tu peux aussi le compléter plus tard.</p>
+              {(asset.category === 'crypto' || quoteKey) && <button type="button" className="text-button"
+                onClick={requestQuote} disabled={requesting}>{requesting ? 'Recherche…' : 'Récupérer le cours'}</button>}
+            </div>
+            {quoteMessage && <p className="hint" role="status">{quoteMessage}</p>}
+
+            <div className="step"><span>3</span><h3>Renseigne ton prix d’achat <small>facultatif</small></h3></div>
+            <div className="segments" role="group" aria-label="Coût d’acquisition">
+              {([['none', 'Plus tard'], ['exact', 'Montant payé'], ['percent', 'Gain ou perte en %']] as const).map(([mode, label]) => (
+                <label key={mode}><input type="radio" name="costMode" checked={costMode === mode} onChange={() => {
+                  setCostMode(mode)
+                  setCostInput(mode === 'percent' && current?.cost?.kind === 'estimated' ? current.cost.initialPercent
+                    : mode === 'exact' && current?.cost?.kind === 'exact' ? current.cost.amount : '')
+                }} /><span>{label}</span></label>
               ))}
             </div>
-            {costMode !== 'none' && (
-              <label className="cost-input">{costMode === 'percent' ? 'Performance au moment de l’ajout (%)' : 'Coût total d’acquisition en CHF'}
-                <input value={costInput} inputMode="decimal" maxLength={38}
-                  placeholder={costMode === 'percent' ? 'Ex. +12 ou −8' : 'Ex. 450'}
-                  onChange={event => setCostInput(event.target.value.replaceAll('−', '-'))} />
-              </label>
-            )}
-          </fieldset>
-          {((amount && amount.gte(0)) || estimate) && (
-            <dl className="estimate" aria-live="polite">
-              {amount && amount.gte(0) && <div><dt>Valeur saisie</dt><dd>{money(amount)}</dd></div>}
+            {costMode !== 'none' && <label className="cost-input">
+              {costMode === 'percent' ? 'Gain ou perte affiché à l’ajout (%)' : 'Montant total payé pour cette position (CHF)'}
+              <input value={costInput} inputMode="decimal" maxLength={38} placeholder={costMode === 'percent' ? 'Ex. +12 ou −8' : 'Ex. 450'}
+                onChange={event => setCostInput(event.target.value.replaceAll('−', '-'))} />
+            </label>}
+            {((currentValue && currentValue.gte(0)) || estimate) && <dl className="estimate" aria-live="polite">
+              {currentValue && currentValue.gte(0) && <div><dt>{valuation.trim() ? 'Valeur saisie' : 'Valeur au cours disponible'}</dt><dd>{money(currentValue)}</dd></div>}
               {estimate && <div><dt>Coût d’acquisition estimé</dt><dd>{money(estimate)}</dd></div>}
-            </dl>
-          )}
-          {amount === null && !valuation.trim() && (
-            <p className="hint">Tu peux ajouter la position maintenant et saisir sa valeur plus tard.</p>
-          )}
+            </dl>}
+          </>}
         </fieldset>
         {error && <p className="error" role="alert">{error}</p>}
         <footer className="dialog-actions">
           <button type="button" className="secondary" onClick={onClose} disabled={busy}>Annuler</button>
-          <button className="primary" type="submit" disabled={busy}>{busy ? 'Enregistrement…' : 'Enregistrer la position'}</button>
+          <button className="primary" type="submit" disabled={busy || !asset}>{busy ? 'Enregistrement…' : 'Enregistrer la position'}</button>
         </footer>
       </form>
     </dialog>

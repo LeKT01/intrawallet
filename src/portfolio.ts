@@ -1,4 +1,5 @@
 import { Decimal } from 'decimal.js'
+import { catalogEntry } from './catalog.ts'
 
 Decimal.set({ precision: 64 })
 
@@ -19,6 +20,8 @@ export interface Position {
   valuation: { amount: string; updatedAt: number } | null
   cost: Cost | null
   createdAt: number
+  listing?: string
+  initialValue?: string | null
 }
 
 export function parseAmount(input: string) {
@@ -51,10 +54,12 @@ export function quantity(value: Decimal.Value) {
   return new Decimal(value).toFixed().replace('.', ',')
 }
 
-export const assetKey = (position: Position) => position.category + '/' + position.reference
+export function assetKey({ category, reference }: Pick<Position, 'category' | 'reference'>) {
+  return category + '/' + (catalogEntry(category, reference)?.reference ?? reference)
+}
 export const platformKey = (platform: string) => platform.toLocaleLowerCase('fr-CH')
 
-export function summarize(positions: Position[]) {
+export function summarize(positions: (Position & { partiallyValued?: boolean })[]) {
   let amount = new Decimal(0)
   let cost = new Decimal(0)
   let priced = 0
@@ -65,7 +70,7 @@ export function summarize(positions: Position[]) {
     if (!position.valuation) continue
     amount = amount.plus(position.valuation.amount)
     priced += 1
-    if (position.cost) {
+    if (position.cost && !position.partiallyValued) {
       cost = cost.plus(position.cost.amount)
       comparable += 1
       estimated ||= position.cost.kind === 'estimated'
@@ -80,8 +85,8 @@ export function summarize(positions: Position[]) {
   }
 }
 
-export function consolidate(positions: Position[]) {
-  const byAsset = new Map<string, Position[]>()
+export function consolidate<T extends Position>(positions: T[]) {
+  const byAsset = new Map<string, T[]>()
   for (const position of positions) {
     const key = assetKey(position)
     const existing = byAsset.get(key)

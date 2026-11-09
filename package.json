@@ -1,11 +1,12 @@
 {
   "name": "portefeuille-local",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Suivi local d’un portefeuille personnel",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 4173 --strictPort",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort"
+    "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
+    "test": "node --test"
   },
   "keywords": [],
   "author": "",
