@@ -38,12 +38,18 @@ const chfFormatter = new Intl.NumberFormat('fr-CH', {
   style: 'currency', currency: 'CHF', currencyDisplay: 'code',
 })
 
-export function money(value: Decimal.Value) {
-  const rounded = new Decimal(value).toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
-  const [whole, fraction] = rounded.abs().toFixed(2).split('.')
+export function money(value: Decimal.Value, digits = 2) {
+  const rounded = new Decimal(value).toDecimalPlaces(digits, Decimal.ROUND_HALF_UP)
+  const [whole, fraction] = rounded.abs().toFixed(digits).split('.')
   const signedWhole = BigInt(whole) * (rounded.isNegative() ? -1n : 1n)
   const parts = chfFormatter.formatToParts(rounded.isNegative() && signedWhole === 0n ? -0 : signedWhole)
   return parts.map(part => part.type === 'fraction' ? fraction : part.value).join('')
+}
+
+export function unitPrice(value: Decimal.Value) {
+  const price = new Decimal(value)
+  const digits = price.gt(0) && price.lt(1) ? Math.min(18, 3 - price.e) : 2
+  return money(price, digits)
 }
 
 export function signedMoney(value: Decimal) {

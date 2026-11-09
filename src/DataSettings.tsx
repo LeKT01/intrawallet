@@ -26,12 +26,13 @@ export function ConfirmDialog({ title, description, confirm, busy, onClose, onCo
   </dialog>
 }
 
-export default function DataSettings({ quoteKey, onKey, onRefresh, refreshing, refreshStatus, onRestored }: {
+export default function DataSettings({ quoteKey, onKey, onRefresh, refreshing, refreshStatus, lastChecked, onRestored }: {
   quoteKey: string
   onKey: (key: string) => void
   onRefresh: () => void
   refreshing: boolean
   refreshStatus: string
+  lastChecked: number | null
   onRestored: () => void
 }) {
   const fileInput = useRef<HTMLInputElement>(null)
@@ -39,6 +40,7 @@ export default function DataSettings({ quoteKey, onKey, onRefresh, refreshing, r
   const [working, setWorking] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [keyDraft, setKeyDraft] = useState(quoteKey)
   const [pending, setPending] = useState<PortfolioData | null>(null)
 
   async function run(action: () => Promise<void>) {
@@ -83,12 +85,19 @@ export default function DataSettings({ quoteKey, onKey, onRefresh, refreshing, r
   return <div className="settings-grid">
     <section className="panel settings-panel"><h2>Cotations automatiques</h2>
       <p className="hint">Les cryptos du catalogue utilisent CoinGecko. Pour les titres cotés aux États-Unis, tu peux utiliser une clé gratuite Finnhub.</p>
-      <label className="cost-input">Clé Finnhub <small>facultative · gardée dans cet onglet</small>
-        <input type="password" value={quoteKey} maxLength={128} autoComplete="off" spellCheck={false}
-          placeholder="Clé de cotation, si tu en as une" onChange={event => onKey(event.target.value)} />
-      </label>
+      <form onSubmit={event => { event.preventDefault(); onKey(keyDraft) }}>
+        <label className="cost-input">Clé Finnhub <small>facultative</small>
+          <input type="password" value={keyDraft} maxLength={128} autoComplete="off" spellCheck={false}
+            placeholder="Clé de cotation, si tu en as une" onChange={event => setKeyDraft(event.target.value)} />
+        </label>
+        <button type="submit" className="secondary" disabled={keyDraft.trim() === quoteKey}>Appliquer la clé</button>
+        <p className="hint">{quoteKey ? 'Clé active. Efface le champ et applique pour la retirer.' : 'Aucune clé active.'}
+          {' '}Elle est conservée dans cet onglet après rechargement.</p>
+      </form>
       <p className="hint">Pour les ETF suisses ou européens, ouvre l’actif et saisis son prix unitaire en CHF.</p>
       <button className="secondary" onClick={onRefresh} disabled={refreshing}>{refreshing ? 'Actualisation…' : 'Actualiser les cours'}</button>
+      <p className="hint">Vérification à l’ouverture et au rechargement, puis environ toutes les 15 minutes pendant la consultation.</p>
+      {lastChecked !== null && <p className="hint">Dernière vérification · {new Date(lastChecked).toLocaleString('fr-CH')}</p>}
       {refreshStatus && <p className="hint" role="status">{refreshStatus}</p>}
     </section>
     <section className="panel settings-panel"><h2>Sauvegarde locale</h2>

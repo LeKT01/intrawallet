@@ -108,6 +108,7 @@ export function saveMarks(marks: Mark[]) {
     const existing = await db.marks.bulkGet(marks.map(mark => mark.id))
     const fresh = marks.filter((mark, index) => !existing[index] && targets.has(mark.target))
     await db.marks.bulkAdd(fresh)
+    return fresh.length
   })
 }
 

@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { deleteOperation, deletePosition, loadPortfolio, saveMarks, saveOperation, savePosition } from './database'
-import { assetKey, categories, consolidate, money, platformKey, quantity, signedMoney, summarize, type Position } from './portfolio'
-import { firstTrackingDate, operationNames, replay, type Holding, type Operation, type PortfolioData } from './ledger'
+import { assetKey, categories, consolidate, money, platformKey, quantity, signedMoney, summarize, unitPrice, type Position } from './portfolio'
+import { firstTrackingDate, operationNames, replay, type Holding, type Mark, type Operation, type PortfolioData } from './ledger'
 import PositionForm from './PositionForm'
 import OperationForm from './OperationForm'
 import DataSettings, { ConfirmDialog } from './DataSettings'
 import HistoryChart from './HistoryChart'
 import ManualQuoteForm from './ManualQuoteForm'
-import { fetchQuotes } from './quotes'
+import { fetchQuotes, quoteAccess, readSessionQuoteKey, saveSessionQuoteKey } from './quotes'
 import { catalogEntry } from './catalog'
 
 type Section = 'overview' | 'positions' | 'journal' | 'data'
@@ -34,6 +34,7 @@ function Icon({ name }: { name: IconName }) {
 function ReadableValue({ position }: { position: Holding }) {
   if (!position.valuation) return <span className="muted">Valorisation incomplète</span>
   return <><strong>{money(position.valuation.amount)}</strong>
+    {position.unitPrice !== null && <small>{position.averageUnitPrice ? 'Prix moyen utilisé' : 'Prix unitaire utilisé'} {unitPrice(position.unitPrice)}</small>}
     <small>{position.partiallyValued ? 'Valeur partielle · ' : ''}{position.source?.source ?? 'Saisie manuelle'} · {
       timestamp.format(position.valuation.updatedAt)
     }</small></>
@@ -52,9 +53,10 @@ export default function App() {
   const [deleting, setDeleting] = useState(false)
   const [actionError, setActionError] = useState('')
   const [message, setMessage] = useState('')
-  const [quoteKey, setQuoteKey] = useState('')
+  const [quoteKey, setQuoteKey] = useState(readSessionQuoteKey)
   const [refreshing, setRefreshing] = useState(false)
   const [refreshStatus, setRefreshStatus] = useState('')
+  const [lastChecked, setLastChecked] = useState<number | null>(null)
   const [allocationMode, setAllocationMode] = useState<'category' | 'platform'>('category')
   const heading = useRef<HTMLHeadingElement>(null)
   const quotePending = useRef(false)
@@ -77,6 +79,14 @@ export default function App() {
     item.platform, 'destination' in item ? item.destination : undefined,
   ]).filter((name): name is string => Boolean(name)).map(name => [platformKey(name), name])).values()]
   const activePlatforms = [...new Map(holdings.map(item => [platformKey(item.platform), item.platform])).values()]
+  const marketByAsset = new Map<string, Mark>()
+  for (const mark of data.marks) {
+    if (mark.kind !== 'market' || mark.price === null || mark.source === 'Cours manuel') continue
+    const previous = marketByAsset.get(mark.target)
+    if (!previous || previous.sourceAt < mark.sourceAt || (previous.sourceAt === mark.sourceAt && previous.at <= mark.at)) {
+      marketByAsset.set(mark.target, mark)
+    }
+  }
   const unpriced = holdings.filter(item => item.partiallyValued).length
   const start = firstTrackingDate(data)
   const history = loaded?.view.history.filter(point => point.at >= start) ?? []
@@ -90,6 +100,12 @@ export default function App() {
   }, [holdings])
   const latest = useRef({ symbols, quoteKey })
   latest.current = { symbols, quoteKey }
+  const trackedAssets = symbols.map(assetKey).sort().join('|')
+
+  function updateQuoteKey(key: string) {
+    saveSessionQuoteKey(key)
+    setQuoteKey(key.trim())
+  }
 
   async function refreshQuotes(userInitiated: boolean) {
     if (quotePending.current) return
@@ -98,17 +114,22 @@ export default function App() {
       if (userInitiated) setRefreshStatus('Ajoute d’abord une position pour récupérer un cours.')
       return
     }
+    if (!symbols.some(asset => quoteAccess(asset, quoteKey) === 'available')) {
+      if (userInitiated) setRefreshStatus('Aucun cours automatique disponible pour ces positions. Tu peux saisir un cours manuellement.')
+      return
+    }
     lastAuto.current = Date.now()
     quotePending.current = true
     setRefreshing(true)
     try {
       const result = await fetchQuotes(symbols, quoteKey.trim())
-      if (result.marks.length) await saveMarks(result.marks)
-      setRefreshStatus(result.marks.length === 0 ? 'Aucun nouveau cours disponible. Les valeurs enregistrées restent affichées.'
-        : `${result.marks.length} cours récupéré(s).${result.unavailable ? ` ${result.unavailable} actif(s) sans cours récupéré.` : ''}`)
+      const added = result.marks.length ? await saveMarks(result.marks) : 0
+      setRefreshStatus(result.marks.length === 0 ? 'Aucun cours reçu. Les dernières valeurs connues restent affichées.'
+        : `${result.marks.length} cours reçu(s) · ${added} nouveau(x).${result.unavailable ? ` ${result.unavailable} actif(s) sans cours reçu.` : ''}`)
     } catch {
       setRefreshStatus('Les cours n’ont pas pu être enregistrés.')
     } finally {
+      setLastChecked(Date.now())
       quotePending.current = false
       setRefreshing(false)
     }
@@ -117,7 +138,7 @@ export default function App() {
   useEffect(() => {
     const auto = () => {
       if (document.visibilityState === 'visible' && Date.now() - lastAuto.current >= 15 * 60 * 1000
-        && latest.current.symbols.some(asset => asset.category === 'crypto' || latest.current.quoteKey.trim())) {
+        && latest.current.symbols.some(asset => quoteAccess(asset, latest.current.quoteKey) === 'available')) {
         void refreshQuotes(false)
       }
     }
@@ -128,7 +149,7 @@ export default function App() {
       window.clearInterval(interval)
       document.removeEventListener('visibilitychange', auto)
     }
-  }, [symbols.length])
+  }, [trackedAssets, quoteKey])
 
   function navigate(destination: Section) {
     setSection(destination)
@@ -158,13 +179,21 @@ export default function App() {
     {assets.map(asset => {
       const entries = asset.entries
       const listed = catalogEntry(asset.category, asset.reference)
+      const lastMarket = marketByAsset.get(asset.key)
+      const firstPrice = entries[0].unitPrice
+      const sharedPrice = firstPrice !== null && entries.every(entry => !entry.averageUnitPrice && entry.unitPrice?.eq(firstPrice))
+        ? firstPrice : null
+      const hasValue = entries.some(entry => entry.valuation !== null)
       return <details className="asset" key={asset.key}>
         <summary>
           <span className="asset-mark" aria-hidden="true">{categories[asset.category].slice(0, 2).toUpperCase()}</span>
-          <span className="asset-title"><strong>{asset.name}</strong><small>{[categories[asset.category], listed?.detail, listed?.aliases?.split(' ')[0] ?? labelReference(asset.reference)].filter(Boolean).join(' · ')}</small></span>
+          <span className="asset-title"><strong>{asset.name}</strong><small>{[categories[asset.category], listed?.detail, listed?.aliases?.split(' ')[0] ?? labelReference(asset.reference)].filter(Boolean).join(' · ')}</small>
+            <small>Détenu <strong className="quantity-inline">{quantity(asset.quantity)}</strong> unité(s)</small></span>
           <span className="asset-platforms">{asset.platformCount} plateforme{asset.platformCount !== 1 ? 's' : ''}</span>
-          <span className="asset-value"><strong>{asset.priced ? money(asset.amount) : '—'}</strong>
-            <small>{entries.some(entry => entry.partiallyValued) ? 'Valorisation incomplète' : 'Valeur estimée'}</small></span>
+          <span className="asset-value asset-unit"><strong>{sharedPrice !== null ? unitPrice(sharedPrice) : '—'}</strong>
+            <small>{sharedPrice !== null ? 'Prix unitaire utilisé' : hasValue ? 'Cours dans le détail' : 'Cours indisponible'}</small></span>
+          <span className="asset-value asset-total"><strong>{asset.priced ? money(asset.amount) : '—'}</strong>
+            <small>{entries.some(entry => entry.partiallyValued) ? 'Valeur détenue partielle' : 'Valeur détenue'}</small></span>
           <span className="disclosure"><Icon name="chevron" /></span>
         </summary>
         <div className="asset-body">
@@ -174,6 +203,10 @@ export default function App() {
               {asset.gain !== null && asset.estimated && <small> · coût estimé</small>}</span>
             <button className="text-button" onClick={() => setManualQuote(entries[0])}>Saisir un cours</button>
           </div>
+          {lastMarket?.price != null && <p className="asset-market">
+            Dernier cours du marché <strong>{unitPrice(lastMarket.price)}</strong>
+            <small>{lastMarket.source} · {timestamp.format(lastMarket.sourceAt)}</small>
+          </p>}
           {entries.map(position => {
             const result = summarize([position])
             return <div className="entry holding-entry" key={position.id}>
@@ -217,8 +250,8 @@ export default function App() {
       {!loaded ? <p className="panel blank" role="status">Ouverture du portefeuille…</p> : loaded.failed ? (
         <div className="panel blank"><h2>Stockage local indisponible</h2><p>Vérifie que ce navigateur autorise le stockage du site, puis recharge la page.</p></div>
       ) : section === 'data' ? (
-        <DataSettings quoteKey={quoteKey} onKey={setQuoteKey} onRefresh={() => void refreshQuotes(true)} refreshing={refreshing}
-          refreshStatus={refreshStatus} onRestored={() => { setRefreshStatus(''); setMessage('Portefeuille restauré.'); lastAuto.current = Date.now() }} />
+        <DataSettings quoteKey={quoteKey} onKey={updateQuoteKey} onRefresh={() => void refreshQuotes(true)} refreshing={refreshing}
+          refreshStatus={refreshStatus} lastChecked={lastChecked} onRestored={() => { setRefreshStatus(''); setMessage('Portefeuille restauré.'); lastAuto.current = Date.now() }} />
       ) : section === 'journal' ? (
         <section className="panel"><header className="panel-header section-heading">
           <div><h2>Journal du portefeuille</h2><p>Positions de départ, achats, ventes et transferts.</p></div>
@@ -259,6 +292,7 @@ export default function App() {
               <p className="hint">Gain réalisé connu <strong>{signedMoney(loaded.view.realized)}</strong>
                 {loaded.view.unknownSales > 0 && ` · ${loaded.view.unknownSales} vente(s) sans coût connu`}</p>
               <button className="text-button" onClick={() => void refreshQuotes(true)} disabled={refreshing}>{refreshing ? 'Actualisation…' : 'Actualiser les cours'}</button>
+              {lastChecked !== null && <p className="hint">Dernière vérification des cours · {timestamp.format(lastChecked)}</p>}
               {refreshStatus && <p className="hint" role="status">{refreshStatus}</p>}
             </div>
             <div className="panel allocation">
@@ -278,7 +312,7 @@ export default function App() {
           <HistoryChart history={history} />
         </>}
         <section className="panel positions-panel">
-          <header className="panel-header"><h2>Positions consolidées</h2><p>Ouvre un actif pour voir son détail par plateforme.</p></header>
+          <header className="panel-header"><h2>Positions consolidées</h2><p>Ouvre un actif pour voir les cours utilisés, leur source et le détail par plateforme.</p></header>
           {holdings.length ? assetList : <p className="hint journal-empty">Aucune position ouverte.</p>}
         </section>
       </>}

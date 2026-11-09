@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { replay } from '../src/ledger.ts'
-import { consolidate, summarize } from '../src/portfolio.ts'
+import { consolidate, summarize, unitPrice } from '../src/portfolio.ts'
 import { searchCatalog } from '../src/catalog.ts'
 import { backupText, readBackup } from '../src/backup.ts'
 
@@ -104,4 +104,24 @@ test('la cotation d’un ETF déjà saisi se regroupe avec son ISIN du catalogue
   ], [{ ...trade('sell', 's', 2, { quantity: '0.5', gross: '50' }), ...etf, reference: 'IE00BFMXXD54' }]))
   assert.equal(consolidate(view.holdings).length, 1)
   assert.equal(view.sales.get('s').toFixed(), '5')
+})
+
+test('le prix unitaire et la valeur détenue sont calculés séparément', () => {
+  const view = replay(data([{ ...opening('p', null, '150'), quantity: '0.002' }], [], [quote('q', 2, '80000')]))
+  const holding = view.holdings[0]
+  assert.equal(holding.unitPrice.toFixed(), '80000')
+  assert.equal(holding.valuation.amount, '160')
+  assert.equal(holding.averageUnitPrice, false)
+  assert.match(unitPrice('0.00001234'), /0[.,]00001234/)
+})
+
+test('des prix différents sur une plateforme donnent un prix moyen clairement identifié', () => {
+  const view = replay(data([opening('a', '100', '80'), { ...opening('b', '600', '240'), quantity: '3' }]))
+  const holding = view.holdings[0]
+  assert.equal(holding.unitPrice.toFixed(), '175')
+  assert.equal(holding.valuation.amount, '700')
+  assert.equal(holding.averageUnitPrice, true)
+  const partial = replay(data([opening('a', '100', '80'), opening('b', null, '90')])).holdings[0]
+  assert.equal(partial.unitPrice, null)
+  assert.equal(partial.valuation.amount, '100')
 })

@@ -42,7 +42,12 @@ type Bucket = {
   tradeMark?: Mark
 }
 
-export type Holding = Position & { source?: Mark; partiallyValued: boolean }
+export type Holding = Position & {
+  source?: Mark
+  partiallyValued: boolean
+  unitPrice: Decimal | null
+  averageUnitPrice: boolean
+}
 export interface HistoryPoint {
   date: string
   at: number
@@ -239,11 +244,16 @@ export function replay(data: PortfolioData) {
     let basis = D(0)
     let unpriced = false
     let knownBasis = true
+    let commonPrice: Decimal | undefined
+    let mixedPrices = false
     let source: Mark | undefined
     for (const bucket of buckets) {
       const mark = markFor(bucket)
       if (mark && mark.price !== null) {
-        value = value.plus(D(mark.price).times(bucket.quantity))
+        const price = D(mark.price)
+        value = value.plus(price.times(bucket.quantity))
+        if (commonPrice === undefined) commonPrice = price
+        else if (!commonPrice.eq(price)) mixedPrices = true
         if (!source || mark.sourceAt < source.sourceAt) {
           const label: string = source && source.source !== mark.source ? 'Sources mixtes' : mark.source
           source = { ...mark, source: label }
@@ -253,7 +263,10 @@ export function replay(data: PortfolioData) {
       else basis = basis.plus(bucket.cost)
     }
     const estimated = buckets.some(bucket => bucket.estimated)
-    holdings.push({ id: key, ...first.asset, platform: first.platform, quantity: sum(buckets).toFixed(),
+    const units = sum(buckets)
+    holdings.push({ id: key, ...first.asset, platform: first.platform, quantity: units.toFixed(),
+      unitPrice: unpriced ? null : mixedPrices ? value.div(units) : commonPrice ?? null,
+      averageUnitPrice: !unpriced && mixedPrices,
       valuation: source ? { amount: value.toFixed(), updatedAt: source.sourceAt } : null, partiallyValued: unpriced,
       cost: !knownBasis ? null : estimated ? { kind: 'estimated', amount: basis.toFixed(), initialPercent: '0', initialValue: '0' }
         : { kind: 'exact', amount: basis.toFixed() }, source, createdAt: 0 })

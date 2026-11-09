@@ -6,7 +6,7 @@ import type { Position } from './portfolio'
 type QuoteAsset = Pick<Position, 'category' | 'reference' | 'name' | 'listing'>
 
 async function json(url: URL) {
-  const response = await fetch(url, { signal: AbortSignal.timeout(9000), credentials: 'omit', referrerPolicy: 'no-referrer' })
+  const response = await fetch(url, { signal: AbortSignal.timeout(9000), cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' })
   if (!response.ok) throw new Error('Fournisseur indisponible.')
   return response.json()
 }
@@ -71,10 +71,36 @@ function previousWeek(day: string) {
 
 const usExchanges = new Set(['XNAS', 'XNYS', 'ARCX', 'XASE', 'BATS'])
 
-async function equityQuote(asset: QuoteAsset, apiKey: string, rates: Map<string, Promise<Decimal>>) {
+function equitySymbol(asset: QuoteAsset) {
   const listing = asset.listing || catalogEntry(asset.category, asset.reference)?.listing || asset.reference
   const [mic, symbol] = listing.split(':')
-  if (!symbol || !usExchanges.has(mic)) return null
+  return symbol && usExchanges.has(mic) ? symbol : null
+}
+
+export function quoteAccess(asset: QuoteAsset, apiKey: string) {
+  if (asset.category === 'crypto') return catalogEntry(asset.category, asset.reference)?.coinId ? 'available' : 'manual'
+  return !equitySymbol(asset) ? 'manual' : apiKey ? 'available' : 'key'
+}
+
+const keyStorage = 'portefeuille.finnhub-key'
+
+export function readSessionQuoteKey() {
+  try { return sessionStorage.getItem(keyStorage) ?? '' }
+  catch { return '' }
+}
+
+export function saveSessionQuoteKey(key: string) {
+  try {
+    if (key.trim()) sessionStorage.setItem(keyStorage, key.trim())
+    else sessionStorage.removeItem(keyStorage)
+  } catch {
+    // The key remains available in memory if browser storage is blocked.
+  }
+}
+
+async function equityQuote(asset: QuoteAsset, apiKey: string, rates: Map<string, Promise<Decimal>>) {
+  const symbol = equitySymbol(asset)
+  if (!symbol) return null
   const url = new URL('https://finnhub.io/api/v1/quote')
   url.search = new URLSearchParams({ symbol, token: apiKey }).toString()
   const data = await json(url)
@@ -91,7 +117,7 @@ async function equityQuote(asset: QuoteAsset, apiKey: string, rates: Map<string,
 export async function fetchQuotes(assets: QuoteAsset[], apiKey = '') {
   const unique = [...new Map(assets.map(asset => [quoteTarget(asset), asset])).values()]
   const cryptos = unique.filter(asset => asset.category === 'crypto')
-  const equities = apiKey ? unique.filter(asset => asset.category !== 'crypto') : []
+  const equities = apiKey ? unique.filter(asset => asset.category !== 'crypto' && equitySymbol(asset)) : []
   const rates = new Map<string, Promise<Decimal>>()
   const requested = equities.length <= equityLimit ? equities : Array.from({ length: equityLimit },
     (_, index) => equities[(equityOffset + index) % equities.length])
