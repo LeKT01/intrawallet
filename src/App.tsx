@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { deleteOperation, deletePosition, loadPortfolio, saveMarks, saveOperation, savePosition } from './database'
-import { assetKey, categories, consolidate, platformKey, quantity, summarize, type Position } from './portfolio'
-import { assetChartMarks, dailyPortfolioHistory, firstTrackingDate, operationNames, replay, type Holding, type Mark, type Operation, type PortfolioData } from './ledger'
+import { assetKey, categories, consolidate, platformKey, quantity, summarize, unitPrice, type Position } from './portfolio'
+import { assetChartMarks, dailyPortfolioHistory, firstTrackingDate, operationNames, quoteTarget, replay, type Holding, type Mark, type Operation, type PortfolioData } from './ledger'
 import PositionForm from './PositionForm'
 import OperationForm from './OperationForm'
 import DataSettings, { ConfirmDialog } from './DataSettings'
 import HistoryChart from './HistoryChart'
 import ManualQuoteForm from './ManualQuoteForm'
-import { fetchQuotes, quoteAccess, readSessionQuoteKey, saveSessionQuoteKey } from './quotes'
+import { fetchQuotes, quoteAccess, quoteTiming, readSessionQuoteKey, saveSessionQuoteKey, type QuoteKeys } from './quotes'
 import { catalogEntry } from './catalog'
 import { currencies, dayKey, type Currency, type CurrencyDisplay } from './currency'
 import useCurrency from './useCurrency'
@@ -21,6 +21,7 @@ type IconName = Section | 'plus' | 'lock' | 'chevron'
 const sections = { overview: 'Vue d’ensemble', positions: 'Positions', journal: 'Journal', data: 'Données' } as const
 const emptyData: PortfolioData = { positions: [], operations: [], marks: [] }
 const quoteInterval = 60 * 1000
+const percent = new Intl.NumberFormat('fr-CH', { style: 'percent', maximumFractionDigits: 2, signDisplay: 'exceptZero' })
 const timestamp = new Intl.DateTimeFormat('fr-CH', { dateStyle: 'medium', timeStyle: 'short' })
 
 function Icon({ name }: { name: IconName }) {
@@ -60,7 +61,7 @@ export default function App() {
   const [deleting, setDeleting] = useState(false)
   const [actionError, setActionError] = useState('')
   const [message, setMessage] = useState('')
-  const [quoteKey, setQuoteKey] = useState(() => demoMode ? '' : readSessionQuoteKey())
+  const [quoteKey, setQuoteKey] = useState<QuoteKeys>(() => ({ finnhub: demoMode ? '' : readSessionQuoteKey('finnhub'), eodhd: demoMode ? '' : readSessionQuoteKey('eodhd'), coingecko: demoMode ? '' : readSessionQuoteKey('coingecko') }))
   const [refreshing, setRefreshing] = useState(false)
   const [refreshStatus, setRefreshStatus] = useState('')
   const [lastChecked, setLastChecked] = useState<number | null>(null)
@@ -79,7 +80,11 @@ export default function App() {
     }
   })
   const data = loaded?.data ?? emptyData
-  const holdings = loaded?.view.holdings ?? []
+  const start = firstTrackingDate(data)
+  const needsFx = data.marks.some(mark => mark.currency === 'EUR' || mark.currency === 'USD')
+  const { display, loading: fxLoading, choose: chooseCurrency, rateToCHF } = useCurrency(start, needsFx)
+  const holdings = useMemo(() => loaded
+    ? (needsFx ? replay(loaded.data, [], rateToCHF).holdings : loaded.view.holdings) : [], [loaded, needsFx, rateToCHF])
   const total = summarize(holdings)
   const assets = consolidate(holdings)
   const platforms = [...new Map([...data.positions, ...data.operations].flatMap(item => [
@@ -95,76 +100,99 @@ export default function App() {
     }
   }
   const unpriced = holdings.filter(item => item.partiallyValued).length
-  const start = firstTrackingDate(data)
-  const { display, loading: fxLoading, choose: chooseCurrency } = useCurrency(start)
   const fx = display.reference()
   const symbols = useMemo(() => {
-    const byAsset = new Map<string, Holding>()
-    for (const holding of holdings) {
-      const key = assetKey(holding)
-      if (!byAsset.has(key) || (!byAsset.get(key)?.listing && holding.listing)) byAsset.set(key, holding)
+    const byAsset = new Map<string, (typeof data.positions)[number] | Operation>()
+    for (const item of [...data.positions, ...data.operations]) {
+      const key = quoteTarget(item)
+      const old = byAsset.get(key)
+      if (!old || (!old.market && item.market) || (!old.listing && item.listing)) byAsset.set(key, item)
     }
-    return [...byAsset.values()].map(({ category, reference, name, listing }) => ({ category, reference, name, listing }))
-  }, [holdings])
-  const dailyPrices = useDailyPrices(demoMode ? [] : symbols)
+    return [...byAsset.values()].map(({ category, reference, name, listing, market }) => ({ category, reference, name, listing, market }))
+  }, [loaded])
+  const liveTargets = new Set(holdings.map(quoteTarget))
+  const liveSymbols = symbols.filter(asset => liveTargets.has(quoteTarget(asset)))
+  const dailyPrices = useDailyPrices(demoMode ? [] : symbols, quoteKey.coingecko)
   const history = useMemo(() => {
     if (!loaded) return []
     const recorded = loaded.view.history.filter(point => point.at >= start)
     return dailyPortfolioHistory(loaded.data, recorded, dailyPrices.flatMap(series => series.marks))
   }, [loaded, start, dailyPrices])
-  const latest = useRef({ symbols, quoteKey })
-  latest.current = { symbols, quoteKey }
-  const trackedAssets = symbols.map(assetKey).sort().join('|')
+  const latest = useRef({ liveSymbols, symbols, quoteKey, marketByAsset })
+  latest.current = { liveSymbols, symbols, quoteKey, marketByAsset }
+  const trackedAssets = symbols.map(asset => quoteTarget(asset) + '/' + (asset.listing ?? '') + '/' + (asset.market?.code ?? '')).sort().join('|')
+  const activeTargets = liveSymbols.map(quoteTarget).sort().join('|')
+  const previousTargets = useRef('')
+  const firstCheck = useRef(true)
 
-  function updateQuoteKey(key: string) {
-    saveSessionQuoteKey(key)
-    setQuoteKey(key.trim())
+  function updateQuoteKey(key: QuoteKeys) {
+    saveSessionQuoteKey('finnhub', key.finnhub)
+    saveSessionQuoteKey('eodhd', key.eodhd)
+    saveSessionQuoteKey('coingecko', key.coingecko)
+    setQuoteKey(key)
+    firstCheck.current = true
+    lastAuto.current = 0
   }
 
   async function refreshQuotes(userInitiated: boolean) {
     if (demoMode || quotePending.current) return
-    const { symbols, quoteKey } = latest.current
-    if (symbols.length === 0) {
-      if (userInitiated) setRefreshStatus('Ajoute d’abord une position pour récupérer un cours.')
+    const { liveSymbols, symbols, quoteKey, marketByAsset } = latest.current
+    if (!symbols.length) {
+      if (userInitiated) setRefreshStatus('Ajoute une position pour récupérer son cours.')
       return
     }
-    if (!symbols.some(asset => quoteAccess(asset, quoteKey) === 'available')) {
-      if (userInitiated) setRefreshStatus('Aucun cours automatique disponible pour ces positions. Tu peux saisir un cours manuellement.')
+    const assets = [...liveSymbols, ...symbols.filter(asset => asset.category !== 'crypto' && quoteKey.eodhd
+      && !liveSymbols.some(item => quoteTarget(item) === quoteTarget(asset)))]
+    const eligible = assets.filter(asset => quoteAccess(asset, quoteKey) === 'available')
+    if (!eligible.length) {
+      if (userInitiated) setRefreshStatus('Active une source de cotation dans Données pour les titres compatibles.')
       return
     }
     lastAuto.current = Date.now()
     quotePending.current = true
     setRefreshing(true)
     try {
-      const result = await fetchQuotes(symbols, quoteKey.trim())
-      const added = result.marks.length ? await saveMarks(result.marks) : 0
-      setRefreshStatus(result.marks.length === 0 ? 'Aucun cours reçu. Les dernières valeurs connues restent affichées.'
-        : `${result.marks.length} cours reçu(s) · ${added} nouveau(x).${result.unavailable ? ` ${result.unavailable} actif(s) sans cours reçu.` : ''}`)
-    } catch {
-      setRefreshStatus('Les cours n’ont pas pu être enregistrés.')
-    } finally {
+      const result = await fetchQuotes(eligible, quoteKey, { force: userInitiated, opening: firstCheck.current, stale: marketByAsset })
+      firstCheck.current = false
+      if (!result.checked) return
+      if (result.marks.length) await saveMarks(result.marks)
+      const count = new Set(result.marks.map(mark => mark.target)).size
+      if (count || result.issues.length || userInitiated) {
+        setRefreshStatus([
+          count ? count + ' actif(s) avec un cours disponible.' : 'Aucun nouveau cours reçu. Les valeurs connues sont conservées.',
+          result.issues[0],
+        ].filter(Boolean).join(' '))
+      }
       setLastChecked(Date.now())
+    } catch {
+      setRefreshStatus('Les cours n’ont pas pu être enregistrés. Les dernières valeurs connues sont conservées.')
+    } finally {
       quotePending.current = false
       setRefreshing(false)
     }
   }
 
   useEffect(() => {
-    if (demoMode) return
+    if (demoMode || !trackedAssets) return
     const auto = () => {
-      if (document.visibilityState === 'visible' && Date.now() - lastAuto.current >= quoteInterval
-        && latest.current.symbols.some(asset => quoteAccess(asset, latest.current.quoteKey) === 'available')) {
-        void refreshQuotes(false)
-      }
+      if (document.visibilityState === 'visible' && Date.now() - lastAuto.current >= quoteInterval) void refreshQuotes(false)
     }
+    if (activeTargets !== previousTargets.current && liveSymbols.some(asset => !marketByAsset.has(quoteTarget(asset)))) {
+      lastAuto.current = 0
+    }
+    previousTargets.current = activeTargets
     auto()
-    const interval = window.setInterval(auto, 10 * 1000)
+    const interval = window.setInterval(auto, 15000)
     document.addEventListener('visibilitychange', auto)
+    window.addEventListener('focus', auto)
+    window.addEventListener('online', auto)
     return () => {
       window.clearInterval(interval)
       document.removeEventListener('visibilitychange', auto)
+      window.removeEventListener('focus', auto)
+      window.removeEventListener('online', auto)
     }
-  }, [trackedAssets, quoteKey])
+  }, [trackedAssets, activeTargets, quoteKey.eodhd, quoteKey.finnhub, quoteKey.coingecko])
 
   function navigate(destination: Section) {
     setSection(destination)
@@ -188,6 +216,18 @@ export default function App() {
       setToDelete(null)
       setDeleting(false)
     }
+  }
+
+  const journal = [
+    ...data.positions.map(value => ({ type: 'position' as const, value, at: value.createdAt })),
+    ...data.operations.map(value => ({ type: 'operation' as const, value, at: value.at })),
+  ].sort((a, b) => b.at - a.at)
+  const journalByAsset = new Map<string, typeof journal>()
+  for (const item of journal) {
+    const target = quoteTarget(item.value)
+    const existing = journalByAsset.get(target)
+    if (existing) existing.push(item)
+    else journalByAsset.set(target, [item])
   }
 
   const assetList = <div className="asset-list">
@@ -228,11 +268,15 @@ export default function App() {
             <span>Quantité totale <strong>{quantity(asset.quantity)}</strong></span>
             <span>Gain latent <strong>{asset.gain === null ? 'Indéterminé' : display.format(asset.gain, { signed: true })}</strong>
               {asset.gain !== null && asset.estimated && <small> · coût estimé</small>}</span>
-            <button className="text-button" onClick={() => setManualQuote(entries[0])}>Saisir un cours</button>
+            {asset.returnRate !== null && <span>Gain latent en % <strong>{percent.format(asset.returnRate.toNumber())}</strong></span>}
+            {asset.costCount === entries.length && <span>Coût moyen unitaire <strong>{display.format(asset.cost.div(asset.quantity), { unit: true })}</strong></span>}
+            <button className="text-button" onClick={() => setManualQuote(entries[0])}>Saisie de secours</button>
           </div>
           {lastMarket?.price != null && <p className="asset-market">
             Dernier cours du marché <strong>{display.format(lastMarket.price, { unit: true })}</strong>
-            <small>{lastMarket.source} · {timestamp.format(lastMarket.sourceAt)}</small>
+            <small>{lastMarket.originalPrice && lastMarket.currency && currencies.includes(lastMarket.currency as Currency)
+              && unitPrice(lastMarket.originalPrice, lastMarket.currency as Currency) + ' · '}
+              {quoteTiming(lastMarket)} · {lastMarket.source} · {timestamp.format(lastMarket.sourceAt)}</small>
           </p>}
           {entries.map(position => {
             const result = summarize([position])
@@ -243,7 +287,16 @@ export default function App() {
               <span className="cost-summary">{position.cost ? <><strong>{display.format(position.cost.amount)}</strong><small>Coût d’acquisition</small></> : <small>Coût inconnu</small>}</span>
             </div>
           })}
-          {chart && <AssetHistory {...chart} name={asset.name} display={display} />}
+          <details className="acquisition-list">
+            <summary>Voir les acquisitions et opérations</summary>
+            {journalByAsset.get(asset.key)?.map(item => <div className="entry" key={item.type + '/' + item.value.id}>
+              <span><strong>{item.value.platform}</strong><small>{item.type === 'position' ? 'Position de départ' : operationNames[item.value.kind]}</small></span>
+              <span><strong>{quantity(item.value.quantity)} unité(s)</strong>
+                <small>{item.type === 'position' && item.value.acquiredOn ? item.value.acquiredOn : timestamp.format(item.at)}</small></span>
+              {item.type === 'position' && item.value.purchase && <span>{unitPrice(item.value.purchase.total, item.value.purchase.currency)}</span>}
+            </div>)}
+          </details>
+          {chart && <AssetHistory {...chart} asset={entries[0]} cryptoKey={quoteKey.coingecko} name={asset.name} display={display} />}
         </div>
       </details>
     })}
@@ -252,10 +305,11 @@ export default function App() {
   const allocation = allocationMode === 'category'
     ? Object.entries(categories).map(([key, label]) => ({ label, amount: summarize(holdings.filter(item => item.category === key)).amount }))
     : activePlatforms.map(label => ({ label, amount: summarize(holdings.filter(item => platformKey(item.platform) === platformKey(label))).amount }))
-  const journal = [
-    ...data.positions.map(value => ({ type: 'position' as const, value, at: value.createdAt })),
-    ...data.operations.map(value => ({ type: 'operation' as const, value, at: value.at })),
-  ].sort((a, b) => b.at - a.at)
+  const ranked = assets.filter(asset => asset.returnRate !== null)
+    .sort((a, b) => b.returnRate!.cmp(a.returnRate!))
+  const mostRecentQuote = [...marketByAsset.values()].filter(mark => liveTargets.has(mark.target))
+    .reduce<number | null>((latest, mark) => Math.max(latest ?? 0, mark.sourceAt), null)
+
 
   return <>
     <header className="site-header"><div className="shell header-content">
@@ -292,7 +346,7 @@ export default function App() {
         <div className="panel blank"><h2>Stockage local indisponible</h2><p>Vérifie que ce navigateur autorise le stockage du site, puis recharge la page.</p></div>
       ) : section === 'data' ? (
         <DataSettings quoteKey={quoteKey} onKey={updateQuoteKey} onRefresh={() => void refreshQuotes(true)} refreshing={refreshing}
-          refreshStatus={refreshStatus} lastChecked={lastChecked} onRestored={() => { setRefreshStatus(''); setMessage('Portefeuille restauré.'); lastAuto.current = Date.now() }} />
+          refreshStatus={refreshStatus} lastChecked={lastChecked} onRestored={() => { setRefreshStatus(''); setMessage('Portefeuille restauré.'); lastAuto.current = 0; firstCheck.current = true; void refreshQuotes(false) }} />
       ) : section === 'journal' ? (
         <section className="panel"><header className="panel-header section-heading">
           <div><h2>Journal du portefeuille</h2><p>Positions de départ, achats, ventes et transferts.</p></div>
@@ -309,6 +363,9 @@ export default function App() {
                 <small>{value.platform}{operation?.destination ? ' → ' + operation.destination : ''}</small>
                 {operation && operation.kind !== 'transfer' && <small>Montant hors frais {display.format(operation.gross, { day: dayKey(operation.at) })}</small>}
                 {operation && operation.fee !== '0' && <small>Frais {display.format(operation.fee, { day: dayKey(operation.at) })}</small>}
+                {'purchase' in value && value.purchase && <small>Montant payé {unitPrice(value.purchase.total, value.purchase.currency)}
+                  {value.acquiredOn ? ' · ' + value.acquiredOn : ''}</small>}
+                {!operation && 'acquiredOn' in value && value.acquiredOn && !value.purchase && <small>Acquis le {value.acquiredOn}</small>}
                 {operation?.feeUnits && operation.feeUnits !== '0' && <small>Frais {quantity(operation.feeUnits)} unité(s)</small>}
                 {gain !== undefined && <small>Gain réalisé {gain === null ? 'indéterminé' : display.format(gain, { day: dayKey(operation!.at), signed: true })}</small>}</span>
               <span className="entry-actions">
@@ -332,11 +389,21 @@ export default function App() {
             <div className="panel total-panel">
               <div className="total-header"><h2>Valeur {unpriced ? 'connue' : 'totale'}</h2><span className="chip">{display.currency}</span></div>
               <p className="total-number">{total.priced || holdings.length === 0 ? display.format(total.amount) : '—'}</p>
+              {needsFx && fxLoading && <p className="hint" role="status">Vérification du taux de change…</p>}
               <p className="muted counts">{assets.length} actif(s) · {activePlatforms.length} plateforme(s)</p>
+              <dl className="summary-metrics">
+                <div><dt>{total.costCount < holdings.length ? 'Coût connu des positions ouvertes' : 'Investi dans les positions ouvertes'}</dt>
+                  <dd>{total.costCount || !holdings.length ? display.format(total.cost) : '—'}{total.estimated && <small>Coût estimé inclus</small>}</dd></div>
+                <div><dt>Gain ou perte latente</dt><dd>{total.gain === null ? '—' : display.format(total.gain, { signed: true })}
+                  {total.returnRate !== null && <small>{percent.format(total.returnRate.toNumber())}</small>}</dd></div>
+              </dl>
+              {holdings.some(holding => ['Saisie manuelle', 'Cours manuel', 'Prix d’opération', 'Sources mixtes'].includes(holding.source?.source ?? ''))
+                && <p className="hint">La valeur inclut des prix saisis ou issus du journal.</p>}
               {unpriced > 0 && <p className="notice">{unpriced} position(s) à valoriser.</p>}
               <p className="hint">Gain réalisé connu <strong>{display.format(loaded.view.realized, { signed: true })}</strong>
                 {loaded.view.unknownSales > 0 && ` · ${loaded.view.unknownSales} vente(s) sans coût connu`}</p>
               {!demoMode && <button className="text-button" onClick={() => void refreshQuotes(true)} disabled={refreshing}>{refreshing ? 'Actualisation…' : 'Actualiser les cours'}</button>}
+              {!demoMode && mostRecentQuote !== null && <p className="hint">Cours le plus récent · {timestamp.format(mostRecentQuote)}</p>}
               {lastChecked !== null && <p className="hint">Dernière vérification des cours · {timestamp.format(lastChecked)}</p>}
               {refreshStatus && <p className="hint" role="status">{refreshStatus}</p>}
             </div>
@@ -348,13 +415,23 @@ export default function App() {
                 {allocation.filter(item => item.amount.gt(0)).map(item => {
                   const weight = item.amount.div(total.amount).times(100).toNumber()
                   return <li key={item.label}><div><span>{item.label}</span>
-                    <strong>{weight.toLocaleString('fr-CH', { maximumFractionDigits: 1 })} %</strong></div>
+                    <strong>{display.format(item.amount)} · {weight.toLocaleString('fr-CH', { maximumFractionDigits: 1 })} %</strong></div>
                     <div className="bar" aria-hidden="true"><span style={{ width: `${weight}%` }} /></div></li>
                 })}
               </ul>}
             </div>
           </section>
-          <HistoryChart history={history} display={display} />
+          {ranked.length > 0 && <section className="panel movers" aria-label="Classement des positions">
+            <h2>Performance des positions ouvertes</h2>
+            <p className="hint">Gain latent en pourcentage du coût connu, dans la devise de référence CHF.</p>
+            <div className="mover-grid">{(ranked.length === 1
+              ? [{ label: 'Actif avec performance calculable', asset: ranked[0] }]
+              : [{ label: 'Meilleure performance', asset: ranked[0] }, { label: 'Plus faible performance', asset: ranked.at(-1)! }])
+              .map(({ label, asset }) => <div key={label}><small>{label}</small><strong>{asset.name}</strong>
+                <span>{percent.format(asset.returnRate!.toNumber())} · {display.format(asset.gain!, { signed: true })}</span>
+                {asset.estimated && <small>Coût estimé</small>}</div>)}</div>
+          </section>}
+          <HistoryChart history={history} intraday={loaded.view.intraday} display={display} />
         </>}
         <section className="panel positions-panel">
           <header className="panel-header"><h2>Positions consolidées</h2><p>Ouvre un actif pour voir sa courbe, ses cours et le détail par plateforme.</p></header>
@@ -363,9 +440,9 @@ export default function App() {
       </>}
     </main>
     {editor !== null && <PositionForm current={editor === 'new' ? null : editor} positions={data.positions}
-      platforms={platforms} marks={data.marks} display={display} quoteKey={quoteKey.trim()} onClose={() => setEditor(null)}
+      platforms={platforms} marks={data.marks} display={display} currentRate={rateToCHF} quoteKey={quoteKey} onConfigure={() => { setEditor(null); navigate('data') }} onClose={() => setEditor(null)}
       onSave={async (position, quote) => { await savePosition(position, editor !== 'new', quote); setMessage('Position enregistrée.') }} />}
-    {tradeEditor !== null && <OperationForm current={tradeEditor === 'new' ? null : tradeEditor} data={data} platforms={platforms}
+    {tradeEditor !== null && <OperationForm current={tradeEditor === 'new' ? null : tradeEditor} data={data} platforms={platforms} marketKey={demoMode ? undefined : quoteKey.eodhd}
       onClose={() => setTradeEditor(null)} onSave={async operation => {
         await saveOperation(operation, tradeEditor !== 'new'); setMessage('Opération enregistrée.')
       }} />}

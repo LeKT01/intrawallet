@@ -1,6 +1,8 @@
 import { Decimal } from 'decimal.js'
 import { assetKey, platformKey, type Position } from './portfolio.ts'
-import { dayKey } from './currency.ts'
+import { dayKey, daysBefore } from './currency.ts'
+import { marketClosedDay } from './marketCalendar.ts'
+import { catalogEntry } from './catalog.ts'
 
 export type OperationKind = 'buy' | 'sell' | 'transfer'
 export const operationNames = { buy: 'Achat', sell: 'Vente', transfer: 'Transfert' } as const
@@ -11,6 +13,7 @@ export interface Operation {
   reference: string
   name: string
   listing?: string
+  market?: Position['market']
   kind: OperationKind
   platform: string
   destination?: string
@@ -30,9 +33,12 @@ export interface Mark {
   at: number
   sourceAt: number
   source: string
+  originalPrice?: string
+  currency?: string
+  timing?: 'close' | 'reported'
 }
 
-type Asset = Pick<Position, 'category' | 'reference' | 'name' | 'listing'>
+type Asset = Pick<Position, 'category' | 'reference' | 'name' | 'listing' | 'market'>
 type Bucket = {
   asset: Asset
   platform: string
@@ -57,6 +63,7 @@ export interface HistoryPoint {
   result: Decimal | null
   reconstructed?: boolean
   usedOlderPrices?: boolean
+  transferFees?: Decimal
 }
 
 export interface PortfolioData {
@@ -76,13 +83,16 @@ export function unitMark(position: Position): Mark | null {
     price: D(position.valuation.amount).div(position.quantity).toFixed(), at, sourceAt: at, source: 'Saisie manuelle' }
 }
 
-export function replay(data: PortfolioData, historical: Mark[] = []) {
+export function replay(data: PortfolioData, historical: Mark[] = [],
+  currentRate?: (code: string) => Decimal | null) {
   const pools = new Map<string, Bucket[]>()
   const manualMarks = new Map<string, Mark>()
   const marketMarks = new Map<string, Mark>()
   const pendingOpenings = new Set<string>()
   const sales = new Map<string, Decimal | null>()
   const history = new Map<string, HistoryPoint>()
+  const intraday: HistoryPoint[] = []
+  const intradayStart = Date.now() - 86400000
   let unknownFlows = false
   let netFlows = D(0)
   let transferFees = D(0)
@@ -101,7 +111,8 @@ export function replay(data: PortfolioData, historical: Mark[] = []) {
     const market = marketMarks.get(assetKey(bucket.asset))
     let best = market
     for (const mark of [bucket.tradeMark, manual]) {
-      if (mark && mark.price !== null && (!best || mark.sourceAt >= best.sourceAt)) best = mark
+      if (mark && mark.price !== null && (!best || mark.sourceAt >= best.sourceAt)
+        && !(mark === bucket.tradeMark && best && best.source !== 'Cours manuel')) best = mark
     }
     return best
   }
@@ -119,7 +130,7 @@ export function replay(data: PortfolioData, historical: Mark[] = []) {
     }
   }
 
-  function record(at: number) {
+  function record(at: number, endOfDay: boolean) {
     if (historical.length && pools.size === 0) return
     const date = dayKey(at)
     let value = D(0)
@@ -134,14 +145,27 @@ export function replay(data: PortfolioData, historical: Mark[] = []) {
         }
         if (dayKey(mark.sourceAt) !== date) {
           usedOlderPrices = true
-          if (historical.length > 0) complete = false
+          if (historical.length > 0) {
+            const venue = bucket.asset.market?.code.split('.').at(-1)
+              ?? (bucket.asset.listing || catalogEntry(bucket.asset.category, bucket.asset.reference)?.listing)?.split(':')[0]
+            let lastSession = date
+            if (venue && bucket.asset.category !== 'crypto' && mark.kind === 'market' && mark.timing === 'close') {
+              while (marketClosedDay(venue, lastSession)) lastSession = daysBefore(lastSession, 1)
+            }
+            if (dayKey(mark.sourceAt) !== lastSession) complete = false
+          }
         }
         value = value.plus(D(mark.price).times(bucket.quantity))
       }
     }
     const flows = unknownFlows || pendingOpenings.size > 0 ? null : netFlows
-    history.set(date, { date, at, value: complete ? value : null, usedOlderPrices,
-      netFlows: flows, result: complete && flows ? value.minus(flows).minus(transferFees) : null })
+    const point = { date, at, value: complete ? value : null, usedOlderPrices, transferFees,
+      netFlows: flows, result: complete && flows ? value.minus(flows).minus(transferFees) : null }
+    if (endOfDay) history.set(date, point)
+    if (!historical.length && at >= intradayStart) {
+      if (intraday.at(-1)?.at === at) intraday[intraday.length - 1] = point
+      else intraday.push(point)
+    }
   }
 
   function applyTrade(trade: Operation) {
@@ -246,7 +270,8 @@ export function replay(data: PortfolioData, historical: Mark[] = []) {
     } else manualMarks.set(event.value.target, event.value)
     resolveOpenings()
     const next = events[i + 1]
-    if (!next || dayKey(next.at) !== dayKey(event.at)) record(event.at)
+    const endOfDay = !next || dayKey(next.at) !== dayKey(event.at)
+    if (endOfDay || (!historical.length && event.at >= intradayStart)) record(event.at, endOfDay)
   }
 
   const holdings: Holding[] = []
@@ -262,7 +287,8 @@ export function replay(data: PortfolioData, historical: Mark[] = []) {
     for (const bucket of buckets) {
       const mark = markFor(bucket)
       if (mark && mark.price !== null) {
-        const price = D(mark.price)
+        const rate = mark.currency && mark.originalPrice ? currentRate?.(mark.currency) : null
+        const price = rate && mark.originalPrice ? D(mark.originalPrice).times(rate) : D(mark.price)
         value = value.plus(price.times(bucket.quantity))
         if (commonPrice === undefined) commonPrice = price
         else if (!commonPrice.eq(price)) mixedPrices = true
@@ -283,7 +309,7 @@ export function replay(data: PortfolioData, historical: Mark[] = []) {
       cost: !knownBasis ? null : estimated ? { kind: 'estimated', amount: basis.toFixed(), initialPercent: '0', initialValue: '0' }
         : { kind: 'exact', amount: basis.toFixed() }, source, createdAt: 0 })
   }
-  return { holdings, history: [...history.values()], sales, realized, unknownSales }
+  return { holdings, history: [...history.values()], intraday, sales, realized, unknownSales }
 }
 
 export function firstTrackingDate(data: PortfolioData) {
@@ -299,17 +325,19 @@ export function dailyPortfolioHistory(data: PortfolioData, recorded: HistoryPoin
   const start = firstTrackingDate(data)
   const usable = historical.filter(mark => mark.at >= start)
   if (!usable.length) return recorded
-  const existing = new Set(recorded.map(point => point.date))
+  const combined = new Map(recorded.map(point => [point.date, point]))
   let previous: HistoryPoint | undefined
   let index = 0
-  const additions = replay(data, usable).history.flatMap(point => {
-    if (existing.has(point.date) || point.value === null) return []
-    while (index < recorded.length && recorded[index].date < point.date) previous = recorded[index++]
-    const basis = previous?.value != null && previous.result != null ? previous.value.minus(previous.result) : null
-    return [{ ...point, netFlows: previous?.netFlows ?? null, result: basis === null ? null : point.value.minus(basis),
-      reconstructed: true }]
-  })
-  return [...recorded, ...additions].sort((a, b) => a.date.localeCompare(b.date))
+  for (const point of replay(data, usable).history) {
+    while (index < recorded.length && recorded[index].date <= point.date) previous = recorded[index++]
+    const existing = combined.get(point.date)
+    if (point.value === null || (existing?.value != null && !existing.usedOlderPrices)) continue
+    const flows = previous?.netFlows ?? null
+    const fees = previous?.transferFees
+    combined.set(point.date, { ...point, netFlows: flows,
+      result: flows && fees ? point.value.minus(flows).minus(fees) : null, reconstructed: true })
+  }
+  return [...combined.values()].sort((a, b) => a.date.localeCompare(b.date))
 }
 
 export function assetChartMarks(data: PortfolioData, target: string, external: Mark[]) {

@@ -8,6 +8,7 @@ export interface CatalogAsset {
   detail?: string
   listing?: string
   coinId?: string
+  market?: { code: string; currency: string }
 }
 
 function etf(name: string, reference: string, detail: string, aliases: string, listing?: string): CatalogAsset {

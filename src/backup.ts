@@ -29,11 +29,19 @@ function identity(value: Record<string, unknown>) {
   return string(value.id, 512) && typeof value.category === 'string' && Object.hasOwn(categories, value.category)
     && string(value.name, 100) && string(value.reference) && string(value.platform, 80)
     && (value.listing === undefined || string(value.listing, 50))
+    && (value.market === undefined || (object(value.market) && typeof value.market.code === 'string'
+      && /^[A-Z0-9][A-Z0-9._-]{0,30}\.(US|SW|XETRA|PA|AS|BR|MI)$/.test(value.market.code)
+      && typeof value.market.currency === 'string' && /^(CHF|EUR|USD)$/.test(value.market.currency)))
 }
 
 function opening(value: unknown) {
   if (!object(value) || !identity(value) || !time(value.createdAt) || !unitAmount(value.quantity, true)) return false
   if (value.initialValue !== undefined && value.initialValue !== null && !decimal(value.initialValue)) return false
+  const isDate = (date: unknown) => typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)
+  if (value.acquiredOn !== undefined && !isDate(value.acquiredOn)) return false
+  if (value.purchase !== undefined && (!object(value.purchase) || !decimal(value.purchase.total)
+    || !decimal(value.purchase.rate, 0, true) || !['CHF', 'EUR', 'USD'].includes(String(value.purchase.currency))
+    || (value.purchase.date !== undefined && !isDate(value.purchase.date)))) return false
   const valuation = value.valuation
   if (valuation !== null && (!object(valuation) || !decimal(valuation.amount) || !time(valuation.updatedAt))) return false
   const cost = value.cost
@@ -55,6 +63,9 @@ function mark(value: unknown) {
   if (!object(value) || !string(value.id, 512) || !string(value.target, 512) || !string(value.source, 80)
     || !time(value.at) || !time(value.sourceAt)) return false
   if (value.kind === 'market') return decimal(value.price)
+    && (value.originalPrice === undefined || decimal(value.originalPrice, 0, true))
+    && (value.currency === undefined || ['CHF', 'EUR', 'USD'].includes(String(value.currency)))
+    && (value.timing === undefined || value.timing === 'close' || value.timing === 'reported')
   return value.kind === 'manual' && (value.price === null || decimal(value.price))
 }
 

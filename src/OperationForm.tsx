@@ -12,11 +12,12 @@ interface Props {
   current: Operation | null
   data: PortfolioData
   platforms: string[]
+  marketKey?: string
   onSave: (operation: Operation) => Promise<void>
   onClose: () => void
 }
 
-export default function OperationForm({ current, data, platforms, onSave, onClose }: Props) {
+export default function OperationForm({ current, data, platforms, marketKey, onSave, onClose }: Props) {
   const dialog = useModal()
   const [kind, setKind] = useState<OperationKind>(current?.kind ?? 'buy')
   const [category, setCategory] = useState<Category>(current?.category ?? 'etf')
@@ -63,7 +64,7 @@ export default function OperationForm({ current, data, platforms, onSave, onClos
     setBusy(true)
     try {
       await onSave({
-        id: current?.id ?? newId(), category: asset.category, name: asset.name, reference: asset.reference, listing: asset.listing,
+        id: current?.id ?? newId(), category: asset.category, name: asset.name, reference: asset.reference, listing: asset.listing, market: asset.market,
         kind, platform: source, destination: kind === 'transfer' ? to : undefined,
         quantity: units.toFixed(), gross: total.toFixed(), fee: costs.toFixed(),
         feeUnits: kind === 'transfer' ? assetCosts.toFixed() : undefined, at, createdAt: current?.createdAt ?? now,
@@ -105,7 +106,7 @@ export default function OperationForm({ current, data, platforms, onSave, onClos
           </select>
         </label>}
         {kind === 'buy' && <AssetPicker category={category} selected={chosen} onCategory={setCategory}
-          onChoose={setChosen} onCustom={setCustom} />}
+          onChoose={setChosen} onCustom={setCustom} marketKey={marketKey} />}
         {kind !== 'buy' && candidates.length === 0 && <p className="hint">Ajoute d’abord une position ou un achat dans ton portefeuille.</p>}
 
         <div className="step"><span>2</span><h3>Renseigne le mouvement</h3></div>

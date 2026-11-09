@@ -246,3 +246,21 @@ form input::placeholder { color: #56657a; opacity: 1; }
 .demo-banner a, .empty-actions a, .settings-panel a { text-decoration: none; }
 .empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .settings-panel > a { margin-top: 10px; }
+
+.summary-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin: 1rem 0; }
+.summary-metrics div { padding-top: .8rem; border-top: 1px solid var(--line, #e2e8f0); }
+.summary-metrics dt, .mover-grid small { font-size: .82rem; }
+.summary-metrics dd { margin: .2rem 0 0; font-size: 1.05rem; font-weight: 700; }
+.summary-metrics dd small { display: block; font-size: .8rem; font-weight: 500; }
+.movers { padding: 1.25rem; margin-bottom: 1rem; }
+.movers h2 { margin: 0 0 .4rem; }
+.mover-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: .75rem; }
+.mover-grid > div { display: grid; gap: .2rem; padding: .85rem; border: 1px solid var(--line, #e2e8f0); border-radius: .6rem; }
+.market-search, .manual-valuation, .market-settings { margin-top: .75rem; }
+.market-search .picker-list { margin-top: .5rem; }
+.manual-valuation > summary { cursor: pointer; font-size: .88rem; }
+.manual-valuation label { margin: .55rem 0; display: grid; gap: .25rem; }
+.history-panel .section-heading, .asset-history .section-heading { flex-wrap: wrap; }
+
+.acquisition-list { margin: .75rem 0; }
+.acquisition-list > summary { cursor: pointer; color: var(--accent); font-size: .86rem; font-weight: 650; }

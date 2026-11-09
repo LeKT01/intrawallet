@@ -155,3 +155,27 @@ test('les devises historiques utilisent le taux du jour ou un taux antérieur r�
   assert.equal(display.convert('100', '2025-11-14'), null)
   assert.match(display.format('100', { day: '2025-11-06' }), /EUR/)
 })
+
+test('le change courant modifie la valorisation sans réécrire les relevés passés', () => {
+  const source = { ...quote('usd', 2, '90'), originalPrice: '100', currency: 'USD', source: 'Finnhub', timing: 'reported' }
+  const position = opening('p', '90', '80')
+  const currentRate = currencyDisplay('USD', [{ date: '2025-11-02', quote: 'USD', rate: '1.25' }])
+  const view = replay(data([position], [], [source]), [], () => currentRate.convert('1', '2025-11-02').pow(-1))
+  assert.equal(view.holdings[0].valuation.amount, '80')
+  assert.equal(view.history.at(-1).value.toFixed(), '90')
+  assert.equal(summarize(view.holdings).cost.toFixed(), '80')
+})
+
+test('une valorisation manquante laisse le coût connu intact et le rendement indéterminé', () => {
+  const totals = summarize(replay(data([opening('p', null, '90')])).holdings)
+  assert.equal(totals.cost.toFixed(), '90')
+  assert.equal(totals.returnRate, null)
+})
+
+test('la sauvegarde accepte les métadonnées de cotation et d’acquisition', () => {
+  const position = { ...opening('p', '90', '80'), acquiredOn: '2025-11-01',
+    purchase: { total: '100', currency: 'USD', date: '2025-11-01', rate: '0.8' } }
+  const mark = { ...quote('q', 2, '90'), originalPrice: '100', currency: 'USD', timing: 'reported' }
+  const snapshot = data([position], [], [mark])
+  assert.deepEqual(readBackup(backupText(snapshot)), snapshot)
+})

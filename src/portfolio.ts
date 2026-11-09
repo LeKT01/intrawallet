@@ -23,6 +23,9 @@ export interface Position {
   createdAt: number
   listing?: string
   initialValue?: string | null
+  market?: { code: string; currency: string }
+  purchase?: { total: string; currency: Currency; date?: string; rate: string }
+  acquiredOn?: string
 }
 
 export function parseAmount(input: string) {
@@ -70,25 +73,33 @@ export const platformKey = (platform: string) => platform.toLocaleLowerCase('fr-
 export function summarize(positions: (Position & { partiallyValued?: boolean })[]) {
   let amount = new Decimal(0)
   let cost = new Decimal(0)
+  let costCount = 0
   let priced = 0
   let comparable = 0
   let estimated = false
 
   for (const position of positions) {
+    if (position.cost) {
+      cost = cost.plus(position.cost.amount)
+      costCount += 1
+      estimated ||= position.cost.kind === 'estimated'
+    }
     if (!position.valuation) continue
     amount = amount.plus(position.valuation.amount)
     priced += 1
     if (position.cost && !position.partiallyValued) {
-      cost = cost.plus(position.cost.amount)
       comparable += 1
-      estimated ||= position.cost.kind === 'estimated'
     }
   }
 
+  const gain = positions.length > 0 && comparable === positions.length ? amount.minus(cost) : null
   return {
     amount,
+    cost,
+    costCount,
+    returnRate: gain && cost.gt(0) ? gain.div(cost) : null,
     priced,
-    gain: positions.length > 0 && comparable === positions.length ? amount.minus(cost) : null,
+    gain,
     estimated,
   }
 }

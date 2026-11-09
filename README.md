@@ -1,6 +1,6 @@
 # Portefeuille Local
 
-Application de suivi local pour les actions, ETF et cryptos, avec regroupement par actif et par plateforme. La devise de référence est le CHF. Le sélecteur du portefeuille affiche aussi les montants en EUR ou USD. Les champs de saisie restent en CHF.
+Application de suivi local pour les actions, ETF et cryptos, avec regroupement par actif et par plateforme. La devise de référence est le CHF. Le sélecteur du portefeuille affiche aussi les montants en EUR ou USD. Les achats initiaux peuvent être saisis dans les trois devises. Les opérations du journal restent saisies en CHF.
 
 ## Démarrer
 
@@ -19,19 +19,30 @@ Ouvre http://127.0.0.1:4173/?demo=1 ou utilise **Données → Ouvrir la démo**.
 
 ## Ajouter une position ou enregistrer une opération
 
-- **Ajouter une position** sert à enregistrer un actif que tu détiens déjà. Sélectionne la catégorie puis cherche le nom, l’indice ou le symbole. Le catalogue local distingue les variantes capitalisantes et distribuantes. Pour un actif absent, le nom suffit en mode manuel et le symbole ou l’ISIN reste facultatif.
-- **Récupérer le cours** affiche le prix unitaire, sa source et sa date avant même la saisie de la quantité. La valeur actuelle correspond au **montant total de la position**, calculé avec le cours si tu laisses le champ vide. Pour saisir un **prix unitaire** qui s’applique à toutes les plateformes, ouvre l’actif dans le tableau de bord et choisis **Saisir un cours**.
-- Le coût initial se renseigne comme montant payé ou comme gain ou perte en %. Avec une valeur de 500 CHF et un gain de 12 %, l’app estime le coût à 446.43 CHF.
-- Dans le **Journal**, enregistre les achats, ventes et transferts pendant la période suivie. Les ventes utilisent le coût moyen pondéré de la plateforme. Un transfert conserve le coût des unités reçues et accepte des frais en CHF ou en unités.
+- **Ajouter une position** sert à enregistrer un actif déjà détenu. Le catalogue local cherche par nom, indice, symbole ou ISIN. Avec une clé EODHD active, **Rechercher sur les marchés** élargit la recherche aux places prises en charge. Vérifie le symbole, la place de cotation et la devise proposés.
+- À la sélection, le formulaire demande le **cours par unité**, affiche sa devise d’origine, sa source et son horodatage, puis calcule la valeur dès la saisie de la quantité. La saisie de secours reste disponible pour un actif sans cours. Une position peut être enregistrée avec une valeur indéterminée.
+- Le coût initial se renseigne comme **montant total payé, frais compris** ou comme **gain ou perte en %**. Le coût en devise d’origine et sa date sont conservés. Pour une saisie en EUR ou USD, le taux de référence du jour d’achat est utilisé quand la date est connue, sinon celui du jour de saisie.
+- Dans le **Journal**, enregistre les achats, ventes et transferts pendant la période suivie. Les ventes utilisent le coût moyen pondéré de la plateforme. Les transferts conservent le coût des unités reçues et peuvent inclure des frais en CHF ou en unités.
 
-## Cotations et historique
+## Cotations et actualisation
 
-- [CoinGecko](https://docs.coingecko.com/demo/reference/simple-price) fournit les cours en CHF des cryptos reconnues. L’app récupère les cours à l’ouverture puis environ toutes les 60 secondes tant que l’onglet est visible. Le bouton d’actualisation permet une demande manuelle. Le dernier cours connu reste affiché avec sa date lorsque le fournisseur est indisponible. L’heure de la dernière vérification indique quand l’app a contacté les sources. La date du cours indique à quand remonte le prix utilisé.
-- Les actions et ETF cotés aux États-Unis utilisent [Finnhub](https://finnhub.io/docs/api) avec une clé personnelle gratuite facultative, saisie et appliquée dans **Données**. Elle est conservée dans le stockage de session du navigateur pour permettre l’actualisation après rechargement dans le même onglet. La valorisation des ETF suisses et européens est manuelle. [Frankfurter](https://frankfurter.dev/) convertit les cours en CHF au taux de référence du jour de cotation ou au dernier taux disponible.
-- Les requêtes de marché contiennent les identifiants ou symboles, ainsi que la clé si elle est fournie au service concerné. Le journal, les quantités et les montants restent dans IndexedDB.
-- La courbe du portefeuille et son tableau journalier commencent à la première position ou opération. Les jours manquants peuvent être estimés avec le journal et les cours du jour de tous les actifs détenus. Les points estimés et les relevés utilisant des cours antérieurs sont indiqués. Le résultat en CHF isole les flux d’achat et de vente. Les transferts internes ne sont pas des flux externes.
-- Chaque actif a sa courbe unitaire et son tableau des variations. Les cryptos du catalogue chargent environ 90 jours de cours quotidiens CoinGecko. Les actions et ETF utilisent les cours et prix d’opération disponibles dans l’app.
-- Les montants et cours historiques affichés en EUR ou USD utilisent le taux de référence Frankfurter de leur date, ou le dernier taux disponible dans les sept jours précédents. La performance affichée est le résultat calculé en CHF, converti au taux de la date. Les historiques de marché et taux téléchargés sont mis en cache localement.
+| Source | Couverture et fréquence dans l’application |
+| --- | --- |
+| [CoinGecko](https://docs.coingecko.com/demo/reference/simple-price) | Cours indicatifs des cryptos du catalogue. Une requête groupée environ chaque minute lorsque l’onglet est actif, ou toutes les cinq minutes avec une clé Demo pour ménager le quota mensuel. |
+| [EODHD](https://eodhd.com/help/plans) | Actions et ETF des places couvertes, dont SIX et Xetra. L’offre gratuite personnelle annonce 20 appels par jour et jusqu’à un an de clôtures pour les instruments accessibles. La recherche de titres compte dans le quota. |
+| [Finnhub](https://finnhub.io/docs/api) | Dernier cours reçu des titres américains compatibles avec la clé de l’utilisateur. Nouvelle demande environ toutes les trois minutes en séance. |
+| [Frankfurter](https://frankfurter.dev/) | Taux quotidiens de référence de la BCE pour CHF, EUR et USD. Le dernier taux disponible peut être utilisé pendant sept jours. |
+
+Pour les actions et ETF, saisis ta propre clé EODHD dans **Données → Cotations automatiques → Appliquer les clés**. Finnhub et CoinGecko Demo sont facultatifs. Les clés sont conservées dans la session du navigateur et envoyées uniquement à leur fournisseur. Une clé utilisée par le navigateur reste accessible à son utilisateur. Les quantités, coûts, plateformes et opérations restent dans IndexedDB. En local, le serveur Vite peut relayer les requêtes EODHD vers le fournisseur pour éviter une dépendance à ses en-têtes CORS. Ce relais fonctionne sur la machine qui lance l’application. Un hébergement statique utilise l’accès direct du navigateur.
+
+Le moteur vérifie les cours à l’ouverture, au rechargement, au retour au premier plan et à la demande. Les recherches identiques peuvent partager une requête en cours. EODHD recharge la clôture si la séance attendue a changé et réutilise les cours historiques déjà stockés. Les horaires et jours fériés sont couverts par des calendriers locaux pour les places principales, sur les années intégrées. Les autres places utilisent une estimation de fin de séance en semaine. La source et la date du cours sont affichées séparément de l’heure de vérification. En cas d’échec, l’application garde le dernier cours disponible.
+
+## Valorisation et historique
+
+- La synthèse distingue valeur détenue, coût des positions ouvertes, gain latent et gain réalisé connu. Les valeurs partielles sont signalées. Le classement utilise les gains latents en pourcentage du coût connu. Le détail d’un actif conserve les plateformes et les entrées individuelles du journal.
+- Le portefeuille propose **24 h, 7 j, 1 mois, 3 mois, 6 mois, 1 an** et **Depuis le début**. L’historique commence à l’entrée dans le suivi. Une date d’acquisition antérieure reste informative. La reconstruction rejoue les quantités et les opérations. Les achats et ventes sont isolés dans le calcul du résultat, tandis qu’un transfert interne conserve les quantités du portefeuille hors frais. Les jours aux données insuffisantes restent visibles comme lacunes.
+- La courbe 24 h du portefeuille repose sur ses relevés locaux. Dans le détail d’une crypto, CoinGecko peut aussi fournir ses observations intrajournalières. Les actions et ETF utilisent leurs clôtures et les relevés disponibles, sans granularité intrajournalière garantie. La courbe d’un titre utilise ses cours bruts. Le journal ne corrige pas automatiquement les splits, dividendes ni autres opérations sur titres.
+- Le taux de référence courant sert aux valorisations actuelles des cours étrangers lorsque disponible. Les courbes utilisent les taux historiques de chaque date. La performance calculée en CHF est convertie dans la devise d’affichage. Les historiques téléchargés sont mis en cache localement.
 
 ## Exporter et restaurer
 

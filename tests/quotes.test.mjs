@@ -1,0 +1,75 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { fetchEodSeries, fetchQuotes, searchMarket } from '../src/quotes.ts'
+import { closeTimestamp, latestClosingDay, marketOpen } from '../src/marketCalendar.ts'
+
+const eodhd = { code: 'VUAA.XETRA', currency: 'EUR' }
+const etf = { category: 'etf', reference: 'IE00BFMXXD54', name: 'Vanguard S&P 500 UCITS ETF', listing: 'XETR:VUAA' }
+const bitcoin = { category: 'crypto', reference: 'BTC', name: 'Bitcoin' }
+const keys = { eodhd: '', finnhub: '', coingecko: '' }
+
+test('le calendrier utilise l’heure locale, les jours fériés et la clôture anticipée', () => {
+  assert.equal(marketOpen('XNAS', Date.parse('2026-11-26T17:00Z')), false)
+  assert.equal(marketOpen('XNAS', Date.parse('2026-11-27T17:59Z')), true)
+  assert.equal(marketOpen('XNAS', Date.parse('2026-11-27T18:00Z')), false)
+  assert.equal(closeTimestamp('US', '2026-11-27'), Date.parse('2026-11-27T18:00Z'))
+  assert.equal(latestClosingDay('XETRA', Date.parse('2026-12-25T19:00Z')), '2026-12-23')
+  assert.equal(latestClosingDay('SW', Date.parse('2026-04-06T19:00Z')), '2026-04-02')
+})
+
+test('la recherche de marché conserve la place, la devise et le bon type de titre', async t => {
+  t.mock.method(globalThis, 'fetch', async url => {
+    assert.equal(url.hostname, 'eodhd.com')
+    assert.match(url.pathname, /search\/VUAA$/)
+    return Response.json([
+      { Code: 'VUAA', Name: 'Vanguard ETF', Exchange: 'XETRA', Currency: 'EUR', Type: 'ETF', ISIN: etf.reference },
+      { Code: 'VUAA', Name: 'Vanguard ETF', Exchange: 'LSE', Currency: 'GBX', Type: 'ETF', ISIN: etf.reference },
+      { Code: 'VUAA', Name: 'Une autre action', Exchange: 'US', Currency: 'USD', Type: 'Common Stock' },
+    ])
+  })
+  const results = await searchMarket('etf', 'VUAA', 'test-recherche')
+  assert.equal(results.length, 1)
+  assert.equal(results[0].reference, etf.reference)
+  assert.equal(results[0].listing, 'XETR:VUAA')
+  assert.deepEqual(results[0].market, eodhd)
+})
+
+test('une clôture d’ETF conserve son prix d’origine, utilise le cours brut et ignore zéro', async t => {
+  t.mock.method(globalThis, 'fetch', async url => {
+    if (url.hostname === 'eodhd.com') {
+      assert.match(url.pathname, /\/eod\/VUAA\.XETRA$/)
+      assert.equal(url.searchParams.get('to'), '2026-04-02')
+      return Response.json([
+        { date: '2026-04-01', close: 0 },
+        { date: '2026-04-02', close: 105, adjusted_close: 87 },
+        { date: '2026-04-03', close: 110 },
+      ])
+    }
+    assert.equal(url.hostname, 'api.frankfurter.dev')
+    assert.equal(url.searchParams.get('providers'), 'ecb')
+    return Response.json([{ date: '2026-04-02', quote: 'EUR', rate: 1.05 }])
+  })
+  const [mark, ...rest] = await fetchEodSeries(etf, eodhd, 'test-historique', Date.parse('2026-04-06T20:00Z'))
+  assert.equal(rest.length, 0)
+  assert.equal(mark.price, '100')
+  assert.equal(mark.originalPrice, '105')
+  assert.equal(mark.currency, 'EUR')
+  assert.equal(mark.timing, 'close')
+  assert.equal(mark.sourceAt, Date.parse('2026-04-02T15:30Z'))
+})
+
+test('les requêtes crypto identiques partagent une réponse et les erreurs de quota sont lisibles', async t => {
+  const now = Date.now()
+  const request = t.mock.method(globalThis, 'fetch', async url => {
+    assert.equal(url.hostname, 'api.coingecko.com')
+    if (url.searchParams.has('x_cg_demo_api_key')) return new Response(null, { status: 429 })
+    return Response.json({ bitcoin: { chf: 63000, last_updated_at: Math.floor(now / 1000) } })
+  })
+  const [one, two] = await Promise.all([fetchQuotes([bitcoin], keys), fetchQuotes([bitcoin], keys)])
+  assert.equal(request.mock.callCount(), 1)
+  assert.equal(one.marks[0].price, '63000')
+  assert.deepEqual(one.marks, two.marks)
+  const limited = await fetchQuotes([bitcoin], { ...keys, coingecko: 'test-limite' })
+  assert.equal(limited.marks.length, 0)
+  assert.match(limited.issues[0], /limité les requêtes/)
+})

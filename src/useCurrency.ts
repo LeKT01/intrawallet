@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { currencyDisplay, dayKey, daysBefore, initialCurrency, persistCurrency, type Currency, type FxRate } from './currency'
-import { fetchFxRates, historyDays } from './quotes'
+import { fetchFxRates, historyDays, referenceRate } from './quotes'
+import { Decimal } from 'decimal.js'
 import { demoFxRates, demoMode } from './demo'
 
 type Cache = { from: string; checkedAt: number; rates: FxRate[] }
-const cacheKey = 'portefeuille.reference-fx'
+const cacheKey = 'portefeuille.reference-fx-ecb'
 
 function readCache(): Cache | null {
   try {
@@ -16,17 +17,25 @@ function readCache(): Cache | null {
   } catch { return null }
 }
 
-export default function useCurrency(start: number) {
+export default function useCurrency(start: number, needsRates: boolean) {
   const [currency, setCurrency] = useState<Currency>(() => demoMode ? 'CHF' : initialCurrency())
   const [cache, setCache] = useState(() => demoMode ? null : readCache())
   const [loading, setLoading] = useState(false)
-  const today = dayKey(Date.now())
+  const [checked, setChecked] = useState(Date.now)
+  const today = dayKey(checked)
+  useEffect(() => {
+    if (demoMode || (!needsRates && currency === 'CHF')) return
+    const check = () => { if (document.visibilityState === 'visible') setChecked(Date.now()) }
+    const timer = window.setInterval(check, 300000)
+    document.addEventListener('visibilitychange', check)
+    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', check) }
+  }, [currency, needsRates])
   const marketStart = daysBefore(today, historyDays + 7)
   const journalStart = Number.isFinite(start) ? daysBefore(dayKey(start), 7) : marketStart
   const from = journalStart < marketStart ? journalStart : marketStart
 
   useEffect(() => {
-    if (demoMode || currency === 'CHF' || (cache && cache.from <= from && Date.now() - cache.checkedAt < 3600000)) {
+    if (demoMode || (!needsRates && currency === 'CHF') || (cache && cache.from <= from && Date.now() - cache.checkedAt < 3600000)) {
       setLoading(false)
       return
     }
@@ -41,11 +50,16 @@ export default function useCurrency(start: number) {
       if (active) setLoading(false)
     })
     return () => { active = false }
-  }, [currency, from, today, cache?.from, cache?.checkedAt])
+  }, [currency, needsRates, from, today, Math.floor(checked / 900000)])
 
+  const rateToCHF = useMemo(() => (code: string) => {
+    const rate = referenceRate(cache?.rates ?? [], code, today)
+    return rate ? new Decimal(1).div(rate.rate) : null
+  }, [cache, today])
   return {
+    rateToCHF,
     display: currencyDisplay(currency, demoMode ? demoFxRates(today) : cache?.rates ?? []),
-    loading: currency !== 'CHF' && loading,
+    loading,
     choose: (value: Currency) => { if (!demoMode) persistCurrency(value); setLoading(false); setCurrency(value) },
   }
 }

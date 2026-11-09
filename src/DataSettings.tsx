@@ -4,6 +4,7 @@ import { loadPortfolio, restorePortfolio } from './database'
 import type { PortfolioData } from './ledger'
 import { useModal } from './PositionForm'
 import { demoLink, demoMode } from './demo'
+import type { QuoteKeys } from './quotes'
 
 export function ConfirmDialog({ title, description, confirm, busy, onClose, onConfirm, danger = false }: {
   title: string
@@ -28,8 +29,8 @@ export function ConfirmDialog({ title, description, confirm, busy, onClose, onCo
 }
 
 export default function DataSettings({ quoteKey, onKey, onRefresh, refreshing, refreshStatus, lastChecked, onRestored }: {
-  quoteKey: string
-  onKey: (key: string) => void
+  quoteKey: QuoteKeys
+  onKey: (key: QuoteKeys) => void
   onRefresh: () => void
   refreshing: boolean
   refreshStatus: string
@@ -91,19 +92,32 @@ export default function DataSettings({ quoteKey, onKey, onRefresh, refreshing, r
 
   return <div className="settings-grid">
     <section className="panel settings-panel"><h2>Cotations automatiques</h2>
-      <p className="hint">Les cryptos du catalogue utilisent CoinGecko. Pour les titres cotés aux États-Unis, tu peux utiliser une clé gratuite Finnhub.</p>
-      <form onSubmit={event => { event.preventDefault(); onKey(keyDraft) }}>
-        <label className="cost-input">Clé Finnhub <small>facultative</small>
-          <input type="password" value={keyDraft} maxLength={128} autoComplete="off" spellCheck={false}
-            placeholder="Clé de cotation, si tu en as une" onChange={event => setKeyDraft(event.target.value)} />
+      <p className="hint">CoinGecko fournit les cours des cryptos du catalogue. Pour les actions et ETF, active les sources dont tu as besoin.</p>
+      <form className="market-settings" onSubmit={event => {
+        event.preventDefault()
+        onKey({ eodhd: keyDraft.eodhd.trim(), finnhub: keyDraft.finnhub.trim(), coingecko: keyDraft.coingecko.trim() })
+      }}>
+        <label className="cost-input">Clé EODHD
+          <input type="password" value={keyDraft.eodhd} maxLength={128} autoComplete="off" spellCheck={false}
+            placeholder="Clé personnelle EODHD" onChange={event => setKeyDraft({ ...keyDraft, eodhd: event.target.value })} />
         </label>
-        <button type="submit" className="secondary" disabled={keyDraft.trim() === quoteKey}>Appliquer la clé</button>
-        <p className="hint">{quoteKey ? 'Clé active. Efface le champ et applique pour la retirer.' : 'Aucune clé active.'}
-          {' '}Elle est conservée dans cet onglet après rechargement.</p>
+        <p className="hint"><a href="https://eodhd.com/pricing" target="_blank" rel="noreferrer">Offre gratuite EODHD</a> · 20 appels par jour, jusqu’à un an de clôtures pour les titres couverts.</p>
+        <label className="cost-input">Clé Finnhub <small>facultative</small>
+          <input type="password" value={keyDraft.finnhub} maxLength={128} autoComplete="off" spellCheck={false}
+            placeholder="Clé personnelle Finnhub" onChange={event => setKeyDraft({ ...keyDraft, finnhub: event.target.value })} />
+        </label>
+        <p className="hint">Finnhub complète les clôtures avec le dernier cours reçu sur les titres américains compatibles.</p>
+        <label className="cost-input">Clé CoinGecko Demo <small>facultative</small>
+          <input type="password" value={keyDraft.coingecko} maxLength={128} autoComplete="off" spellCheck={false}
+            placeholder="À renseigner si CoinGecko demande une clé" onChange={event => setKeyDraft({ ...keyDraft, coingecko: event.target.value })} />
+        </label>
+        <button type="submit" className="secondary" disabled={keyDraft.coingecko.trim() === quoteKey.coingecko
+          && keyDraft.eodhd.trim() === quoteKey.eodhd
+          && keyDraft.finnhub.trim() === quoteKey.finnhub}>Appliquer les clés</button>
+        <p className="hint">Les clés restent dans la session du navigateur et sont envoyées à leurs fournisseurs respectifs. Elles sont accessibles depuis ton navigateur. Efface un champ et applique pour retirer sa clé.</p>
       </form>
-      <p className="hint">Pour les ETF suisses ou européens, ouvre l’actif et saisis son prix unitaire en CHF.</p>
       <button className="secondary" onClick={onRefresh} disabled={refreshing}>{refreshing ? 'Actualisation…' : 'Actualiser les cours'}</button>
-      <p className="hint">Vérification à l’ouverture et au rechargement, puis environ toutes les 60 secondes pendant la consultation.</p>
+      <p className="hint">Crypto environ chaque minute (5 min avec une clé Demo pour limiter sa consommation), Finnhub environ toutes les 3 minutes en séance, EODHD après les clôtures selon disponibilité et quota. La vérification reprend au retour dans l’application.</p>
       {lastChecked !== null && <p className="hint">Dernière vérification · {new Date(lastChecked).toLocaleString('fr-CH')}</p>}
       {refreshStatus && <p className="hint" role="status">{refreshStatus}</p>}
     </section>

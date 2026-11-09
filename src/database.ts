@@ -1,10 +1,10 @@
 import { Dexie, type EntityTable } from 'dexie'
-import { assetKey, type Position } from './portfolio'
-import { dayKey } from './currency'
-import { demoMode, makeDemo } from './demo'
-import { firstTrackingDate, replay, unitMark, type Mark, type Operation, type PortfolioData } from './ledger'
+import { assetKey, type Position } from './portfolio.ts'
+import { dayKey } from './currency.ts'
+import { demoMode, makeDemo } from './demo.ts'
+import { firstTrackingDate, replay, unitMark, type Mark, type Operation, type PortfolioData } from './ledger.ts'
 
-export interface DailySeries { target: string; fetchedAt: number; marks: Mark[] }
+export interface DailySeries { target: string; fetchedAt: number; marks: Mark[]; instrument?: Position['market'] }
 
 const db = new Dexie(demoMode ? 'portefeuille-local-demo' : 'portefeuille-local') as Dexie & {
   positions: EntityTable<Position, 'id'>
@@ -27,6 +27,7 @@ if (demoMode) db.on('populate', transaction => {
 })
 
 export const loadDailyPrices = () => db.dailyPrices.toArray()
+export const loadDailySeries = (target: string) => db.dailyPrices.get(target)
 export function saveDailyPrices(series: DailySeries) {
   return db.transaction('rw', db.dailyPrices, async () => {
     const existing = await db.dailyPrices.get(series.target)
@@ -37,7 +38,7 @@ export function saveDailyPrices(series: DailySeries) {
       if (!previous || previous.sourceAt <= mark.sourceAt) byDay.set(day, mark)
     }
     return db.dailyPrices.put({ target: series.target, fetchedAt: Math.max(series.fetchedAt, existing?.fetchedAt ?? 0),
-      marks: [...byDay.values()] })
+      marks: [...byDay.values()], instrument: series.instrument ?? existing?.instrument })
   })
 }
 

@@ -9,7 +9,7 @@ import { fetchDailyPrices } from './quotes'
 
 type Asset = Pick<Position, 'category' | 'reference' | 'name' | 'listing'>
 
-export default function useDailyPrices(assets: Asset[]) {
+export default function useDailyPrices(assets: Asset[], key: string) {
   const series = useLiveQuery(loadDailyPrices)
   const latest = useRef({ assets, series })
   latest.current = { assets, series }
@@ -26,20 +26,20 @@ export default function useDailyPrices(assets: Asset[]) {
       const today = dayKey(now)
       const cached = new Map(latest.current.series?.map(item => [item.target, item]))
       const missing = latest.current.assets.filter(asset => {
-        const key = quoteTarget(asset)
-        const series = cached.get(key)
+        const target = quoteTarget(asset)
+        const series = cached.get(target)
         return catalogEntry(asset.category, asset.reference)?.coinId
           && (!series || dayKey(series.fetchedAt) !== today)
-          && now - (attempts.current.get(key) ?? 0) >= 300000
+          && now - (attempts.current.get(key + '/' + target) ?? 0) >= 300000
       }).slice(0, 2)
       if (!missing.length) return
       pending.current = true
       try {
         for (const asset of missing) {
           const target = quoteTarget(asset)
-          attempts.current.set(target, Date.now())
+          attempts.current.set(key + '/' + target, Date.now())
           try {
-            const marks = await fetchDailyPrices(asset)
+            const marks = await fetchDailyPrices(asset, key)
             if (marks.length) await saveDailyPrices({ target, fetchedAt: Date.now(), marks })
           } catch { /* A later check can retry without discarding prices already stored. */ }
         }
@@ -49,8 +49,9 @@ export default function useDailyPrices(assets: Asset[]) {
     }
     void update()
     const timer = window.setInterval(() => void update(), 60000)
-    return () => window.clearInterval(timer)
-  }, [tracked, ready])
+    document.addEventListener('visibilitychange', update)
+    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', update) }
+  }, [tracked, ready, key])
 
   return series ?? []
 }

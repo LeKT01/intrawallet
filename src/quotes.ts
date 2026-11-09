@@ -1,14 +1,42 @@
 import { Decimal } from 'decimal.js'
-import { catalogEntry } from './catalog'
-import { quoteTarget, type Mark } from './ledger'
-import type { Position } from './portfolio'
-import { dayKey, type FxRate } from './currency'
+import { catalogEntry, type CatalogAsset } from './catalog.ts'
+import { quoteTarget, type Mark } from './ledger.ts'
+import { dayKey, daysBefore, type FxRate } from './currency.ts'
+import { closeTimestamp, latestClosingDay, marketOpen } from './marketCalendar.ts'
+import { loadDailySeries, saveDailyPrices } from './database.ts'
 
-type QuoteAsset = Pick<Position, 'category' | 'reference' | 'name' | 'listing'>
+export type QuoteAsset = Pick<CatalogAsset, 'category' | 'reference' | 'name' | 'listing' | 'market'>
+export type QuoteKeys = { finnhub: string; eodhd: string; coingecko: string }
+type Provider = keyof QuoteKeys
+type QuoteResult = { marks: Mark[]; issues: string[]; checked: number }
 
-async function json(url: URL) {
-  const response = await fetch(url, { signal: AbortSignal.timeout(9000), cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' })
-  if (!response.ok) throw new Error('Fournisseur indisponible.')
+const venueCodes: Record<string, string> = {
+  XNAS: 'US', XNYS: 'US', ARCX: 'US', XASE: 'US', BATS: 'US', US: 'US',
+  XSWX: 'SW', XETR: 'XETRA', XPAR: 'PA', XAMS: 'AS', XBRU: 'BR', XMIL: 'MI',
+}
+const venueNames: Record<string, string> = {
+  US: 'États-Unis', SW: 'SIX Swiss Exchange', XETRA: 'Xetra', PA: 'Euronext Paris',
+  AS: 'Euronext Amsterdam', BR: 'Euronext Bruxelles', MI: 'Borsa Italiana',
+}
+const venueMics: Record<string, string> = { US: 'US', SW: 'XSWX', XETRA: 'XETR', PA: 'XPAR', AS: 'XAMS', BR: 'XBRU', MI: 'XMIL' }
+const markTime = (stamp: unknown) => Number(stamp) * 1000
+const validTime = (at: number) => Number.isSafeInteger(at) && at > 0 && at <= Date.now() + 300000
+const datePattern = /^\d{4}-\d{2}-\d{2}$/
+const symbolPattern = /^[A-Z0-9][A-Z0-9._-]{0,30}$/
+const isinPattern = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/
+const supportedCurrency = /^(CHF|EUR|USD)$/
+export const historyDays = 365
+
+async function json(url: URL, provider: string) {
+  let response: Response
+  try {
+    response = await fetch(url, { signal: AbortSignal.timeout(9000), cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' })
+  } catch {
+    throw new Error(provider + ' est inaccessible depuis ce navigateur.')
+  }
+  if (response.status === 429) throw new Error(provider + ' a limité les requêtes. Réessaie plus tard.')
+  if ([401, 403].includes(response.status)) throw new Error(provider + ' a refusé l’accès. Vérifie la clé et la couverture de l’offre.')
+  if (!response.ok) throw new Error(provider + ' n’a pas renvoyé de données pour cette demande.')
   return response.json()
 }
 
@@ -17,154 +45,300 @@ function positive(value: unknown) {
   try {
     const number = new Decimal(value)
     return number.isFinite() && number.gt(0) ? number : null
-  } catch {
-    return null
-  }
+  } catch { return null }
 }
 
-function marketMark(asset: QuoteAsset, price: Decimal, source: string, sourceAt: number, at: number): Mark {
+function marketMark(asset: QuoteAsset, price: Decimal, source: string, sourceAt: number, at: number,
+  originalPrice: Decimal, currency: string, timing: Mark['timing']): Mark {
   const target = quoteTarget(asset)
   return { id: [target, source, sourceAt, price.toFixed()].join('/'), kind: 'market',
-    target, price: price.toFixed(), sourceAt, at, source }
+    target, price: price.toFixed(), sourceAt, at, source, originalPrice: originalPrice.toFixed(), currency, timing }
 }
 
-const cryptoSource = 'CoinGecko'
-const equityLimit = 8
-let equityOffset = 0
+function listing(asset: QuoteAsset) {
+  const value = asset.listing || catalogEntry(asset.category, asset.reference)?.listing || asset.reference
+  const [mic, symbol] = value.split(':')
+  return symbol && symbolPattern.test(symbol) && Object.hasOwn(venueCodes, mic) ? { mic, symbol, venue: venueCodes[mic] } : null
+}
 
-async function cryptoQuotes(assets: QuoteAsset[]) {
+export function quoteAccess(asset: QuoteAsset, keys: QuoteKeys) {
+  if (asset.category === 'crypto') return catalogEntry(asset.category, asset.reference)?.coinId ? 'available' : 'manual'
+  const exchange = listing(asset)
+  if (!exchange && !isinPattern.test(asset.reference)) return 'manual'
+  return keys.eodhd || (exchange?.venue === 'US' && keys.finnhub) ? 'available' : 'key'
+}
+
+export function readSessionQuoteKey(provider: Provider) {
+  try { return sessionStorage.getItem('portefeuille.' + provider + '-key') ?? '' }
+  catch { return '' }
+}
+
+export function saveSessionQuoteKey(provider: Provider, key: string) {
+  try {
+    if (key.trim()) sessionStorage.setItem('portefeuille.' + provider + '-key', key.trim())
+    else sessionStorage.removeItem('portefeuille.' + provider + '-key')
+  } catch { /* Keep the key in memory if browser storage is unavailable. */ }
+}
+
+const fxRequests = new Map<string, { at: number; result: Promise<FxRate[]> }>()
+export function fetchFxRates(from: string, to?: string) {
+  const key = from + '/' + (to ?? '')
+  const previous = fxRequests.get(key)
+  if (previous && Date.now() - previous.at < 3600000) return previous.result
+  const url = new URL('https://api.frankfurter.dev/v2/rates')
+  url.search = new URLSearchParams({ base: 'CHF', quotes: 'EUR,USD', from, providers: 'ecb', ...(to ? { to } : {}) }).toString()
+  const result = json(url, 'Frankfurter').then((data): FxRate[] => {
+    if (!Array.isArray(data)) return []
+    return data.flatMap((row): FxRate[] => {
+      const rate = positive(row?.rate)
+      if (!rate || (row.quote !== 'EUR' && row.quote !== 'USD') || !datePattern.test(row.date)) return []
+      return [{ date: row.date, quote: row.quote, rate: rate.toFixed() }]
+    })
+  }).catch(error => {
+    fxRequests.delete(key)
+    throw error
+  })
+  fxRequests.set(key, { at: Date.now(), result })
+  return result
+}
+
+export function referenceRate(rates: FxRate[], currency: string, day: string) {
+  if (currency === 'CHF') return { date: day, rate: '1' }
+  return rates.filter(row => row.quote === currency && row.date <= day && row.date >= daysBefore(day, 7))
+    .sort((a, b) => b.date.localeCompare(a.date))[0]
+}
+
+export async function rateToCHF(currency: string, day: string) {
+  if (currency === 'CHF') return { date: day, rate: new Decimal(1) }
+  const ref = referenceRate(await fetchFxRates(daysBefore(day, 7), day), currency, day)
+  if (!ref) throw new Error('Taux de change indisponible pour la date sélectionnée.')
+  return { date: ref.date, rate: new Decimal(1).div(ref.rate) }
+}
+
+const quoteCache = new Map<string, { at: number; result: Promise<Mark[]> }>()
+function cachedRequest(key: string, interval: number, load: () => Promise<Mark[]>) {
+  const cached = quoteCache.get(key)
+  if (cached && Date.now() - cached.at < interval) return cached.result
+  const result = load()
+  quoteCache.set(key, { at: Date.now(), result })
+  return result
+}
+
+async function cryptoQuotes(assets: QuoteAsset[], key: string) {
   const matched = assets.flatMap(asset => {
     const coinId = catalogEntry(asset.category, asset.reference)?.coinId
     return coinId ? [{ asset, coinId }] : []
   })
-  if (matched.length === 0) return []
-  const url = new URL('https://api.coingecko.com/api/v3/simple/price')
-  url.search = new URLSearchParams({ ids: matched.map(item => item.coinId).join(','), vs_currencies: 'chf',
-    include_last_updated_at: 'true' }).toString()
-  const prices = await json(url)
-  const at = Date.now()
-  return matched.flatMap(({ asset, coinId }) => {
-    const price = positive(prices?.[coinId]?.chf)
-    const sourceAt = Number(prices?.[coinId]?.last_updated_at) * 1000
-    return price && Number.isSafeInteger(sourceAt) && sourceAt > 0 && sourceAt <= at + 300000
-      ? [marketMark(asset, price, cryptoSource, sourceAt, at)] : []
+  if (!matched.length) return []
+  const ids = matched.map(item => item.coinId).sort().join(',')
+  return cachedRequest('crypto/' + key + '/' + ids, 60000, async () => {
+    const url = new URL('https://api.coingecko.com/api/v3/simple/price')
+    url.search = new URLSearchParams({ ids, vs_currencies: 'chf', include_last_updated_at: 'true', ...(key ? { x_cg_demo_api_key: key } : {}) }).toString()
+    const prices = await json(url, 'CoinGecko')
+    const at = Date.now()
+    return matched.flatMap(({ asset, coinId }) => {
+      const price = positive(prices?.[coinId]?.chf)
+      const sourceAt = markTime(prices?.[coinId]?.last_updated_at)
+      return price && validTime(sourceAt) ? [marketMark(asset, price, 'CoinGecko', sourceAt, at, price, 'CHF', 'reported')] : []
+    })
   })
 }
 
-async function exchangeRate(currency: string, day: string) {
-  if (currency === 'CHF') return new Decimal(1)
-  const url = new URL('https://api.frankfurter.dev/v2/rates')
-  url.search = new URLSearchParams({ base: currency, quotes: 'CHF', from: previousWeek(day), to: day }).toString()
-  const data = await json(url)
-  const rate = Array.isArray(data)
-    ? data.filter(row => row.quote === 'CHF' && row.date <= day)
-      .sort((left, right) => String(right.date).localeCompare(String(left.date)))[0]
-    : null
-  if (!rate) throw new Error('Taux CHF indisponible.')
-  const value = positive(rate.rate)
-  if (!value) throw new Error('Taux CHF invalide.')
-  return value
+function finnhubQuote(asset: QuoteAsset, key: string) {
+  return cachedRequest('finnhub/' + key + '/' + quoteTarget(asset), 180000, async () => {
+    const url = new URL('https://finnhub.io/api/v1/quote')
+    url.search = new URLSearchParams({ symbol: listing(asset)!.symbol, token: key }).toString()
+    const data = await json(url, 'Finnhub')
+    const price = positive(data?.c)
+    const sourceAt = markTime(data?.t)
+    if (!price || !validTime(sourceAt)) return []
+    const { rate } = await rateToCHF('USD', dayKey(sourceAt))
+    return [marketMark(asset, price.times(rate), 'Finnhub', sourceAt, Date.now(), price, 'USD', 'reported')]
+  })
 }
 
-function previousWeek(day: string) {
-  return new Date(Date.parse(day + 'T12:00:00Z') - 7 * 86400000).toISOString().slice(0, 10)
-}
-
-const usExchanges = new Set(['XNAS', 'XNYS', 'ARCX', 'XASE', 'BATS'])
-
-function equitySymbol(asset: QuoteAsset) {
-  const listing = asset.listing || catalogEntry(asset.category, asset.reference)?.listing || asset.reference
-  const [mic, symbol] = listing.split(':')
-  return symbol && usExchanges.has(mic) ? symbol : null
-}
-
-export function quoteAccess(asset: QuoteAsset, apiKey: string) {
-  if (asset.category === 'crypto') return catalogEntry(asset.category, asset.reference)?.coinId ? 'available' : 'manual'
-  return !equitySymbol(asset) ? 'manual' : apiKey ? 'available' : 'key'
-}
-
-const keyStorage = 'portefeuille.finnhub-key'
-
-export function readSessionQuoteKey() {
-  try { return sessionStorage.getItem(keyStorage) ?? '' }
-  catch { return '' }
-}
-
-export function saveSessionQuoteKey(key: string) {
-  try {
-    if (key.trim()) sessionStorage.setItem(keyStorage, key.trim())
-    else sessionStorage.removeItem(keyStorage)
-  } catch {
-    // The key remains available in memory if browser storage is blocked.
+const budgetKey = 'portefeuille.eodhd-budget'
+let budget = { day: '', count: 0 }
+async function eodJson(path: string, key: string, params: Record<string, string> = {}) {
+  function reserve() {
+    const day = new Date().toISOString().slice(0, 10)
+    try {
+      const saved = JSON.parse(localStorage.getItem(budgetKey) ?? 'null')
+      if (saved?.day === day && Number.isInteger(saved.count) && saved.count >= 0) budget = saved
+    } catch { /* The in-memory limit still applies. */ }
+    if (budget.day !== day) budget = { day, count: 0 }
+    if (budget.count >= 20) throw new Error('Quota EODHD de cette journée atteint dans ce navigateur (20 appels).')
+    budget.count += 1
+    try { localStorage.setItem(budgetKey, JSON.stringify(budget)) } catch { /* Keep count in memory. */ }
   }
+  if (typeof navigator !== 'undefined' && navigator.locks) await navigator.locks.request(budgetKey, reserve)
+  else reserve()
+  // The standard local server forwards EODHD only. Static deployments call the provider directly.
+  const local = typeof location !== 'undefined' && ['127.0.0.1', 'localhost'].includes(location.hostname)
+  const base = local ? location.origin + '/market/eodhd/' : 'https://eodhd.com/api/'
+  const url = new URL(base + path)
+  url.search = new URLSearchParams({ ...params, api_token: key, fmt: 'json' }).toString()
+  return json(url, 'EODHD')
 }
 
-async function equityQuote(asset: QuoteAsset, apiKey: string, rates: Map<string, Promise<Decimal>>) {
-  const symbol = equitySymbol(asset)
-  if (!symbol) return null
-  const url = new URL('https://finnhub.io/api/v1/quote')
-  url.search = new URLSearchParams({ symbol, token: apiKey }).toString()
-  const data = await json(url)
-  const price = positive(data?.c)
-  const sourceAt = Number(data?.t) * 1000
+type Instrument = NonNullable<CatalogAsset['market']>
+type SearchResult = CatalogAsset & { market: Instrument; isin?: string }
+const searches = new Map<string, Promise<SearchResult[]>>()
+
+export async function searchMarket(category: 'stock' | 'etf', query: string, key: string) {
+  const term = query.trim()
+  const cacheKey = [key, category, term.toUpperCase()].join('/')
+  const existing = searches.get(cacheKey)
+  if (existing) return existing
+  const result = eodJson('search/' + encodeURIComponent(term), key, { limit: '30' }).then((data): SearchResult[] => {
+    if (!Array.isArray(data)) return []
+    return data.flatMap(row => {
+      const { Code, Exchange, Name, Currency, Type, ISIN } = row ?? {}
+      if (!Object.hasOwn(venueNames, Exchange) || !symbolPattern.test(Code) || !supportedCurrency.test(Currency)
+        || typeof Name !== 'string' || !Name.trim() || (category === 'etf' ? Type !== 'ETF' : !['Common Stock', 'Preferred Stock'].includes(Type))) return []
+      const listing = venueMics[Exchange] + ':' + Code
+      const isin = typeof ISIN === 'string' && isinPattern.test(ISIN) ? ISIN : undefined
+      const known = catalogEntry(category, listing)
+        ?? (Exchange === 'US' ? ['XNAS', 'XNYS', 'ARCX', 'XASE', 'BATS'].map(mic => catalogEntry(category, mic + ':' + Code)).find(Boolean) : undefined)
+      return [{ category, name: (known?.name ?? Name.trim()).slice(0, 100), reference: known?.reference ?? (category === 'etf' && isin ? isin : listing),
+        listing: known?.listing ?? listing, detail: venueNames[Exchange] + ' · ' + Code + ' · ' + Currency,
+        isin, market: { code: Code + '.' + Exchange, currency: Currency } }]
+    })
+  }).catch(error => { searches.delete(cacheKey); throw error })
+  searches.set(cacheKey, result)
+  return result
+}
+
+async function instrument(asset: QuoteAsset, key: string) {
+  if (asset.market) return asset.market
+  const exchange = listing(asset)
+  if (exchange?.venue === 'US') return { code: exchange.symbol + '.US', currency: 'USD' }
+  if (asset.category === 'crypto') return null
+  const isin = isinPattern.test(asset.reference) ? asset.reference : ''
+  const matches = await searchMarket(asset.category, isin || exchange?.symbol || asset.reference, key)
+  const exact = exchange
+    ? matches.find(item => item.market.code === exchange.symbol + '.' + exchange.venue && (!isin || item.isin === isin))
+    : matches.find(item => item.isin === isin)
+  return exact?.market ?? null
+}
+
+export async function fetchEodSeries(asset: QuoteAsset, meta: Instrument, key: string, at: number, previous?: Mark) {
+  const market = meta.code.split('.').at(-1)!
+  const to = latestClosingDay(market, at)
+  const earliest = daysBefore(dayKey(at), historyDays - 1)
+  const overlap = previous ? daysBefore(dayKey(previous.sourceAt), 2) : earliest
+  const from = overlap > earliest ? overlap : earliest
+  const data = await eodJson('eod/' + encodeURIComponent(meta.code), key, { from, to, period: 'd', order: 'a' })
+  if (!Array.isArray(data)) throw new Error('Réponse EODHD invalide.')
+  const rows = data.flatMap(row => {
+    const price = positive(row?.close)
+    const date = Date.parse(row?.date + 'T00:00:00Z')
+    return price && datePattern.test(row.date) && Number.isFinite(date) && new Date(date).toISOString().slice(0, 10) === row.date && row.date >= from && row.date <= to ? [{ day: row.date as string, price }] : []
+  }).sort((a, b) => a.day.localeCompare(b.day))
+  if (!rows.length) return []
+  const rates = meta.currency === 'CHF' ? [] : await fetchFxRates(daysBefore(rows[0].day, 7), rows.at(-1)!.day)
+  const marks = rows.flatMap(({ day, price }) => {
+    const rate = referenceRate(rates, meta.currency, day)
+    const sourceAt = closeTimestamp(market, day)
+    return rate && validTime(sourceAt) ? [marketMark(asset, price.div(rate.rate), 'EODHD · clôture', sourceAt, sourceAt, price, meta.currency, 'close')] : []
+  })
+  if (!marks.length) throw new Error('Taux de change indisponible pour ' + asset.name + '.')
+  return marks
+}
+
+const eodAttempts = new Map<string, number>()
+async function equityDaily(asset: QuoteAsset, key: string, force: boolean) {
+  const target = quoteTarget(asset)
+  const cached = await loadDailySeries(target)
   const at = Date.now()
-  if (!price || !Number.isSafeInteger(sourceAt) || sourceAt <= 0 || sourceAt > at + 300000) return null
-  const day = new Date(sourceAt).toISOString().slice(0, 10)
-  if (!rates.has(day)) rates.set(day, exchangeRate('USD', day))
-  const rate = await rates.get(day)!
-  return marketMark(asset, price.times(rate), 'Finnhub · cotation USD convertie', sourceAt, at)
+  const venue = asset.market?.code.split('.').at(-1) ?? cached?.instrument?.code.split('.').at(-1) ?? listing(asset)?.venue ?? ''
+  const expected = latestClosingDay(venue, at)
+  const last = cached?.marks.reduce<Mark | undefined>((latest, mark) => !latest || latest.sourceAt < mark.sourceAt ? mark : latest, undefined)
+  const attemptKey = key + '/' + target
+  const recentAttempt = at - (eodAttempts.get(attemptKey) ?? 0) < (force ? 60000 : 3600000)
+  if (last && (dayKey(last.sourceAt) >= expected || (!force && cached && at - cached.fetchedAt < 3600000))) return [last]
+  return cachedRequest('eodhd/' + attemptKey, 60000, async () => {
+    if (recentAttempt) return last ? [last] : []
+    eodAttempts.set(attemptKey, at)
+    const meta = asset.market ?? cached?.instrument ?? await instrument(asset, key)
+    if (!meta) throw new Error('EODHD : aucune cotation vérifiée pour ' + asset.name + '. Essaie une recherche par nom ou ISIN.')
+    const marks = await fetchEodSeries(asset, meta, key, at, last)
+    if (!marks.length) {
+      if (last) return [last]
+      throw new Error('EODHD ne fournit pas de clôture pour ' + asset.name + ' avec cette clé.')
+    }
+    await saveDailyPrices({ target, fetchedAt: at, marks, instrument: meta })
+    return [marks.at(-1)!]
+  })
 }
 
-export async function fetchQuotes(assets: QuoteAsset[], apiKey = '') {
+let eodOffset = 0
+let finnhubOffset = 0
+export const cryptoInterval = (key: string) => key ? 300000 : 60000
+
+export async function fetchQuotes(assets: QuoteAsset[], keys: QuoteKeys,
+  { force = false, opening = false, stale = new Map<string, Mark>() } = {}): Promise<QuoteResult> {
   const unique = [...new Map(assets.map(asset => [quoteTarget(asset), asset])).values()]
-  const cryptos = unique.filter(asset => asset.category === 'crypto')
-  const equities = apiKey ? unique.filter(asset => asset.category !== 'crypto' && equitySymbol(asset)) : []
-  const rates = new Map<string, Promise<Decimal>>()
-  const requested = equities.length <= equityLimit ? equities : Array.from({ length: equityLimit },
-    (_, index) => equities[(equityOffset + index) % equities.length])
-  if (equities.length > equityLimit) equityOffset = (equityOffset + equityLimit) % equities.length
-  const providers = [
-    cryptoQuotes(cryptos),
-    ...requested.map(asset => equityQuote(asset, apiKey, rates).then(mark => mark ? [mark] : [])),
+  const crypto = unique.filter(asset => asset.category === 'crypto' && (force || opening
+    || Date.now() - (stale.get(quoteTarget(asset))?.at ?? 0) >= cryptoInterval(keys.coingecko)))
+  const equities = unique.filter(asset => asset.category !== 'crypto' && quoteAccess(asset, keys) === 'available')
+  const eligibleUS = equities.filter(asset => keys.finnhub && listing(asset)?.venue === 'US'
+    && (force || opening || (marketOpen('US', Date.now()) && Date.now() - (stale.get(quoteTarget(asset))?.at ?? 0) >= 180000)))
+  const rotate = (items: QuoteAsset[], limit: number, offset: number) =>
+    items.length <= limit ? items : Array.from({ length: limit }, (_, i) => items[(offset + i) % items.length])
+  const us = rotate(eligibleUS, 8, finnhubOffset)
+  const eod = keys.eodhd ? rotate(equities, 6, eodOffset) : []
+  finnhubOffset += us.length
+  eodOffset += eod.length
+  const requests = [
+    ...(crypto.length ? [cryptoQuotes(crypto, keys.coingecko)] : []),
+    ...us.map(asset => finnhubQuote(asset, keys.finnhub)),
+    ...eod.map(asset => equityDaily(asset, keys.eodhd, force)),
   ]
-  const results = await Promise.allSettled(providers)
-  const marks = results.flatMap(result => result.status === 'fulfilled' ? result.value : [])
-  return { marks, unavailable: unique.length - new Set(marks.map(mark => mark.target)).size }
+  const result = await Promise.allSettled(requests)
+  const marks = result.flatMap(value => value.status === 'fulfilled' ? value.value : [])
+  const issues = [...new Set(result.flatMap(value => value.status === 'rejected'
+    ? [value.reason instanceof Error ? value.reason.message : 'Le fournisseur de données est indisponible.'] : []))]
+  return { marks, issues, checked: requests.length }
 }
 
-export const historyDays = 90
-
-export async function fetchDailyPrices(asset: QuoteAsset) {
+async function cryptoHistory(asset: QuoteAsset, key: string, days: number) {
   const coin = catalogEntry(asset.category, asset.reference)?.coinId
   if (!coin) return []
   const url = new URL('https://api.coingecko.com/api/v3/coins/' + encodeURIComponent(coin) + '/market_chart')
-  url.search = new URLSearchParams({ vs_currency: 'chf', days: String(historyDays), interval: 'daily' }).toString()
-  const data = await json(url)
-  const today = dayKey(Date.now())
+  url.search = new URLSearchParams({ vs_currency: 'chf', days: String(days), ...(key ? { x_cg_demo_api_key: key } : {}) }).toString()
+  const data = await json(url, 'CoinGecko')
   if (!Array.isArray(data?.prices)) return []
-  const byDay = new Map<string, Mark>()
-  for (const row of data.prices) {
-    if (!Array.isArray(row)) continue
+  return data.prices.flatMap((row: unknown) => {
+    if (!Array.isArray(row)) return []
     const [at, raw] = row
     const price = positive(raw)
-    if (!price || !Number.isSafeInteger(at) || at <= 0 || at > Date.now()) continue
-    const day = dayKey(at)
-    if (day >= today) continue
-    const mark = marketMark(asset, price, 'CoinGecko · historique quotidien', at, at)
-    const previous = byDay.get(day)
-    if (!previous || previous.at < at) byDay.set(day, mark)
+    if (!price || !validTime(at) || at > Date.now()) return []
+    return [marketMark(asset, price, days === 1 ? 'CoinGecko · intrajournalier' : 'CoinGecko · historique quotidien',
+      at, at, price, 'CHF', 'reported')]
+  }).sort((a: Mark, b: Mark) => a.at - b.at) as Mark[]
+}
+
+export function fetchIntradayPrices(asset: QuoteAsset, key: string) {
+  return cachedRequest('crypto-history/' + key + '/' + quoteTarget(asset), 300000, () => cryptoHistory(asset, key, 1))
+}
+
+export async function fetchDailyPrices(asset: QuoteAsset, key: string) {
+  const series = await cryptoHistory(asset, key, historyDays)
+  const today = dayKey(Date.now())
+  const byDay = new Map<string, Mark>()
+  for (const mark of series) {
+    const day = dayKey(mark.at)
+    if (day < today) byDay.set(day, mark)
   }
   return [...byDay.values()].sort((a, b) => a.at - b.at)
 }
 
-export async function fetchFxRates(from: string) {
-  const url = new URL('https://api.frankfurter.dev/v2/rates')
-  url.search = new URLSearchParams({ base: 'CHF', quotes: 'EUR,USD', from }).toString()
-  const data = await json(url)
-  if (!Array.isArray(data)) return []
-  return data.flatMap((row): FxRate[] => {
-    const rate = positive(row?.rate)
-    if (!rate || (row.quote !== 'EUR' && row.quote !== 'USD') || !/^\d{4}-\d{2}-\d{2}$/.test(row.date)) return []
-    return [{ date: row.date, quote: row.quote, rate: rate.toFixed() }]
-  })
+export function quoteTiming(mark: Mark) {
+  if (mark.timing === 'close') return 'Dernière clôture disponible'
+  if (mark.timing === 'reported' && mark.source === 'CoinGecko') {
+    return Date.now() - mark.sourceAt > 900000 ? 'Dernier cours crypto connu' : 'Cours indicatif · marché 24 h/24'
+  }
+  if (mark.timing === 'reported') return 'Dernier cours reçu · délai variable'
+  return mark.source.includes('fictif') ? 'Cours fictif' : 'Dernier cours disponible'
 }
