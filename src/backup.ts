@@ -1,6 +1,6 @@
 import { Decimal } from 'decimal.js'
 import { replay, type PortfolioData } from './ledger.ts'
-import { categories } from './portfolio.ts'
+import { categories, platformKey } from './portfolio.ts'
 
 function object(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -28,6 +28,7 @@ function unitAmount(value: unknown, exclusive = false) {
 function identity(value: Record<string, unknown>) {
   return string(value.id, 512) && typeof value.category === 'string' && Object.hasOwn(categories, value.category)
     && string(value.name, 100) && string(value.reference) && string(value.platform, 80)
+    && (value.isin === undefined || (typeof value.isin === 'string' && /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/.test(value.isin)))
     && (value.listing === undefined || string(value.listing, 50))
     && (value.market === undefined || (object(value.market) && typeof value.market.code === 'string'
       && /^[A-Z0-9][A-Z0-9._-]{0,30}\.(US|SW|XETRA|PA|AS|BR|MI)$/.test(value.market.code)
@@ -41,6 +42,8 @@ function opening(value: unknown) {
   if (value.acquiredOn !== undefined && !isDate(value.acquiredOn)) return false
   if (value.purchase !== undefined && (!object(value.purchase) || !decimal(value.purchase.total)
     || !decimal(value.purchase.rate, 0, true) || !['CHF', 'EUR', 'USD'].includes(String(value.purchase.currency))
+    || (value.purchase.unit !== undefined && !decimal(value.purchase.unit))
+    || (value.purchase.fees !== undefined && !decimal(value.purchase.fees))
     || (value.purchase.date !== undefined && !isDate(value.purchase.date)))) return false
   const valuation = value.valuation
   if (valuation !== null && (!object(valuation) || !decimal(valuation.amount) || !time(valuation.updatedAt))) return false
@@ -52,6 +55,9 @@ function opening(value: unknown) {
 function operation(value: unknown) {
   if (!object(value) || !identity(value) || !time(value.createdAt) || !time(value.at)
     || !unitAmount(value.quantity, true) || !decimal(value.fee)) return false
+  if (value.original !== undefined && (!object(value.original) || !decimal(value.original.gross)
+    || !decimal(value.original.fee) || !decimal(value.original.rate, 0, true)
+    || !['CHF', 'EUR', 'USD'].includes(String(value.original.currency)))) return false
   if (value.kind === 'buy') return decimal(value.gross, 0, true)
   if (value.kind === 'sell') return decimal(value.gross)
   return value.kind === 'transfer' && decimal(value.gross) && string(value.destination, 80)
@@ -65,6 +71,8 @@ function mark(value: unknown) {
   if (value.kind === 'market') return decimal(value.price)
     && (value.originalPrice === undefined || decimal(value.originalPrice, 0, true))
     && (value.currency === undefined || ['CHF', 'EUR', 'USD'].includes(String(value.currency)))
+    && (value.instrument === undefined || string(value.instrument, 64))
+    && (value.receivedAt === undefined || time(value.receivedAt))
     && (value.timing === undefined || value.timing === 'close' || value.timing === 'reported')
   return value.kind === 'manual' && (value.price === null || decimal(value.price))
 }
@@ -88,7 +96,9 @@ export function readBackup(text: string) {
     || !validList(parsed.positions, opening) || !validList(parsed.operations, operation) || !validList(parsed.marks, mark)) {
     throw new Error('Format de sauvegarde inconnu ou données invalides.')
   }
-  const data = { positions: parsed.positions, operations: parsed.operations, marks: parsed.marks } as PortfolioData
+  if (parsed.platforms !== undefined && (!Array.isArray(parsed.platforms) || !parsed.platforms.every(name => string(name, 80))
+    || new Set(parsed.platforms.map(platformKey)).size !== parsed.platforms.length)) throw new Error('Liste de plateformes invalide.')
+  const data = { ...(parsed.platforms === undefined ? {} : { platforms: parsed.platforms }), positions: parsed.positions, operations: parsed.operations, marks: parsed.marks } as PortfolioData
   replay(data)
   return data
 }

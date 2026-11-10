@@ -73,3 +73,24 @@ test('les requêtes crypto identiques partagent une réponse et les erreurs de q
   assert.equal(limited.marks.length, 0)
   assert.match(limited.issues[0], /limité les requêtes/)
 })
+
+test('une ancienne clôture est fraîche durant une fermeture et ancienne après une séance attendue', async () => {
+  const { quoteIsStale } = await import('../src/quotes.ts')
+  const mark = { source: 'EODHD · clôture', timing: 'close', instrument: 'VUAA.XETRA',
+    sourceAt: Date.parse('2026-04-02T15:30Z') }
+  assert.equal(quoteIsStale(mark, Date.parse('2026-04-06T20:00Z')), false)
+  assert.equal(quoteIsStale(mark, Date.parse('2026-04-07T20:00Z')), true)
+})
+
+test('les clôtures d’ETF sont enregistrées avec leur ligne de cotation', async t => {
+  const markTime = Date.parse('2026-04-02T15:30Z')
+  const { instrumentCode } = await import('../src/quotes.ts')
+  t.mock.method(globalThis, 'fetch', async url => url.hostname === 'eodhd.com'
+    ? Response.json([{ date: '2026-04-02', close: 100 }])
+    : Response.json([{ date: '2026-04-02', quote: 'EUR', rate: 1 }]))
+  const [result] = await fetchEodSeries(etf, eodhd, 'test-ligne', Date.parse('2026-04-06T20:00Z'))
+  assert.equal(result.instrument, 'VUAA.XETRA')
+  assert.equal(result.sourceAt, markTime)
+  assert.ok(result.receivedAt > markTime)
+  assert.notEqual(instrumentCode(etf), instrumentCode({ ...etf, listing: 'XSWX:VUAA' }))
+})

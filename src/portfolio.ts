@@ -22,9 +22,10 @@ export interface Position {
   cost: Cost | null
   createdAt: number
   listing?: string
+  isin?: string
   initialValue?: string | null
   market?: { code: string; currency: string }
-  purchase?: { total: string; currency: Currency; date?: string; rate: string }
+  purchase?: { total: string; currency: Currency; date?: string; rate: string; unit?: string; fees?: string }
   acquiredOn?: string
 }
 
@@ -32,6 +33,10 @@ export function parseAmount(input: string) {
   const normalized = input.trim().replace(',', '.')
   if (!/^[+-]?\d{1,18}(?:\.\d{1,18})?$/.test(normalized)) return null
   return new Decimal(normalized)
+}
+
+export function acquisitionCost(units: Decimal, unitPrice: Decimal, fees: Decimal) {
+  return units.times(unitPrice).plus(fees)
 }
 
 export function estimatedCost(value: Decimal, percent: Decimal) {

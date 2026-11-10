@@ -3,14 +3,16 @@ import { catalogEntry, searchCatalog, type CatalogAsset } from './catalog'
 import { searchMarket } from './quotes'
 import { categories, type Category } from './portfolio'
 
-export type AssetInput = Pick<CatalogAsset, 'category' | 'reference' | 'name' | 'listing' | 'detail' | 'aliases' | 'market'>
-export type ChosenAsset = Pick<CatalogAsset, 'category' | 'reference' | 'name' | 'listing' | 'market'>
+export type AssetInput = Pick<CatalogAsset, 'category' | 'reference' | 'name' | 'listing' | 'detail' | 'aliases' | 'isin' | 'market'>
+export type ChosenAsset = Pick<CatalogAsset, 'category' | 'reference' | 'name' | 'listing' | 'isin' | 'market'>
 
 export function assetDescription(asset: AssetInput) {
   const metadata = catalogEntry(asset.category, asset.reference) ?? asset
-  return [asset.detail ?? metadata.detail, asset.market?.currency, asset.listing ?? metadata.listing,
-    metadata.aliases?.split(' ')[0], asset.reference.startsWith('MANUAL:') ? null : asset.reference]
-    .filter(Boolean).join('  /  ')
+  const listing = asset.listing ?? metadata.listing
+  const isin = asset.isin ?? metadata.isin
+  const reference = !listing && !isin && !asset.reference.startsWith('MANUAL:') ? asset.reference : null
+  return [asset.detail ?? metadata.detail, listing, asset.market?.currency, isin, reference]
+    .filter(Boolean).join(' · ')
 }
 
 export function customAsset(category: Category, name: string, identifier: string): ChosenAsset | null {

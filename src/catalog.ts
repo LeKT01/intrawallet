@@ -8,11 +8,12 @@ export interface CatalogAsset {
   detail?: string
   listing?: string
   coinId?: string
+  isin?: string
   market?: { code: string; currency: string }
 }
 
 function etf(name: string, reference: string, detail: string, aliases: string, listing?: string): CatalogAsset {
-  return { category: 'etf', name, reference, aliases, detail, listing }
+  return { category: 'etf', name, reference, isin: reference, aliases, detail, listing }
 }
 
 // Identifiers come from issuer factsheets or the Swiss justETF directory.

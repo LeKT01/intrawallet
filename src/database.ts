@@ -1,5 +1,5 @@
 import { Dexie, type EntityTable } from 'dexie'
-import { assetKey, type Position } from './portfolio.ts'
+import { assetKey, platformKey, type Position } from './portfolio.ts'
 import { dayKey } from './currency.ts'
 import { demoMode, makeDemo } from './demo.ts'
 import { firstTrackingDate, replay, unitMark, type Mark, type Operation, type PortfolioData } from './ledger.ts'
@@ -11,11 +11,13 @@ const db = new Dexie(demoMode ? 'portefeuille-local-demo' : 'portefeuille-local'
   operations: EntityTable<Operation, 'id'>
   marks: EntityTable<Mark, 'id'>
   dailyPrices: EntityTable<DailySeries, 'target'>
+  platforms: EntityTable<{ id: string; name: string }, 'id'>
 }
 
 db.version(1).stores({ positions: 'id,createdAt' })
 db.version(2).stores({ positions: 'id,createdAt', operations: 'id,at', marks: 'id,[kind+target]' })
 db.version(3).stores({ dailyPrices: 'target' })
+db.version(4).stores({ platforms: 'id' })
 
 if (demoMode) db.on('populate', transaction => {
   const { positions, operations, marks } = makeDemo()
@@ -31,7 +33,8 @@ export const loadDailySeries = (target: string) => db.dailyPrices.get(target)
 export function saveDailyPrices(series: DailySeries) {
   return db.transaction('rw', db.dailyPrices, async () => {
     const existing = await db.dailyPrices.get(series.target)
-    const byDay = new Map(existing?.marks.map(mark => [dayKey(mark.at), mark]))
+    const sameInstrument = !series.instrument || !existing?.instrument || existing.instrument.code === series.instrument.code
+    const byDay = new Map(sameInstrument ? existing?.marks.map(mark => [dayKey(mark.at), mark]) : undefined)
     for (const mark of series.marks) {
       const day = dayKey(mark.at)
       const previous = byDay.get(day)
@@ -43,18 +46,19 @@ export function saveDailyPrices(series: DailySeries) {
 }
 
 export async function loadPortfolio(): Promise<PortfolioData> {
-  return db.transaction('r', [db.positions, db.operations, db.marks], async () => {
-    const [positions, operations, marks] = await Promise.all([
+  return db.transaction('r', [db.positions, db.operations, db.marks, db.platforms], async () => {
+    const [positions, operations, marks, platforms] = await Promise.all([
       db.positions.orderBy('createdAt').toArray(),
       db.operations.orderBy('at').toArray(),
       db.marks.toArray(),
+      db.platforms.toArray(),
     ])
-    return { positions, operations, marks }
+    return { positions, operations, marks, platforms: platforms.map(platform => platform.name) }
   })
 }
 
 const write = <T,>(callback: () => Promise<T>) =>
-  db.transaction('rw', [db.positions, db.operations, db.marks], callback)
+  db.transaction('rw', [db.positions, db.operations, db.marks, db.platforms], callback)
 
 export function savePosition(position: Position, editing: boolean, quote?: Mark) {
   return write(async () => {
@@ -64,24 +68,16 @@ export function savePosition(position: Position, editing: boolean, quote?: Mark)
     const positions = previous ? data.positions.map(item => item.id === position.id ? position : item)
       : [...data.positions, position]
     const marks = [...data.marks]
-    const identityChanged = previous && assetKey(previous) !== assetKey(position)
-    if (identityChanged) {
-      await db.marks.where('[kind+target]').equals(['manual', position.id]).delete()
-      for (let i = marks.length - 1; i >= 0; i--) {
-        if (marks[i].kind === 'manual' && marks[i].target === position.id) marks.splice(i, 1)
-      }
-    } else {
-      const oldMark = previous && unitMark(previous)
-      if (oldMark && !marks.some(item => item.id === oldMark.id)) {
-        marks.push(oldMark)
-        await db.marks.add(oldMark)
-      }
+    const oldMark = previous && unitMark(previous)
+    if (oldMark && !marks.some(item => item.id === oldMark.id)) {
+      marks.push(oldMark)
+      await db.marks.add(oldMark)
     }
-    const manual = unitMark(position)
+    const manual = previous?.valuation?.updatedAt === position.valuation?.updatedAt ? null : unitMark(position)
     if (manual) {
       await db.marks.put(manual)
       marks.push(manual)
-    } else if (previous?.valuation && !identityChanged) {
+    } else if (previous?.valuation && !position.valuation) {
       const now = Date.now()
       const removed: Mark = { id: 'manual/' + position.id + '/' + now, kind: 'manual', target: position.id,
         price: null, at: now, sourceAt: now, source: 'Saisie manuelle' }
@@ -143,10 +139,36 @@ export function saveMarks(marks: Mark[]) {
   })
 }
 
+export function savePlatform(name: string, previous?: string) {
+  const clean = name.trim().replace(/\s+/g, ' ')
+  const id = platformKey(clean)
+  const old = previous ? platformKey(previous) : null
+  if (!clean || clean.length > 80) throw new Error('Indique un nom de plateforme valide.')
+  return write(async () => {
+    const data = await loadPortfolio()
+    const names = [...(data.platforms ?? []), ...data.positions.map(item => item.platform),
+      ...data.operations.flatMap(item => [item.platform, item.destination ?? ''])]
+    if (id !== old && names.some(item => platformKey(item) === id)) throw new Error('Cette plateforme existe déjà.')
+    if (old) {
+      if (!names.some(item => platformKey(item) === old)) throw new Error('Cette plateforme a été renommée dans un autre onglet.')
+      const rename = (value: string) => platformKey(value) === old ? clean : value
+      const positions = data.positions.filter(item => platformKey(item.platform) === old)
+        .map(item => ({ ...item, platform: clean }))
+      const operations = data.operations.filter(item => platformKey(item.platform) === old || platformKey(item.destination ?? '') === old)
+        .map(item => ({ ...item, platform: rename(item.platform), destination: item.destination && rename(item.destination) }))
+      await db.positions.bulkPut(positions)
+      await db.operations.bulkPut(operations)
+      if (old !== id) await db.platforms.delete(old)
+    }
+    await db.platforms.put({ id, name: clean })
+  })
+}
+
 export function restorePortfolio(data: PortfolioData) {
   replay(data)
   return write(async () => {
-    await Promise.all([db.positions.clear(), db.operations.clear(), db.marks.clear()])
-    await Promise.all([db.positions.bulkAdd(data.positions), db.operations.bulkAdd(data.operations), db.marks.bulkAdd(data.marks)])
+    await Promise.all([db.positions.clear(), db.operations.clear(), db.marks.clear(), db.platforms.clear()])
+    await Promise.all([db.positions.bulkAdd(data.positions), db.operations.bulkAdd(data.operations), db.marks.bulkAdd(data.marks),
+      db.platforms.bulkPut((data.platforms ?? []).map(name => ({ id: platformKey(name), name })))])
   })
 }

@@ -1,3 +1,7 @@
+import { Decimal } from 'decimal.js'
+import { currencies, dayKey, type Currency } from './currency'
+import { demoFxRates, demoMode } from './demo'
+import { rateToCHF, referenceRate } from './quotes'
 import { useRef, useState, type FormEvent } from 'react'
 import AssetPicker, { type AssetInput } from './AssetPicker'
 import { firstTrackingDate, operationNames, quoteTarget, type Operation, type OperationKind, type PortfolioData } from './ledger'
@@ -10,6 +14,7 @@ function day(time: number) {
 
 interface Props {
   current: Operation | null
+  initialAsset?: AssetInput
   data: PortfolioData
   platforms: string[]
   marketKey?: string
@@ -17,17 +22,18 @@ interface Props {
   onClose: () => void
 }
 
-export default function OperationForm({ current, data, platforms, marketKey, onSave, onClose }: Props) {
+export default function OperationForm({ current, initialAsset, data, platforms, marketKey, onSave, onClose }: Props) {
   const dialog = useModal()
   const [kind, setKind] = useState<OperationKind>(current?.kind ?? 'buy')
-  const [category, setCategory] = useState<Category>(current?.category ?? 'etf')
-  const [chosen, setChosen] = useState<AssetInput | null>(current)
+  const [category, setCategory] = useState<Category>(current?.category ?? initialAsset?.category ?? 'etf')
+  const [chosen, setChosen] = useState<AssetInput | null>(current ?? initialAsset ?? null)
   const [custom, setCustom] = useState<AssetInput | null>(null)
   const [platform, setPlatform] = useState(current?.platform ?? '')
   const [destination, setDestination] = useState(current?.destination ?? '')
   const [quantity, setQuantity] = useState(current?.quantity ?? '')
-  const [gross, setGross] = useState(current?.kind === 'transfer' ? '' : current?.gross ?? '')
-  const [fee, setFee] = useState(current?.fee ?? '')
+  const [gross, setGross] = useState(current?.kind === 'transfer' ? '' : current?.original?.gross ?? current?.gross ?? '')
+  const [fee, setFee] = useState(current?.original?.fee ?? current?.fee ?? '')
+  const [currency, setCurrency] = useState<Currency>(current?.original?.currency ?? 'CHF')
   const [feeUnits, setFeeUnits] = useState(current?.feeUnits ?? '')
   const [date, setDate] = useState(day(current?.at ?? Date.now()))
   const [error, setError] = useState('')
@@ -53,7 +59,7 @@ export default function OperationForm({ current, data, platforms, marketKey, onS
     const costs = parseAmount(fee.trim() || '0')
     const assetCosts = parseAmount(kind === 'transfer' ? feeUnits.trim() || '0' : '0')
     if (!units?.gt(0)) return setError('La quantité doit être supérieure à zéro.')
-    if (!total || total.lt(0) || (kind === 'buy' && !total.gt(0))) return setError('Indique le montant total de l’opération en CHF.')
+    if (!total || total.lt(0) || (kind === 'buy' && !total.gt(0))) return setError('Indique le montant total de l’opération.')
     if (!costs || costs.lt(0) || !assetCosts || assetCosts.lt(0)) return setError('Les frais doivent être positifs ou nuls.')
     const now = Date.now()
     const at = current && day(current.at) === date ? current.at : date === day(now) ? now : Date.parse(date + 'T23:59:59.999')
@@ -63,10 +69,16 @@ export default function OperationForm({ current, data, platforms, marketKey, onS
     pending.current = true
     setBusy(true)
     try {
+      const demoRate = demoMode ? referenceRate(demoFxRates(dayKey(at)), currency, dayKey(at)) : null
+      const savedRate = current?.original?.currency === currency && current.at === at ? current.original.rate : null
+      const rate = savedRate ? new Decimal(savedRate) : demoRate ? new Decimal(1).div(demoRate.rate)
+        : demoMode ? null : (await rateToCHF(currency, dayKey(at))).rate
+      if (!rate) throw new Error('Taux de change indisponible pour cette opération.')
       await onSave({
-        id: current?.id ?? newId(), category: asset.category, name: asset.name, reference: asset.reference, listing: asset.listing, market: asset.market,
+        id: current?.id ?? newId(), category: asset.category, name: asset.name, reference: asset.reference, listing: asset.listing, isin: asset.isin, market: asset.market,
         kind, platform: source, destination: kind === 'transfer' ? to : undefined,
-        quantity: units.toFixed(), gross: total.toFixed(), fee: costs.toFixed(),
+        quantity: units.toFixed(), gross: total.times(rate).toFixed(), fee: costs.times(rate).toFixed(),
+        original: { gross: total.toFixed(), fee: costs.toFixed(), currency, rate: rate.toFixed() },
         feeUnits: kind === 'transfer' ? assetCosts.toFixed() : undefined, at, createdAt: current?.createdAt ?? now,
       })
       onClose()
@@ -125,10 +137,15 @@ export default function OperationForm({ current, data, platforms, marketKey, onS
             <input type="date" value={date} min={Number.isFinite(first) ? day(first) : undefined} max={day(Date.now())}
               onChange={event => setDate(event.target.value)} />
           </label>
-          {kind !== 'transfer' && <label>{kind === 'buy' ? 'Montant payé hors frais (CHF)' : 'Montant reçu avant frais (CHF)'}
+          {kind !== 'transfer' && <label>{kind === 'buy' ? 'Montant payé hors frais' : 'Montant reçu avant frais'}
             <input value={gross} inputMode="decimal" maxLength={38} placeholder="Ex. 300" onChange={event => setGross(event.target.value)} />
           </label>}
-          <label>Frais payés en CHF <small>facultatif</small>
+          <label>Devise de l’opération
+            <select value={currency} onChange={event => setCurrency(event.target.value as Currency)}>
+              {currencies.map(code => <option key={code}>{code}</option>)}
+            </select>
+          </label>
+          <label>Frais payés <small>facultatif</small>
             <input value={fee} inputMode="decimal" maxLength={38} placeholder="0" onChange={event => setFee(event.target.value)} />
           </label>
           {kind === 'transfer' && <label>Frais prélevés dans l’actif <small>facultatif</small>

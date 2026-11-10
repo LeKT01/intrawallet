@@ -1,6 +1,6 @@
 # Portefeuille Local
 
-Application de suivi local pour les actions, ETF et cryptos, avec regroupement par actif et par plateforme. La devise de référence est le CHF. Le sélecteur du portefeuille affiche aussi les montants en EUR ou USD. Les achats initiaux peuvent être saisis dans les trois devises. Les opérations du journal restent saisies en CHF.
+Application de suivi local pour les actions, ETF et cryptos, avec regroupement par actif et par plateforme. La devise de référence est le CHF. Le sélecteur du portefeuille affiche aussi les montants en EUR ou USD. Les achats et transactions peuvent être saisis en CHF, EUR ou USD. Le coût d’origine est conservé.
 
 ## Démarrer
 
@@ -15,14 +15,14 @@ Ouvre http://127.0.0.1:4173/. Utilise la même adresse et le même profil de nav
 
 ## Essayer la démo
 
-Ouvre http://127.0.0.1:4173/?demo=1 ou utilise **Données → Ouvrir la démo**. Le portefeuille fictif contient 30 jours de cours, des positions sur deux plateformes et des achats, ventes et transferts. Les essais sont enregistrés dans une base locale séparée. Le bandeau de démo permet de revenir au portefeuille personnel.
+Ouvre http://127.0.0.1:4173/?demo=1 ou utilise **Paramètres → Ouvrir la démo**. Le portefeuille fictif contient 30 jours de cours, des positions sur deux plateformes et des achats, ventes et transferts. Les essais sont enregistrés dans une base locale séparée. Le bandeau de démo permet de revenir au portefeuille personnel.
 
 ## Ajouter une position ou enregistrer une opération
 
 - **Ajouter une position** sert à enregistrer un actif déjà détenu. Le catalogue local cherche par nom, indice, symbole ou ISIN. Avec une clé EODHD active, **Rechercher sur les marchés** élargit la recherche aux places prises en charge. Vérifie le symbole, la place de cotation et la devise proposés.
-- À la sélection, le formulaire demande le **cours par unité**, affiche sa devise d’origine, sa source et son horodatage, puis calcule la valeur dès la saisie de la quantité. La saisie de secours reste disponible pour un actif sans cours. Une position peut être enregistrée avec une valeur indéterminée.
-- Le coût initial se renseigne comme **montant total payé, frais compris** ou comme **gain ou perte en %**. Le coût en devise d’origine et sa date sont conservés. Pour une saisie en EUR ou USD, le taux de référence du jour d’achat est utilisé quand la date est connue, sinon celui du jour de saisie.
-- Dans le **Journal**, enregistre les achats, ventes et transferts pendant la période suivie. Les ventes utilisent le coût moyen pondéré de la plateforme. Les transferts conservent le coût des unités reçues et peuvent inclure des frais en CHF ou en unités.
+- À la sélection, le formulaire demande le **cours par unité**, affiche sa devise d’origine, sa source et son horodatage, puis calcule la valeur dès la saisie de la quantité. Une position sans cours peut être enregistrée avec une valeur indéterminée. Les anciennes saisies manuelles restent disponibles dans les relevés historiques avec leur provenance.
+- Le coût initial se renseigne avec le **prix d’achat unitaire et les frais**, ou comme **gain ou perte en %**. Un ancien coût total peut être conservé lors d’une modification. Le coût en devise d’origine et sa date sont conservés. Pour une saisie en EUR ou USD, le taux de référence du jour d’achat est utilisé quand la date est connue, sinon celui du jour de saisie.
+- Dans le **Journal**, enregistre les achats, ventes et transferts pendant la période suivie. Les ventes utilisent le coût moyen pondéré de la plateforme. Les transferts conservent le coût des unités reçues et peuvent inclure des frais dans la devise d’origine ou en unités. La base comptable est le CHF.
 
 ## Cotations et actualisation
 
@@ -33,9 +33,13 @@ Ouvre http://127.0.0.1:4173/?demo=1 ou utilise **Données → Ouvrir la démo**.
 | [Finnhub](https://finnhub.io/docs/api) | Dernier cours reçu des titres américains compatibles avec la clé de l’utilisateur. Nouvelle demande environ toutes les trois minutes en séance. |
 | [Frankfurter](https://frankfurter.dev/) | Taux quotidiens de référence de la BCE pour CHF, EUR et USD. Le dernier taux disponible peut être utilisé pendant sept jours. |
 
-Pour les actions et ETF, saisis ta propre clé EODHD dans **Données → Cotations automatiques → Appliquer les clés**. Finnhub et CoinGecko Demo sont facultatifs. Les clés sont conservées dans la session du navigateur et envoyées uniquement à leur fournisseur. Une clé utilisée par le navigateur reste accessible à son utilisateur. Les quantités, coûts, plateformes et opérations restent dans IndexedDB. En local, le serveur Vite peut relayer les requêtes EODHD vers le fournisseur pour éviter une dépendance à ses en-têtes CORS. Ce relais fonctionne sur la machine qui lance l’application. Un hébergement statique utilise l’accès direct du navigateur.
+Pour les actions et ETF, saisis ta propre clé EODHD dans **Paramètres → Cotations automatiques → Appliquer les clés**. Finnhub et CoinGecko Demo sont facultatifs. Les clés sont conservées dans la session du navigateur et envoyées uniquement à leur fournisseur. Une clé utilisée par le navigateur reste accessible à son utilisateur. Les quantités, coûts, plateformes et opérations restent dans IndexedDB. En local, le serveur Vite peut relayer les requêtes EODHD vers le fournisseur pour éviter une dépendance à ses en-têtes CORS. Ce relais fonctionne sur la machine qui lance l’application. Un hébergement statique utilise l’accès direct du navigateur.
 
-Le moteur vérifie les cours à l’ouverture, au rechargement, au retour au premier plan et à la demande. Les recherches identiques peuvent partager une requête en cours. EODHD recharge la clôture si la séance attendue a changé et réutilise les cours historiques déjà stockés. Les horaires et jours fériés sont couverts par des calendriers locaux pour les places principales, sur les années intégrées. Les autres places utilisent une estimation de fin de séance en semaine. La source et la date du cours sont affichées séparément de l’heure de vérification. En cas d’échec, l’application garde le dernier cours disponible.
+En mode automatique, le moteur vérifie les cours à l’ouverture, au rechargement, au retour au premier plan et à la demande. Les recherches identiques peuvent partager une requête en cours. EODHD recharge la clôture si la séance attendue a changé et réutilise les cours historiques déjà stockés. Les horaires et jours fériés sont couverts par des calendriers locaux pour les places principales, sur les années intégrées. Les autres places utilisent une estimation de fin de séance en semaine. La source et la date du cours sont affichées séparément de l’heure de vérification. En cas d’échec, l’application garde le dernier cours de marché disponible. Le statut « cours ancien » dépend de l’âge de la cotation ou de la dernière séance attendue. Les licences des clés personnelles dépendent du fournisseur et couvrent l’utilisation personnelle selon le plan. Le code du projet et les données du mode démo peuvent être partagés séparément des cotations sous licence.
+
+## Navigation et préférences
+
+La vue d’ensemble présente la valorisation, le résultat sur la période, la composition et les positions principales. Le **Portefeuille** propose des filtres et ouvre une fiche par actif. **Transactions** permet de filtrer, modifier ou supprimer les mouvements enregistrés. **Analyses** présente la concentration, les poids, les gains latents et l’évolution du poids par catégorie. **Plateformes** permet de créer un établissement ou de renommer ses occurrences dans les positions et transactions. **Paramètres** regroupe le thème, la devise, le mode d’actualisation, les sources et les sauvegardes.
 
 ## Valorisation et historique
 
@@ -46,7 +50,7 @@ Le moteur vérifie les cours à l’ouverture, au rechargement, au retour au pre
 
 ## Exporter et restaurer
 
-Dans **Données**, exporte ou importe une sauvegarde JSON locale. La restauration valide le format et la cohérence du journal avant de remplacer les données. Effacer les données du site efface aussi le portefeuille de ce navigateur.
+La migration IndexedDB ajoute une table de plateformes. Les positions, mouvements et cotations conservent leurs tables. Dans **Paramètres**, exporte ou importe une sauvegarde JSON locale. La restauration valide le format et la cohérence du journal avant de remplacer les données. Effacer les données du site efface aussi le portefeuille de ce navigateur.
 
 ## Sources du catalogue
 

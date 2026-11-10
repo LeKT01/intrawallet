@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Decimal } from 'decimal.js'
 import { dayKey, daysBefore } from './currency'
 
@@ -23,9 +23,9 @@ export function inPeriod<T extends { date: string }>(points: T[], days: number) 
   return points.filter(point => point.date >= cutoff)
 }
 
-export function PeriodButtons({ range, choose }: { range: number; choose: (days: number) => void }) {
+export function PeriodButtons({ range, choose, minimumDays = 1 }: { range: number; choose: (days: number) => void; minimumDays?: number }) {
   return <div className="segments" role="group" aria-label="Période">
-    {periods.map(period => <button type="button" key={period.label} className="secondary segment-button"
+    {periods.filter(period => period.days >= minimumDays).map(period => <button type="button" key={period.label} className="secondary segment-button"
       aria-pressed={range === period.days} onClick={() => choose(period.days)}>{period.label}</button>)}
   </div>
 }
@@ -36,6 +36,7 @@ export default function DailyChart({ points, label, format, empty }: {
   format: (value: Decimal) => string
   empty: string
 }) {
+  const fillId = useId()
   const [selectedTime, setSelectedTime] = useState<number>()
   const values = points.flatMap(point => point.value === null ? [] : [point.value])
   const first = points[0]
@@ -52,19 +53,43 @@ export default function DailyChart({ points, label, format, empty }: {
     point, x: duration === 0 ? 350 : 24 + 652 * (timeOf(point) - start) / duration,
     y: spread.eq(0) ? 85 : 150 - 128 * point.value.minus(min).div(spread).toNumber(),
   })
+  const activeCoord = coords.find(item => item?.point === active)
+  const segments: NonNullable<typeof coords[number]>[][] = []
   const path = coords.map((item, index) => {
     if (!item) return ''
     const previous = coords[index - 1]
     const contiguous = previous && timeOf(item.point) - timeOf(previous.point) <= (item.point.at === undefined ? 86400000 : 3600000)
+    if (!contiguous) segments.push([])
+    segments.at(-1)!.push(item)
     return (contiguous ? 'L' : 'M') + item.x.toFixed(2) + ' ' + item.y.toFixed(2)
   }).join(' ')
 
   return <>
     <p className="history-readout"><strong>{format(active.value!)}</strong><span>{labelOf(active)}{active.detail ? ' · ' + active.detail : ''}</span></p>
-    <svg className="history-chart" viewBox="0 0 700 175" role="group" aria-label={label}>
+    <div className="chart-plot">
+    <div className="chart-scale" aria-hidden="true">
+      <span>{format(max)}</span><span>{format(min.plus(spread.div(2)))}</span><span>{format(min)}</span>
+    </div>
+    <svg className="history-chart" viewBox="0 0 700 175" preserveAspectRatio="none" role="group" aria-label={label}
+      onPointerMove={event => {
+        const bounds = event.currentTarget.getBoundingClientRect()
+        const pointer = (event.clientX - bounds.left) * 700 / bounds.width
+        const nearest = coords.reduce<typeof coords[number]>((best, item) =>
+          item && (!best || Math.abs(pointer - item.x) < Math.abs(pointer - best.x)) ? item : best, null)
+        if (nearest) setSelectedTime(timeOf(nearest.point))
+      }}>
+      <defs><linearGradient id={fillId} x2="0" y2="100%"><stop offset="0%" stopColor="var(--accent)" stopOpacity=".22" />
+        <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" /></linearGradient></defs>
       {[22, 85, 150].map(y => <line key={y} x1="24" x2="676" y1={y} y2={y} />)}
-      <path d={path} />
-      {coords.map(item => item && <circle key={timeOf(item.point)} cx={item.x} cy={item.y} r={active === item.point ? 5 : 3}
+      {segments.filter(segment => segment.length > 1).map(segment => {
+        const area = 'M' + segment[0].x + ' 150 L' + segment.map(item => item.x.toFixed(2) + ' ' + item.y.toFixed(2)).join(' L')
+          + ' L' + segment.at(-1)!.x + ' 150 Z'
+        return <path className="chart-area" key={segment[0].x} d={area} style={{ fill: 'url(#' + fillId + ')' }} />
+      })}
+      <path d={path} className="chart-line" />
+      {activeCoord && <line className="chart-crosshair" x1={activeCoord.x}
+        x2={activeCoord.x} y1="22" y2="150" />}
+      {coords.map(item => item && <circle key={timeOf(item.point)} cx={item.x} cy={item.y} r={active === item.point ? 5 : 3} className={active === item.point ? 'active-point' : 'chart-point'}
         tabIndex={active === item.point ? 0 : -1} onFocus={() => setSelectedTime(timeOf(item.point))}
         onPointerEnter={() => setSelectedTime(timeOf(item.point))} onClick={() => setSelectedTime(timeOf(item.point))}
         onKeyDown={event => {
@@ -75,7 +100,7 @@ export default function DailyChart({ points, label, format, empty }: {
           next?.focus()
         }} aria-label={labelOf(item.point) + ' · ' + format(item.point.value!)}>
         <title>{labelOf(item.point) + ' · ' + format(item.point.value!)}</title></circle>)}
-    </svg>
+    </svg></div>
     <div className="history-axis"><span>{labelOf(first)}</span><span>{first !== last && labelOf(last)}</span></div>
     {values.length === 1 && <p className="hint">La courbe se dessinera à partir de deux relevés valorisés.</p>}
   </>

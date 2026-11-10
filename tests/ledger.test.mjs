@@ -179,3 +179,45 @@ test('la sauvegarde accepte les métadonnées de cotation et d’acquisition', (
   const snapshot = data([position], [], [mark])
   assert.deepEqual(readBackup(backupText(snapshot)), snapshot)
 })
+
+test('la valorisation de marché conserve les données manuelles dans leur contexte historique', () => {
+  const legacy = opening('legacy', '300', '200')
+  const manual = quote('manual', 2, '360')
+  const withoutMarket = replay(data([legacy], [], [manual]), [], undefined, true)
+  assert.equal(withoutMarket.holdings[0].valuation, null)
+  assert.equal(withoutMarket.holdings[0].cost.amount, '200')
+  assert.equal(withoutMarket.history.at(-1).value.toFixed(), '360')
+  assert.equal(withoutMarket.history.at(-1).usesNonMarketPrices, true)
+  const market = { ...quote('real', 3, '330'), source: 'CoinGecko' }
+  const laterManual = quote('manual-again', 4, '500')
+  const result = replay(data([legacy], [], [manual, market, laterManual]), [], undefined, true)
+  assert.equal(result.holdings[0].valuation.amount, '330')
+  assert.equal(result.history.at(-1).value.toFixed(), '500')
+})
+
+test('trois plateformes Bitcoin sont consolidées sans perdre les quantités individuelles', () => {
+  const positions = ['0.10', '0.15', '0.05'].map((quantity, index) => ({
+    ...opening('btc-' + index, null, null, ['Binance', 'Coinbase', 'Revolut'][index]),
+    category: 'crypto', reference: 'BTC', name: 'Bitcoin', quantity,
+  }))
+  const bitcoin = { ...quote('btc', 3, '70000'), target: 'crypto/BTC', source: 'CoinGecko' }
+  const result = consolidate(replay(data(positions, [], [bitcoin]), [], undefined, true).holdings)
+  assert.equal(result[0].quantity.toFixed(), '0.3')
+  assert.equal(result[0].platformCount, 3)
+  assert.deepEqual(result[0].entries.map(entry => entry.quantity), ['0.1', '0.15', '0.05'])
+  assert.equal(result[0].amount.toFixed(), '21000')
+})
+
+test('les acquisitions unitaires appliquent les frais une seule fois avec précision', async () => {
+  const { Decimal } = await import('decimal.js')
+  const { acquisitionCost } = await import('../src/portfolio.ts')
+  assert.equal(acquisitionCost(new Decimal('0.001234567890123456'), new Decimal('60000'), new Decimal('2')).toFixed(),
+    '76.07407340740736')
+})
+
+test('la sauvegarde conserve les plateformes personnalisées et les transactions en devise d’origine', () => {
+  const operation = trade('buy', 'usd', 2, { gross: '90', fee: '1.8', original: { gross: '100', fee: '2', currency: 'USD', rate: '0.9' } })
+  const snapshot = { ...data([], [operation]), platforms: ['Réserve locale', 'Mon courtier'] }
+  assert.deepEqual(readBackup(backupText(snapshot)), snapshot)
+  assert.throws(() => readBackup(backupText({ ...snapshot, platforms: ['Courtage', 'courtage'] })), /plateformes/)
+})

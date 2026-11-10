@@ -5,7 +5,7 @@ import { dayKey, daysBefore, type FxRate } from './currency.ts'
 import { closeTimestamp, latestClosingDay, marketOpen } from './marketCalendar.ts'
 import { loadDailySeries, saveDailyPrices } from './database.ts'
 
-export type QuoteAsset = Pick<CatalogAsset, 'category' | 'reference' | 'name' | 'listing' | 'market'>
+export type QuoteAsset = Pick<CatalogAsset, 'category' | 'reference' | 'name' | 'listing' | 'isin' | 'market'>
 export type QuoteKeys = { finnhub: string; eodhd: string; coingecko: string }
 type Provider = keyof QuoteKeys
 type QuoteResult = { marks: Mark[]; issues: string[]; checked: number }
@@ -36,6 +36,7 @@ async function json(url: URL, provider: string) {
   }
   if (response.status === 429) throw new Error(provider + ' a limité les requêtes. Réessaie plus tard.')
   if ([401, 403].includes(response.status)) throw new Error(provider + ' a refusé l’accès. Vérifie la clé et la couverture de l’offre.')
+  if (response.status >= 500) throw new Error(provider + ' est temporairement indisponible (HTTP ' + response.status + ').')
   if (!response.ok) throw new Error(provider + ' n’a pas renvoyé de données pour cette demande.')
   return response.json()
 }
@@ -49,10 +50,15 @@ function positive(value: unknown) {
 }
 
 function marketMark(asset: QuoteAsset, price: Decimal, source: string, sourceAt: number, at: number,
-  originalPrice: Decimal, currency: string, timing: Mark['timing']): Mark {
+  originalPrice: Decimal, currency: string, timing: Mark['timing'], instrument?: string): Mark {
   const target = quoteTarget(asset)
-  return { id: [target, source, sourceAt, price.toFixed()].join('/'), kind: 'market',
-    target, price: price.toFixed(), sourceAt, at, source, originalPrice: originalPrice.toFixed(), currency, timing }
+  return { id: [target, source, ...(instrument ? [instrument] : []), sourceAt, price.toFixed()].join('/'), kind: 'market',
+    target, price: price.toFixed(), sourceAt, at, source, originalPrice: originalPrice.toFixed(), currency, timing, instrument, receivedAt: Date.now() }
+}
+
+export function instrumentCode(asset: QuoteAsset) {
+  const exchange = listing(asset)
+  return asset.market?.code ?? (exchange ? exchange.symbol + '.' + exchange.venue : undefined)
 }
 
 function listing(asset: QuoteAsset) {
@@ -64,7 +70,7 @@ function listing(asset: QuoteAsset) {
 export function quoteAccess(asset: QuoteAsset, keys: QuoteKeys) {
   if (asset.category === 'crypto') return catalogEntry(asset.category, asset.reference)?.coinId ? 'available' : 'manual'
   const exchange = listing(asset)
-  if (!exchange && !isinPattern.test(asset.reference)) return 'manual'
+  if (!exchange && !asset.market && !asset.isin && !isinPattern.test(asset.reference)) return 'manual'
   return keys.eodhd || (exchange?.venue === 'US' && keys.finnhub) ? 'available' : 'key'
 }
 
@@ -153,7 +159,7 @@ function finnhubQuote(asset: QuoteAsset, key: string) {
     const sourceAt = markTime(data?.t)
     if (!price || !validTime(sourceAt)) return []
     const { rate } = await rateToCHF('USD', dayKey(sourceAt))
-    return [marketMark(asset, price.times(rate), 'Finnhub', sourceAt, Date.now(), price, 'USD', 'reported')]
+    return [marketMark(asset, price.times(rate), 'Finnhub', sourceAt, Date.now(), price, 'USD', 'reported', listing(asset)!.symbol + '.US')]
   })
 }
 
@@ -214,7 +220,7 @@ async function instrument(asset: QuoteAsset, key: string) {
   const exchange = listing(asset)
   if (exchange?.venue === 'US') return { code: exchange.symbol + '.US', currency: 'USD' }
   if (asset.category === 'crypto') return null
-  const isin = isinPattern.test(asset.reference) ? asset.reference : ''
+  const isin = asset.isin ?? (isinPattern.test(asset.reference) ? asset.reference : '')
   const matches = await searchMarket(asset.category, isin || exchange?.symbol || asset.reference, key)
   const exact = exchange
     ? matches.find(item => item.market.code === exchange.symbol + '.' + exchange.venue && (!isin || item.isin === isin))
@@ -240,7 +246,7 @@ export async function fetchEodSeries(asset: QuoteAsset, meta: Instrument, key: s
   const marks = rows.flatMap(({ day, price }) => {
     const rate = referenceRate(rates, meta.currency, day)
     const sourceAt = closeTimestamp(market, day)
-    return rate && validTime(sourceAt) ? [marketMark(asset, price.div(rate.rate), 'EODHD · clôture', sourceAt, sourceAt, price, meta.currency, 'close')] : []
+    return rate && validTime(sourceAt) ? [marketMark(asset, price.div(rate.rate), 'EODHD · clôture', sourceAt, sourceAt, price, meta.currency, 'close', meta.code)] : []
   })
   if (!marks.length) throw new Error('Taux de change indisponible pour ' + asset.name + '.')
   return marks
@@ -249,12 +255,15 @@ export async function fetchEodSeries(asset: QuoteAsset, meta: Instrument, key: s
 const eodAttempts = new Map<string, number>()
 async function equityDaily(asset: QuoteAsset, key: string, force: boolean) {
   const target = quoteTarget(asset)
-  const cached = await loadDailySeries(target)
+  const explicitCode = instrumentCode(asset)
+  const lineKey = explicitCode ? target + '@' + explicitCode : target
+  const stored = await loadDailySeries(lineKey) ?? (explicitCode ? await loadDailySeries(target) : undefined)
+  const cached = stored && (!explicitCode || !stored.instrument || stored.instrument.code === explicitCode) ? stored : undefined
   const at = Date.now()
   const venue = asset.market?.code.split('.').at(-1) ?? cached?.instrument?.code.split('.').at(-1) ?? listing(asset)?.venue ?? ''
   const expected = latestClosingDay(venue, at)
   const last = cached?.marks.reduce<Mark | undefined>((latest, mark) => !latest || latest.sourceAt < mark.sourceAt ? mark : latest, undefined)
-  const attemptKey = key + '/' + target
+  const attemptKey = [key, target, explicitCode].join('/')
   const recentAttempt = at - (eodAttempts.get(attemptKey) ?? 0) < (force ? 60000 : 3600000)
   if (last && (dayKey(last.sourceAt) >= expected || (!force && cached && at - cached.fetchedAt < 3600000))) return [last]
   return cachedRequest('eodhd/' + attemptKey, 60000, async () => {
@@ -267,7 +276,7 @@ async function equityDaily(asset: QuoteAsset, key: string, force: boolean) {
       if (last) return [last]
       throw new Error('EODHD ne fournit pas de clôture pour ' + asset.name + ' avec cette clé.')
     }
-    await saveDailyPrices({ target, fetchedAt: at, marks, instrument: meta })
+    await saveDailyPrices({ target: lineKey, fetchedAt: at, marks, instrument: meta })
     return [marks.at(-1)!]
   })
 }
@@ -332,6 +341,19 @@ export async function fetchDailyPrices(asset: QuoteAsset, key: string) {
     if (day < today) byDay.set(day, mark)
   }
   return [...byDay.values()].sort((a, b) => a.at - b.at)
+}
+
+export function quoteIsStale(mark: Mark, at = Date.now()) {
+  if (mark.source === 'Cours simulé') return false
+  if (mark.timing === 'close') {
+    const venue = mark.instrument?.split('.').at(-1)
+    return dayKey(mark.sourceAt) < latestClosingDay(venue ?? '', at)
+  }
+  if (mark.source.startsWith('CoinGecko')) return at - mark.sourceAt > 900000
+  if (mark.source.startsWith('Finnhub')) {
+    return marketOpen('US', at) ? at - mark.sourceAt > 1800000 : dayKey(mark.sourceAt) < latestClosingDay('US', at)
+  }
+  return at - mark.sourceAt > 86400000
 }
 
 export function quoteTiming(mark: Mark) {

@@ -136,7 +136,7 @@ export default function DataSettings({ quoteKey, onKey, onRefresh, refreshing, r
       <a className="secondary" href={demoLink(true)}>Ouvrir la démo</a>
     </section>
     {pending && <ConfirmDialog title="Restaurer cette sauvegarde ?"
-      description={`Le portefeuille actuel sera remplacé par ${pending.positions.length} position(s) de départ et ${pending.operations.length} opération(s) du fichier.`}
+      description={`Le portefeuille actuel sera remplacé par ${pending.positions.length} position(s) de départ, ${pending.operations.length} opération(s) et les plateformes du fichier.`}
       confirm="Restaurer le fichier" busy={working} onClose={() => setPending(null)} onConfirm={() => {
         void run(async () => {
           try {
