@@ -88,8 +88,9 @@ export default function App() {
   })
   const data = loaded?.data ?? emptyData
   const start = firstTrackingDate(data)
-  const needsFx = useMemo(() => data.marks.some(mark => mark.currency === 'EUR' || mark.currency === 'USD'), [data.marks])
-  const { display, loading: fxLoading, choose: chooseCurrency, rateToCHF } = useCurrency(start, needsFx)
+  const needsFx = useMemo(() => data.marks.some(mark => mark.currency === 'EUR' || mark.currency === 'USD')
+    || data.positions.some(position => position.valuation?.manual && position.valuation.manual.currency !== 'CHF'), [data.marks, data.positions])
+  const { display, loading: fxLoading, choose: chooseCurrency, rateToCHF } = useCurrency(start, needsFx || editor !== null)
   const holdings = useMemo(() => loaded
     ? (needsFx ? replay(loaded.data, [], rateToCHF, true).holdings : loaded.view.holdings) : [], [loaded, needsFx, rateToCHF])
   const assets = useMemo(() => consolidate(holdings), [holdings])

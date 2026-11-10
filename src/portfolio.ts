@@ -18,7 +18,7 @@ export interface Position {
   reference: string
   platform: string
   quantity: string
-  valuation: { amount: string; updatedAt: number } | null
+  valuation: { amount: string; updatedAt: number; manual?: { amount: string; currency: Currency } } | null
   cost: Cost | null
   createdAt: number
   listing?: string

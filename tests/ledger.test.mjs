@@ -1,7 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { dailyPortfolioHistory, replay } from '../src/ledger.ts'
-import { consolidate, summarize, unitPrice } from '../src/portfolio.ts'
+import { Decimal } from 'decimal.js'
+import { dailyPortfolioHistory, replay, unitMark } from '../src/ledger.ts'
+import { consolidate, estimatedCost, summarize, unitPrice } from '../src/portfolio.ts'
 import { currencyDisplay } from "../src/currency.ts"
 import { searchCatalog } from '../src/catalog.ts'
 import { backupText, readBackup } from '../src/backup.ts'
@@ -206,6 +207,30 @@ test('la valorisation de marché conserve les données manuelles dans leur conte
   const result = replay(data([legacy], [], [manual, market, laterManual]), [], undefined, true)
   assert.equal(result.holdings[0].valuation.amount, '330')
   assert.equal(result.history.at(-1).value.toFixed(), '500')
+})
+
+test('une valeur manuelle en EUR sert au coût estimé et cède la priorité au cours de marché', () => {
+  const asset = searchCatalog('etf', 'NQSE')[0]
+  const amount = new Decimal(843.32).times('0.92')
+  const percent = new Decimal(10)
+  const position = { ...opening('p', null, null), ...asset, quantity: '52.38',
+    valuation: { amount: amount.toFixed(), updatedAt: day(3), manual: { amount: '843.32', currency: 'EUR' } },
+    cost: { kind: 'estimated', amount: estimatedCost(amount, percent).toFixed(), initialValue: amount.toFixed(), initialPercent: percent.toFixed() } }
+  const snapshot = data([position], [], [unitMark(position)])
+  const restored = readBackup(backupText(snapshot))
+  assert.deepEqual(restored, snapshot)
+  const rate = () => new Decimal('0.92')
+  const fallback = replay(restored, [], rate, true).holdings[0]
+  assert.equal(fallback.usesManualValuation, true)
+  assert.equal(new Decimal(fallback.valuation.amount).toFixed(4), '775.8544')
+  assert.equal(summarize([fallback]).returnRate.toFixed(4), '0.1000')
+
+  const closing = { ...quote('nqse', 2, '15'), target: 'etf/' + asset.reference, source: 'EODHD · clôture' }
+  const automatic = replay({ ...restored, marks: [...restored.marks, closing] }, [], rate, true).holdings[0]
+  assert.equal(automatic.usesManualValuation, false)
+  assert.equal(automatic.valuation.amount, '785.7')
+  const other = { ...position, ...searchCatalog('etf', 'CSNDX')[0], valuation: null }
+  assert.equal(replay({ ...restored, positions: [other] }, [], rate, true).holdings[0].valuation, null)
 })
 
 test('trois plateformes Bitcoin sont consolidées sans perdre les quantités individuelles', () => {

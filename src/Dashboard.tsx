@@ -18,6 +18,7 @@ export default function Dashboard({ assets, holdings, display, quotes, history, 
   const [allocation, setAllocation] = useState<'category' | 'platform' | 'asset'>('category')
   const total = summarize(holdings)
   const unknown = assets.filter(asset => asset.entries.some(entry => entry.partiallyValued)).length
+  const manual = assets.filter(asset => asset.entries.some(entry => entry.usesManualValuation)).length
   const stale = assets.filter(asset => { const mark = quotes.get(asset.key); return mark && quoteIsStale(mark) }).length
   const latest = assets.reduce<Mark | undefined>((previous, asset) => {
     const mark = quotes.get(asset.key)
@@ -32,7 +33,7 @@ export default function Dashboard({ assets, holdings, display, quotes, history, 
     <div className="dashboard-grid">
       <section className="panel valuation-panel" aria-label="Valorisation et historique">
         <header className="valuation-hero">
-          <div><p className="valuation-label">{unknown ? 'Valeur de marché connue' : 'Valeur du portefeuille'}</p>
+          <div><p className="valuation-label">{unknown ? 'Valeur connue du portefeuille' : 'Valeur du portefeuille'}</p>
             <h2>{total.priced || !holdings.length ? display.format(total.amount) : '—'}</h2>
             <p className="hero-performance">
               <Change value={total.gain}>{total.gain === null ? 'Gain latent indéterminé' : display.format(total.gain, { signed: true })}</Change>
@@ -46,15 +47,16 @@ export default function Dashboard({ assets, holdings, display, quotes, history, 
             {latest && !demo && <small>Cours le plus récent · {timestamp.format(latest.sourceAt)}</small>}
           </div>
         </header>
-        {(unknown > 0 || stale > 0 || refreshStatus) && <div className="valuation-status" role="status">
+        {(unknown > 0 || manual > 0 || stale > 0 || refreshStatus) && <div className="valuation-status" role="status">
           {unknown > 0 && <span>{unknown} actif{unknown > 1 ? 's' : ''} sans cours</span>}
+          {manual > 0 && <span>{manual} actif{manual > 1 ? 's' : ''} avec une valeur manuelle</span>}
           {stale > 0 && <span className="stale-label">{stale} cours ancien{stale > 1 ? 's' : ''}</span>}
           {refreshStatus && <span>{refreshStatus}</span>}
         </div>}
         <HistoryChart history={history} intraday={intraday} display={display} range={range} chooseRange={setRange} embedded />
       </section>
       <section className="panel allocation-panel">
-        <PanelHeading title="Répartition" description={unknown ? 'Sur les valeurs de marché connues.' : 'Poids dans le portefeuille.'} />
+        <PanelHeading title="Répartition" description={unknown ? 'Sur les valeurs connues.' : 'Poids dans le portefeuille.'} />
         <label className="allocation-select"><span className="sr-only">Répartition par</span>
           <select value={allocation} onChange={event => setAllocation(event.target.value as typeof allocation)}>
             <option value="category">Par catégorie</option><option value="platform">Par plateforme</option><option value="asset">Par actif</option>

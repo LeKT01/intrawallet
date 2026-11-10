@@ -50,6 +50,8 @@ export default function PositionForm({ current, positions, platforms, marks, dis
   const [custom, setCustom] = useState<AssetInput | null>(null)
   const [platform, setPlatform] = useState(current?.platform ?? '')
   const [units, setUnits] = useState(current?.quantity ?? '')
+  const [manualInput, setManualInput] = useState(current?.valuation?.manual?.amount ?? '')
+  const [manualCurrencyChoice, setManualCurrencyChoice] = useState(current?.valuation?.manual?.currency)
   const [purchaseCurrency, setPurchaseCurrency] = useState<Currency>(current?.purchase?.currency ?? 'CHF')
   const [purchaseDate, setPurchaseDate] = useState(current?.acquiredOn ?? current?.purchase?.date ?? '')
   const [costMode, setCostMode] = useState<CostMode>(
@@ -98,7 +100,14 @@ export default function PositionForm({ current, positions, platforms, marks, dis
   const qty = parseAmount(units)
   const rate = quote?.currency && quote.originalPrice ? currentRate(quote.currency) : null
   const currentPrice = rate && quote?.originalPrice ? new Decimal(quote.originalPrice).times(rate) : quote?.price
-  const currentValue = qty?.gt(0) && currentPrice ? qty.times(currentPrice) : null
+  const savedValuation = sameAsset && !identityChanged ? current?.valuation : null
+  const savedManual = savedValuation?.manual
+  const manualCurrency = manualCurrencyChoice ?? currencies.find(code => code === asset?.market?.currency) ?? 'CHF'
+  const manualAmount = parseAmount(manualInput)
+  const manualRate = !quote && manualAmount?.gt(0) ? currentRate(manualCurrency)
+    ?? (savedValuation && savedManual?.currency === manualCurrency ? new Decimal(savedValuation.amount).div(savedManual.amount) : null) : null
+  const manualTotal = qty?.gt(0) && manualAmount && manualRate ? manualAmount.times(manualRate) : null
+  const currentValue = qty?.gt(0) && currentPrice ? qty.times(currentPrice) : manualTotal
   const enteredCost = parseAmount(costInput)
   const fee = parseAmount(fees || '0')
   const purchaseDay = purchaseDate || dayKey(Date.now())
@@ -143,6 +152,10 @@ export default function PositionForm({ current, positions, platforms, marks, dis
     const selectedPlatform = platformName(platform, platforms)
     if (!selectedPlatform) return setError('Renseigne la plateforme, par exemple Revolut ou ta banque.')
     if (!qty?.gt(0)) return setError('La quantité doit être un nombre supérieur à zéro.')
+    if (!quote && manualInput.trim()) {
+      if (!manualAmount?.gt(0)) return setError('Saisis une valeur totale supérieure à zéro.')
+      if (!manualRate) return setError('Taux de change indisponible. Réessaie ou saisis la valeur en CHF.')
+    }
 
     if (purchaseDate && (!/^\d{4}-\d{2}-\d{2}$/.test(purchaseDate) || purchaseDate > dayKey(Date.now()))) {
       return setError('Choisis une date d’acquisition valide, au plus tard aujourd’hui.')
@@ -176,6 +189,13 @@ export default function PositionForm({ current, positions, platforms, marks, dis
 
       const now = Date.now()
       const known = positions.find(item => quoteTarget(item) === target && item.id !== current?.id)
+      let valuation = savedValuation ?? null
+      if (manualTotal && manualAmount) {
+        if (savedManual?.amount !== manualAmount.toFixed() || savedManual.currency !== manualCurrency || qty.toFixed() !== current?.quantity) {
+          valuation = { amount: manualTotal.toFixed(), updatedAt: Math.max(now, (valuation?.updatedAt ?? 0) + 1),
+            manual: { amount: manualAmount.toFixed(), currency: manualCurrency } }
+        }
+      } else if (!quote && savedManual && !manualInput.trim()) valuation = null
       const originalValue = current?.initialValue ?? (current?.valuation?.updatedAt === current?.createdAt
         ? current?.valuation?.amount : null)
       const initialValue = current ? originalValue ?? null : currentValue?.toFixed() ?? null
@@ -183,7 +203,7 @@ export default function PositionForm({ current, positions, platforms, marks, dis
         id: current?.id ?? newId(), category: asset.category, name: known?.name ?? asset.name,
         reference: asset.reference, listing: asset.listing, isin: asset.isin, market: asset.market, platform: selectedPlatform, quantity: qty.toFixed(),
         cost, purchase, acquiredOn: purchaseDate || undefined, createdAt: current?.createdAt ?? now, initialValue,
-        valuation: current?.valuation ?? null,
+        valuation,
       }
 
       await onSave(entry, quote === fresh ? fresh : undefined)
@@ -212,11 +232,20 @@ export default function PositionForm({ current, positions, platforms, marks, dis
           <div className="step"><span>1</span><h3>Choisis ton investissement</h3></div>
           <AssetPicker category={category} selected={selected} onCategory={setCategory}
             onChoose={item => {
+              const previousManual = item && current && quoteTarget(item) === quoteTarget(current) && instrumentCode(item) === instrumentCode(current)
+                ? current.valuation?.manual : undefined
               setSelected(item)
               setConfirmedInstrument(false)
               setQuoteState(undefined)
               setRetry(0)
-            }} onCustom={item => { setCustom(item); setConfirmedInstrument(false) }} marketKey={demoMode ? undefined : eodhd} />
+              setManualInput(previousManual?.amount ?? '')
+              setManualCurrencyChoice(previousManual?.currency)
+            }} onCustom={item => {
+              setCustom(item)
+              setConfirmedInstrument(false)
+              setManualInput('')
+              setManualCurrencyChoice(undefined)
+            }} marketKey={demoMode ? undefined : eodhd} />
 
           {asset && <>
             <section className="quote-card" aria-label="Cours de l’actif">
@@ -236,7 +265,7 @@ export default function PositionForm({ current, positions, platforms, marks, dis
               {access === 'manual' && <p className="hint">{demoMode ? 'La démo utilise des cours fictifs.' : 'Cet identifiant n’est pas relié à une cotation automatique.'}</p>}
               {!demoMode && hasAutomaticSixQuote(asset) && <p className="hint">Clôture publiée par SIX Swiss Exchange, récupérée sans clé.</p>}
               {access === 'key' && <p className="hint">Active une clé de cotation pour ce titre dans <button type="button" className="text-button" onClick={onConfigure}>Paramètres</button>.</p>}
-              {request?.issue && <p className="hint" role="status">{request.issue}{quote ? ' Le dernier cours connu est affiché.' : ' Tu peux enregistrer la quantité et valoriser la position plus tard.'}</p>}
+              {request?.issue && <p className="hint" role="status">{request.issue}{quote ? ' Le dernier cours connu est affiché.' : ' Tu peux saisir la valeur affichée par ton courtier ci-dessous.'}</p>}
             </section>
             {identityChanged && <label className="check-row"><input type="checkbox" checked={confirmedInstrument}
               onChange={event => setConfirmedInstrument(event.target.checked)} />
@@ -252,6 +281,18 @@ export default function PositionForm({ current, positions, platforms, marks, dis
                 <input value={units} inputMode="decimal" maxLength={38} placeholder="Ex. 2,5"
                   onChange={event => setUnits(event.target.value)} />
               </label>
+              {!quote && <>
+                <label>Valeur totale actuelle <small>facultative</small>
+                  <input value={manualInput} inputMode="decimal" maxLength={38} placeholder="Ex. 843,32"
+                    onChange={event => setManualInput(event.target.value)} />
+                </label>
+                <label>Devise de la valeur
+                  <select value={manualCurrency} onChange={event => setManualCurrencyChoice(event.target.value as Currency)}>
+                    {currencies.map(currency => <option key={currency}>{currency}</option>)}
+                  </select>
+                </label>
+                <p className="hint full">Recopie la valeur totale affichée par ton courtier pour la quantité indiquée. Le cours automatique prend le relais dès qu’il est disponible.</p>
+              </>}
             </div>
             <div className="step"><span>3</span><h3>Renseigne ton prix d’achat <small>facultatif</small></h3></div>
             <div className="segments" role="group" aria-label="Coût d’acquisition">
@@ -291,7 +332,7 @@ export default function PositionForm({ current, positions, platforms, marks, dis
             <dl className="estimate position-preview" aria-label="Aperçu de la position" aria-live="polite">
               <div><dt>Quantité</dt><dd>{qty?.gt(0) ? qty.toFixed() : '—'}</dd></div>
               <div><dt>{costMode === 'percent' ? 'Coût estimé' : 'Coût d’acquisition'}</dt><dd>{basis === null ? '—' : display.format(basis)}</dd></div>
-              <div><dt>Valeur de marché</dt><dd>{currentValue === null ? '—' : display.format(currentValue)}</dd></div>
+              <div><dt>{manualTotal ? 'Valeur saisie manuellement' : 'Valeur de marché'}</dt><dd>{currentValue === null ? '—' : display.format(currentValue)}</dd></div>
               <div><dt>Gain latent indicatif</dt><dd>{previewGain === null ? '—' : display.format(previewGain, { signed: true })}</dd></div>
             </dl>
             {costMode === 'exact' && purchaseTotal && !purchaseRate && <p className="hint" role="status">

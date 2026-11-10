@@ -55,6 +55,7 @@ type Bucket = {
 
 export type Holding = Position & {
   source?: Mark
+  usesManualValuation: boolean
   partiallyValued: boolean
   unitPrice: Decimal | null
   averageUnitPrice: boolean
@@ -82,12 +83,18 @@ export interface PortfolioData {
 const D = (value: Decimal.Value) => new Decimal(value)
 const poolKey = (asset: Asset, platform: string) => assetKey(asset) + '/' + platformKey(platform)
 const sum = (buckets: Bucket[]) => buckets.reduce((total, bucket) => total.plus(bucket.quantity), D(0))
+const manualValuationSource = 'Valorisation manuelle'
+const manualMarkMatches = (mark: Mark, position: Position) =>
+  mark.source !== manualValuationSource || mark.instrument === (position.listing ?? position.reference)
 
 export function unitMark(position: Position): Mark | null {
   if (!position.valuation) return null
-  const at = position.valuation.updatedAt
+  const { amount, updatedAt: at, manual } = position.valuation
   return { id: 'manual/' + position.id + '/' + at, kind: 'manual', target: position.id,
-    price: D(position.valuation.amount).div(position.quantity).toFixed(), at, sourceAt: at, source: 'Saisie manuelle' }
+    price: D(amount).div(position.quantity).toFixed(), at, sourceAt: at,
+    source: manual ? manualValuationSource : 'Saisie manuelle',
+    ...(manual ? { originalPrice: D(manual.amount).div(position.quantity).toFixed(), currency: manual.currency,
+      instrument: position.listing ?? position.reference } : {}) }
 }
 
 export const isMarketMark = (mark: Mark) =>
@@ -117,9 +124,12 @@ export function replay(data: PortfolioData, historical: Mark[] = [],
     else pools.set(key, [bucket])
   }
 
-  function markFor(bucket: Bucket) {
+  function markFor(bucket: Bucket, verifiedOnly = false) {
     const manual = bucket.manualId ? manualMarks.get(bucket.manualId) : undefined
-    const market = marketMarks.get(assetKey(bucket.asset))
+    const target = assetKey(bucket.asset)
+    const fallback = manual?.source === manualValuationSource && manual.price !== null ? manual : undefined
+    if (verifiedOnly || fallback) return verifiedMarks.get(target) ?? fallback
+    const market = marketMarks.get(target)
     let best = market
     for (const mark of [bucket.tradeMark, manual]) {
       if (mark && mark.price !== null && (!best || mark.sourceAt >= best.sourceAt)
@@ -261,7 +271,8 @@ export function replay(data: PortfolioData, historical: Mark[] = [],
     if (mark) activeMarks.set(mark.id, mark)
   }
   for (const mark of data.marks) {
-    if (mark.kind === 'market' || positionsById.has(mark.target)) activeMarks.set(mark.id, mark)
+    const position = positionsById.get(mark.target)
+    if (mark.kind === 'market' || (position && manualMarkMatches(mark, position))) activeMarks.set(mark.id, mark)
   }
   for (const mark of historical) activeMarks.set(mark.id, mark)
   const events = [
@@ -304,10 +315,12 @@ export function replay(data: PortfolioData, historical: Mark[] = [],
     let knownBasis = true
     let commonPrice: Decimal | undefined
     let mixedPrices = false
+    let usesManualValuation = false
     let source: Mark | undefined
     for (const bucket of buckets) {
-      const mark = marketOnly ? verifiedMarks.get(assetKey(bucket.asset)) : markFor(bucket)
+      const mark = markFor(bucket, marketOnly)
       if (mark && mark.price !== null) {
+        usesManualValuation ||= mark.source === manualValuationSource
         const rate = mark.currency && mark.originalPrice ? currentRate?.(mark.currency) : null
         const price = rate && mark.originalPrice ? D(mark.originalPrice).times(rate) : D(mark.price)
         value = value.plus(price.times(bucket.quantity))
@@ -326,7 +339,7 @@ export function replay(data: PortfolioData, historical: Mark[] = [],
     holdings.push({ id: key, ...first.asset, platform: first.platform, quantity: units.toFixed(),
       unitPrice: unpriced ? null : mixedPrices ? value.div(units) : commonPrice ?? null,
       averageUnitPrice: !unpriced && mixedPrices,
-      valuation: source ? { amount: value.toFixed(), updatedAt: source.sourceAt } : null, partiallyValued: unpriced,
+      valuation: source ? { amount: value.toFixed(), updatedAt: source.sourceAt } : null, partiallyValued: unpriced, usesManualValuation,
       cost: !knownBasis ? null : estimated ? { kind: 'estimated', amount: basis.toFixed(), initialPercent: '0', initialValue: '0' }
         : { kind: 'exact', amount: basis.toFixed() }, source, createdAt: 0 })
   }
@@ -366,8 +379,11 @@ export function assetChartMarks(data: PortfolioData, target: string, external: M
   const market = [...external, ...observed.filter(mark => mark.source !== 'Cours manuel')]
   if (market.length) return { marks: market, official: true }
   const positions = data.positions.filter(position => assetKey(position) === target)
-  const ids = new Set(positions.map(position => position.id))
-  const marks = [...observed, ...data.marks.filter(mark => mark.kind === 'manual' && ids.has(mark.target) && mark.price !== null)]
+  const byId = new Map(positions.map(position => [position.id, position]))
+  const marks = [...observed, ...data.marks.filter(mark => {
+    const position = byId.get(mark.target)
+    return mark.kind === 'manual' && mark.price !== null && position && manualMarkMatches(mark, position)
+  })]
   for (const position of positions) {
     const mark = unitMark(position)
     if (mark) marks.push(mark)

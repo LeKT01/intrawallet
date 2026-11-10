@@ -47,6 +47,8 @@ function opening(value: unknown) {
     || (value.purchase.date !== undefined && !isDate(value.purchase.date)))) return false
   const valuation = value.valuation
   if (valuation !== null && (!object(valuation) || !decimal(valuation.amount) || !time(valuation.updatedAt))) return false
+  if (object(valuation) && valuation.manual !== undefined && (!object(valuation.manual)
+    || !unitAmount(valuation.manual.amount, true) || !['CHF', 'EUR', 'USD'].includes(String(valuation.manual.currency)))) return false
   const cost = value.cost
   return cost === null || (object(cost) && decimal(cost.amount) && (cost.kind === 'exact'
     || (cost.kind === 'estimated' && decimal(cost.initialPercent, -100, true) && decimal(cost.initialValue, 0, true))))
@@ -75,6 +77,9 @@ function mark(value: unknown) {
     && (value.receivedAt === undefined || time(value.receivedAt))
     && (value.timing === undefined || value.timing === 'close' || value.timing === 'reported')
   return value.kind === 'manual' && (value.price === null || decimal(value.price))
+    && (value.originalPrice === undefined || decimal(value.originalPrice, 0, true))
+    && (value.currency === undefined || ['CHF', 'EUR', 'USD'].includes(String(value.currency)))
+    && (value.instrument === undefined || string(value.instrument))
 }
 
 function validList(value: unknown, validate: (entry: unknown) => boolean) {

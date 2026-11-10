@@ -53,7 +53,7 @@ export default function useCurrency(start: number, needsRates: boolean) {
   }, [currency, needsRates, from, today, Math.floor(checked / 900000)])
 
   const rateToCHF = useMemo(() => (code: string) => {
-    const rate = referenceRate(cache?.rates ?? [], code, today)
+    const rate = referenceRate(demoMode ? demoFxRates(today) : cache?.rates ?? [], code, today)
     return rate ? new Decimal(1).div(rate.rate) : null
   }, [cache, today])
   return {

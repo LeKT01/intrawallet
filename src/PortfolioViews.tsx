@@ -67,8 +67,10 @@ export function AssetTable({ assets, display, quotes, onOpen, limit }: {
           </button></th>
           <td data-label="Quantité">{quantity(asset.quantity)}</td>
           <td data-label="Cours">{price === null ? '—' : display.format(price, { unit: true })}
+            {asset.entries[0].usesManualValuation && <small>Prix unitaire estimé</small>}
             {quote && quoteIsStale(quote) && <small className="stale-label">Cours ancien</small>}</td>
           <td data-label="Valeur"><strong>{asset.priced ? display.format(asset.amount) : '—'}</strong>
+            {asset.entries.some(entry => entry.usesManualValuation) && <small>Saisie manuelle incluse</small>}
             {asset.entries.some(entry => entry.partiallyValued) && <small>{asset.priced ? 'Partielle' : 'En attente de cours'}</small>}</td>
           <td data-label="Gain latent"><Change value={asset.gain}>{asset.gain === null ? '—' : display.format(asset.gain, { signed: true })}
             {asset.returnRate !== null && <small>{percentLabel(asset.returnRate)}</small>}</Change></td>
@@ -105,7 +107,7 @@ export function PortfolioView({ holdings, platforms, display, quotes, onOpen }: 
 export type AllocationRow = { label: string; amount: Decimal }
 export function Allocation({ rows, display }: { rows: AllocationRow[]; display: CurrencyDisplay }) {
   const valued = rows.filter(row => row.amount.gt(0)).sort((a, b) => b.amount.cmp(a.amount))
-  if (!valued.length) return <p className="inline-empty">Répartition disponible dès qu’une valeur de marché est connue.</p>
+  if (!valued.length) return <p className="inline-empty">Répartition disponible dès qu’une position est valorisée.</p>
   const total = valued.reduce((sum, row) => sum.plus(row.amount), valued[0].amount.times(0))
   return <ul className="allocation-list">{valued.map((row, index) => {
     const fraction = row.amount.div(total)
@@ -122,13 +124,14 @@ export function AssetDetail({ asset, data, series, quote, display, cryptoKey, on
 }) {
   const chart = assetChartMarks(data, asset.key, series?.marks ?? [])
   const entry = asset.entries[0]
+  const usesManualValuation = asset.entries.some(position => position.usesManualValuation)
   const native = quote?.originalPrice && quote.currency ? unitPrice(quote.originalPrice, quote.currency as Currency) : null
   return <div className="detail-stack">
     <div className="detail-actions"><button className="secondary" onClick={onBack}><Icon name="back" /> Portefeuille</button>
       <button className="primary" onClick={onTrade}><Icon name="plus" /> Ajouter une transaction</button></div>
     <section className="panel asset-detail-hero">
       <div className="asset-detail-identity"><AssetBadge asset={asset} /><div><h2>{asset.name}</h2><p>{assetDescription(entry) || categories[asset.category]}</p></div></div>
-      <div className="asset-detail-price"><small>Dernier cours de marché</small>
+      <div className="asset-detail-price"><small>{!quote && entry.usesManualValuation ? 'Prix unitaire estimé' : 'Dernier cours de marché'}</small>
         <strong>{native ?? (entry.unitPrice === null ? 'Indisponible' : display.format(entry.unitPrice, { unit: true }))}</strong>
         {quote && <p className={quoteIsStale(quote) ? 'stale-label' : 'muted'}>
           {quoteIsStale(quote) && 'Cours ancien · '}{quoteTiming(quote)} · {quote.instrument ? quote.instrument + ' · ' : ''}{quote.source} · {timestamp.format(quote.sourceAt)}
@@ -139,7 +142,8 @@ export function AssetDetail({ asset, data, series, quote, display, cryptoKey, on
       <PanelHeading title="Ma position" description={asset.estimated ? 'Le coût inclut une estimation.' : 'Le coût moyen tient compte des frais enregistrés.'} />
       <div className="metric-grid embedded">
         <Metric label="Quantité">{quantity(asset.quantity)}</Metric>
-        <Metric label="Valeur de marché">{asset.priced ? display.format(asset.amount) : '—'}</Metric>
+        <Metric label={usesManualValuation ? 'Valeur détenue' : 'Valeur de marché'} note={usesManualValuation ? 'Saisie manuelle incluse' : undefined}>
+          {asset.priced ? display.format(asset.amount) : '—'}</Metric>
         <Metric label="Coût connu" note={asset.costCount < asset.entries.length ? 'Coût incomplet' : undefined}>{asset.costCount ? display.format(asset.cost) : '—'}</Metric>
         <Metric label="Prix moyen d’acquisition">{asset.costCount === asset.entries.length ? display.format(asset.cost.div(asset.quantity), { unit: true }) : '—'}</Metric>
         <Metric label="Gain latent" note={percentLabel(asset.returnRate)}><Change value={asset.gain}>{asset.gain === null ? '—' : display.format(asset.gain, { signed: true })}</Change></Metric>
@@ -151,7 +155,8 @@ export function AssetDetail({ asset, data, series, quote, display, cryptoKey, on
         const totals = summarize([position])
         return <div className="entry" key={position.id}>
           <span><strong>{position.platform}</strong><small>{quantity(position.quantity)} unité(s)</small></span>
-          <span><strong>{position.valuation ? display.format(position.valuation.amount) : '—'}</strong><small>Valeur détenue</small></span>
+          <span><strong>{position.valuation ? display.format(position.valuation.amount) : '—'}</strong>
+            <small>{position.usesManualValuation ? 'Valeur saisie manuellement' : 'Valeur détenue'}</small></span>
           <span><Change value={totals.gain}>{totals.gain === null ? '—' : display.format(totals.gain, { signed: true })}</Change><small>Gain latent</small></span>
         </div>
       })}</div>
