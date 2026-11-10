@@ -291,16 +291,16 @@ async function equityDaily(asset: QuoteAsset, key: string, force: boolean) {
   })
 }
 
-let sixSnapshot: { at: number; result: Promise<ReturnType<typeof parseSixClosings>> } | undefined
+let sixSnapshot: { at: number; result: Promise<ReturnType<typeof parseSixClosings>>; failed?: boolean } | undefined
 
-async function sixQuotes(assets: QuoteAsset[]) {
+async function sixQuotes(assets: QuoteAsset[], force: boolean) {
   const at = Date.now()
-  if (!sixSnapshot || at - sixSnapshot.at >= 30 * 60000) {
+  if (!sixSnapshot || (sixSnapshot.failed ? force || at - sixSnapshot.at >= 60000 : at - sixSnapshot.at >= 30 * 60000)) {
     const url = new URL('/market/six/etf-closings', location.origin)
-    const result = json(url, 'SIX Swiss Exchange', 13000).then(parseSixClosings)
+    const result = json(url, 'Le relais local SIX', 28000).then(parseSixClosings)
     sixSnapshot = { at, result }
     void result.catch(() => {
-      if (sixSnapshot?.result === result) sixSnapshot = { at: Date.now() - 25 * 60000, result }
+      if (sixSnapshot?.result === result) sixSnapshot = { at: Date.now(), result, failed: true }
     })
   }
   const snapshot = await sixSnapshot.result
@@ -340,7 +340,7 @@ export async function fetchQuotes(assets: QuoteAsset[], keys: QuoteKeys,
   eodOffset += eod.length
   const requests = [
     ...(crypto.length ? [cryptoQuotes(crypto, keys.coingecko)] : []),
-    ...(six.length ? [sixQuotes(six)] : []),
+    ...(six.length ? [sixQuotes(six, force)] : []),
     ...us.map(asset => finnhubQuote(asset, keys.finnhub)),
     ...eod.map(asset => equityDaily(asset, keys.eodhd, force)),
   ]

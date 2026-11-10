@@ -28,7 +28,7 @@ Ouvre http://127.0.0.1:4173/?demo=1 ou utilise **Paramètres → Ouvrir la démo
 
 | Source | Couverture et fréquence dans l’application |
 | --- | --- |
-| [SIX Swiss Exchange](https://www.six-group.com/en/market-data/etf/closing-prices.html) | Dernières clôtures des ETF dont la ligne suisse est identifiée, sans clé lorsque l’application tourne en local. Le relevé est partagé entre les ETF et mis en cache 30 minutes. |
+| [SIX Swiss Exchange](https://www.six-group.com/en/market-data/etf/closing-prices.html) | Dernières clôtures des ETF dont la ligne suisse est identifiée, sans clé lorsque l’application tourne en local. Le serveur partage le relevé entre les ETF et le conserve 30 minutes. En cas d’échec, il essaie un deuxième accès au même relevé. Le bouton « Vérifier le cours » relance la demande immédiatement après un échec. |
 | [CoinGecko](https://docs.coingecko.com/demo/reference/simple-price) | Cours indicatifs des cryptos du catalogue. Une requête groupée environ chaque minute lorsque l’onglet est actif, ou toutes les cinq minutes avec une clé Demo pour ménager le quota mensuel. |
 | [EODHD](https://eodhd.com/help/plans) | Actions et ETF des places couvertes, dont SIX et Xetra. L’offre gratuite personnelle annonce 20 appels par jour et jusqu’à un an de clôtures pour les instruments accessibles. La recherche de titres compte dans le quota. |
 | [Finnhub](https://finnhub.io/docs/api) | Dernier cours reçu des titres américains compatibles avec la clé de l’utilisateur. Nouvelle demande environ toutes les trois minutes en séance. |
