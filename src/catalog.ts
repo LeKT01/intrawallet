@@ -12,27 +12,29 @@ export interface CatalogAsset {
   market?: { code: string; currency: string }
 }
 
-function etf(name: string, reference: string, detail: string, aliases: string, listing?: string): CatalogAsset {
-  return { category: 'etf', name, reference, isin: reference, aliases, detail, listing }
+function etf(name: string, reference: string, detail: string, aliases: string, listing?: string, currency?: string): CatalogAsset {
+  const market = listing?.startsWith('XSWX:') && currency ? { code: listing.slice(5) + '.SW', currency } : undefined
+  return { category: 'etf', name, reference, isin: reference, aliases, detail, listing, market }
 }
 
 // Identifiers come from issuer factsheets or the Swiss justETF directory.
 export const catalog: CatalogAsset[] = [
   etf('Vanguard S&P 500 UCITS ETF', 'IE00BFMXXD54', 'Capitalisant', 'VUAA VUAG', 'XETR:VUAA'),
-  etf('Vanguard S&P 500 UCITS ETF', 'IE00B3XXRP09', 'Distribuant', 'VUSA VUSD', 'XSWX:VUSA'),
+  etf('Vanguard S&P 500 UCITS ETF', 'IE00B3XXRP09', 'Distribuant', 'VUSA VUSD', 'XSWX:VUSA', 'CHF'),
   etf('Vanguard S&P 500 ETF', 'US9229083632', 'Distribuant · cotation américaine', 'VOO', 'ARCX:VOO'),
-  etf('iShares Nasdaq 100 UCITS ETF', 'IE00B53SZB19', 'Capitalisant', 'CNDX CSNDX SXRV', 'XSWX:CSNDX'),
-  etf('iShares Core S&P 500 UCITS ETF', 'IE00B5BMR087', 'Capitalisant', 'CSPX SXR8 CSSPX', 'XSWX:CSSPX'),
-  etf('iShares Core S&P 500 UCITS ETF', 'IE0031442068', 'Distribuant', 'IUSA IDUS'),
+  etf('iShares Nasdaq 100 UCITS ETF', 'IE00B53SZB19', 'Capitalisant', 'CNDX CSNDX SXRV', 'XSWX:CSNDX', 'USD'),
+  etf('iShares Core S&P 500 UCITS ETF', 'IE00B5BMR087', 'Capitalisant', 'CSPX SXR8 CSSPX', 'XSWX:CSSPX', 'USD'),
+  etf('iShares Core S&P 500 UCITS ETF', 'IE0031442068', 'Distribuant', 'IUSA IDUS', 'XSWX:IUSA', 'USD'),
   etf('Vanguard FTSE All-World UCITS ETF', 'IE00BK5BQT80', 'Capitalisant', 'VWCE VWRP VWRA', 'XETR:VWCE'),
-  etf('Vanguard FTSE All-World UCITS ETF', 'IE00B3RBWM25', 'Distribuant', 'VWRL VWRD', 'XSWX:VWRL'),
-  etf('iShares Core MSCI World UCITS ETF', 'IE00B4L5Y983', 'Capitalisant', 'SWDA IWDA EUNL', 'XSWX:SWDA'),
-  etf('iShares Core MSCI Emerging Markets IMI UCITS ETF', 'IE00BKM4GZ66', 'Capitalisant', 'EIMI IS3N EMIM'),
+  etf('Vanguard FTSE All-World UCITS ETF', 'IE00BK5BQT80', 'Capitalisant · cotation suisse', 'VWRA', 'XSWX:VWRA', 'CHF'),
+  etf('Vanguard FTSE All-World UCITS ETF', 'IE00B3RBWM25', 'Distribuant', 'VWRL VWRD', 'XSWX:VWRL', 'CHF'),
+  etf('iShares Core MSCI World UCITS ETF', 'IE00B4L5Y983', 'Capitalisant', 'SWDA IWDA EUNL', 'XSWX:SWDA', 'USD'),
+  etf('iShares Core MSCI Emerging Markets IMI UCITS ETF', 'IE00BKM4GZ66', 'Capitalisant', 'EIMI IS3N EMIM', 'XSWX:EIMI', 'USD'),
   etf('Amundi Core S&P 500 Swap UCITS ETF', 'LU1135865084', 'Capitalisant', 'LYP5'),
   etf('Amundi MSCI Europe UCITS ETF', 'FR0010261198', 'Capitalisant', 'LYM5 LYY5'),
   etf('Amundi Core MSCI Emerging Markets Swap UCITS ETF', 'LU2573967036', 'Capitalisant', 'LEMA'),
   etf('Amundi Core STOXX Europe 600 UCITS ETF', 'LU0908500753', 'Capitalisant', 'LYP6 MEUD'),
-  etf('Xtrackers MSCI World Industrials UCITS ETF 1C', 'IE00BM67HV82', 'Capitalisant', 'XDWI'),
+  etf('Xtrackers MSCI World Industrials UCITS ETF 1C', 'IE00BM67HV82', 'Capitalisant', 'XDWI', 'XSWX:XDWI', 'CHF'),
   ...([
     ['Bitcoin', 'BTC', 'bitcoin'], ['Ethereum', 'ETH', 'ethereum'], ['Solana', 'SOL', 'solana'],
     ['XRP', 'XRP', 'ripple'], ['Cardano', 'ADA', 'cardano'], ['Dogecoin', 'DOGE', 'dogecoin'],
@@ -50,7 +52,8 @@ export const catalog: CatalogAsset[] = [
 
 const byReference = new Map<string, CatalogAsset>()
 for (const asset of catalog) {
-  byReference.set(asset.category + '/' + asset.reference, asset)
+  const key = asset.category + '/' + asset.reference
+  if (!byReference.has(key)) byReference.set(key, asset)
   if (asset.listing) byReference.set(asset.category + '/' + asset.listing, asset)
 }
 

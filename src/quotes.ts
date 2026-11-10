@@ -3,6 +3,7 @@ import { catalogEntry, type CatalogAsset } from './catalog.ts'
 import { quoteTarget, type Mark } from './ledger.ts'
 import { dayKey, daysBefore, type FxRate } from './currency.ts'
 import { closeTimestamp, latestClosingDay, marketOpen } from './marketCalendar.ts'
+import { findSixClosing, parseSixClosings, sixEtfLine } from './sixEtf.ts'
 import { loadDailySeries, saveDailyPrices } from './database.ts'
 
 export type QuoteAsset = Pick<CatalogAsset, 'category' | 'reference' | 'name' | 'listing' | 'isin' | 'market'>
@@ -27,10 +28,10 @@ const isinPattern = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/
 const supportedCurrency = /^(CHF|EUR|USD)$/
 export const historyDays = 365
 
-async function json(url: URL, provider: string) {
+async function json(url: URL, provider: string, timeout = 9000) {
   let response: Response
   try {
-    response = await fetch(url, { signal: AbortSignal.timeout(9000), cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' })
+    response = await fetch(url, { signal: AbortSignal.timeout(timeout), cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' })
   } catch {
     throw new Error(provider + ' est inaccessible depuis ce navigateur.')
   }
@@ -67,8 +68,17 @@ function listing(asset: QuoteAsset) {
   return symbol && symbolPattern.test(symbol) && Object.hasOwn(venueCodes, mic) ? { mic, symbol, venue: venueCodes[mic] } : null
 }
 
+function isLocalApp() {
+  return typeof location !== 'undefined' && ['127.0.0.1', 'localhost', 'terminal.local'].includes(location.hostname)
+}
+
+export function hasAutomaticSixQuote(asset: QuoteAsset) {
+  return isLocalApp() && sixEtfLine(asset) !== null
+}
+
 export function quoteAccess(asset: QuoteAsset, keys: QuoteKeys) {
   if (asset.category === 'crypto') return catalogEntry(asset.category, asset.reference)?.coinId ? 'available' : 'manual'
+  if (hasAutomaticSixQuote(asset)) return 'available'
   const exchange = listing(asset)
   if (!exchange && !asset.market && !asset.isin && !isinPattern.test(asset.reference)) return 'manual'
   return keys.eodhd || (exchange?.venue === 'US' && keys.finnhub) ? 'available' : 'key'
@@ -281,6 +291,34 @@ async function equityDaily(asset: QuoteAsset, key: string, force: boolean) {
   })
 }
 
+let sixSnapshot: { at: number; result: Promise<ReturnType<typeof parseSixClosings>> } | undefined
+
+async function sixQuotes(assets: QuoteAsset[]) {
+  const at = Date.now()
+  if (!sixSnapshot || at - sixSnapshot.at >= 30 * 60000) {
+    const url = new URL('/market/six/etf-closings', location.origin)
+    const result = json(url, 'SIX Swiss Exchange', 13000).then(parseSixClosings)
+    sixSnapshot = { at, result }
+    void result.catch(() => {
+      if (sixSnapshot?.result === result) sixSnapshot = { at: Date.now() - 25 * 60000, result }
+    })
+  }
+  const snapshot = await sixSnapshot.result
+  const results = await Promise.allSettled(assets.map(async asset => {
+    const line = sixEtfLine(asset)
+    const quote = line && findSixClosing(snapshot, line)
+    const price = positive(quote?.price)
+    if (!quote || !price || quote.day > dayKey(at)) return null
+    const { rate } = await rateToCHF(quote.currency, quote.day)
+    const sourceAt = closeTimestamp('SW', quote.day)
+    if (!validTime(sourceAt)) return null
+    return marketMark(asset, price.times(rate), 'SIX · clôture', sourceAt, sourceAt, price, quote.currency, 'close', quote.symbol + '.SW')
+  }))
+  const marks = results.flatMap(result => result.status === 'fulfilled' && result.value ? [result.value] : [])
+  if (!marks.length) throw new Error('SIX : aucune clôture exploitable pour les lignes demandées.')
+  return marks
+}
+
 let eodOffset = 0
 let finnhubOffset = 0
 export const cryptoInterval = (key: string) => key ? 300000 : 60000
@@ -290,6 +328,7 @@ export async function fetchQuotes(assets: QuoteAsset[], keys: QuoteKeys,
   const unique = [...new Map(assets.map(asset => [quoteTarget(asset), asset])).values()]
   const crypto = unique.filter(asset => asset.category === 'crypto' && (force || opening
     || Date.now() - (stale.get(quoteTarget(asset))?.at ?? 0) >= cryptoInterval(keys.coingecko)))
+  const six = unique.filter(hasAutomaticSixQuote)
   const equities = unique.filter(asset => asset.category !== 'crypto' && quoteAccess(asset, keys) === 'available')
   const eligibleUS = equities.filter(asset => keys.finnhub && listing(asset)?.venue === 'US'
     && (force || opening || (marketOpen('US', Date.now()) && Date.now() - (stale.get(quoteTarget(asset))?.at ?? 0) >= 180000)))
@@ -301,6 +340,7 @@ export async function fetchQuotes(assets: QuoteAsset[], keys: QuoteKeys,
   eodOffset += eod.length
   const requests = [
     ...(crypto.length ? [cryptoQuotes(crypto, keys.coingecko)] : []),
+    ...(six.length ? [sixQuotes(six)] : []),
     ...us.map(asset => finnhubQuote(asset, keys.finnhub)),
     ...eod.map(asset => equityDaily(asset, keys.eodhd, force)),
   ]

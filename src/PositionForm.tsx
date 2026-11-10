@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import AssetPicker, { type AssetInput } from './AssetPicker'
 import { acquisitionCost, estimatedCost, parseAmount, platformKey, unitPrice, type Category, type Cost, type Position } from './portfolio'
 import { isMarketMark, quoteTarget, type Mark } from './ledger'
-import { fetchQuotes, instrumentCode, quoteAccess, quoteIsStale, quoteTiming, rateToCHF, referenceRate, type QuoteKeys } from './quotes'
+import { fetchQuotes, hasAutomaticSixQuote, instrumentCode, quoteAccess, quoteIsStale, quoteTiming, rateToCHF, referenceRate, type QuoteKeys } from './quotes'
 import { currencies, dayKey, type Currency, type CurrencyDisplay } from './currency'
 import { Decimal } from 'decimal.js'
 import { demoFxRates, demoMode } from './demo'
@@ -234,6 +234,7 @@ export default function PositionForm({ current, positions, platforms, marks, dis
                   onClick={() => setRetry(value => value + 1)} disabled={request?.loading}>{request?.loading ? 'Recherche…' : 'Vérifier le cours'}</button>}
               </div>
               {access === 'manual' && <p className="hint">{demoMode ? 'La démo utilise des cours fictifs.' : 'Cet identifiant n’est pas relié à une cotation automatique.'}</p>}
+              {!demoMode && hasAutomaticSixQuote(asset) && <p className="hint">Clôture publiée par SIX Swiss Exchange, récupérée sans clé.</p>}
               {access === 'key' && <p className="hint">Active une clé de cotation pour ce titre dans <button type="button" className="text-button" onClick={onConfigure}>Paramètres</button>.</p>}
               {request?.issue && <p className="hint" role="status">{request.issue}{quote ? ' Le dernier cours connu est affiché.' : ' Tu peux enregistrer la quantité et valoriser la position plus tard.'}</p>}
             </section>

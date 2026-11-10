@@ -92,7 +92,7 @@ export default function DataSettings({ quoteKey, onKey, onRefresh, refreshing, r
 
   return <div className="settings-grid">
     <section className="panel settings-panel"><h2>Cotations automatiques</h2>
-      <p className="hint">CoinGecko fournit les cours des cryptos du catalogue. Pour les actions et ETF, active les sources dont tu as besoin.</p>
+      <p className="hint">Les ETF pris en charge sur SIX Swiss Exchange récupèrent leur clôture sans clé lorsque l’application tourne en local. EODHD étend la couverture aux autres places et à l’historique. CoinGecko fournit les cours des cryptos du catalogue.</p>
       <form className="market-settings" onSubmit={event => {
         event.preventDefault()
         onKey({ eodhd: keyDraft.eodhd.trim(), finnhub: keyDraft.finnhub.trim(), coingecko: keyDraft.coingecko.trim() })

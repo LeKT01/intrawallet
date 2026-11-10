@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { catalogEntry, searchCatalog, type CatalogAsset } from './catalog'
-import { searchMarket } from './quotes'
+import { hasAutomaticSixQuote, searchMarket } from './quotes'
 import { categories, type Category } from './portfolio'
 
 export type AssetInput = Pick<CatalogAsset, 'category' | 'reference' | 'name' | 'listing' | 'detail' | 'aliases' | 'isin' | 'market'>
@@ -115,9 +115,9 @@ export default function AssetPicker({ category, selected, onCategory, onChoose, 
               onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void lookup() } }} />
           </label>
           <ul className="picker-list" aria-label="Actifs proposés">
-            {results.slice(0, limit).map(asset => <li key={asset.reference}>
+            {results.slice(0, limit).map(asset => <li key={asset.listing ?? asset.reference}>
               <button type="button" onClick={() => { resetCustom(); onChoose(asset) }}>
-                <strong>{asset.name}</strong><small>{assetDescription(asset)}</small>
+                <strong>{asset.name}</strong><small>{assetDescription(asset)}{hasAutomaticSixQuote(asset) ? ' · Cours SIX sans clé' : ''}</small>
               </button>
             </li>)}
           </ul>
@@ -128,7 +128,7 @@ export default function AssetPicker({ category, selected, onCategory, onChoose, 
             {marketStatus && <p className="hint" role="status">{marketStatus}</p>}
             {marketResults.length > 0 && <ul className="picker-list" aria-label="Résultats EODHD">
               {marketResults.map(asset => <li key={asset.market?.code}><button type="button" onClick={() => { resetCustom(); onChoose(asset) }}>
-                <strong>{asset.name}</strong><small>{assetDescription(asset)}</small>
+                <strong>{asset.name}</strong><small>{assetDescription(asset)}{hasAutomaticSixQuote(asset) ? ' · Cours SIX sans clé' : ''}</small>
               </button></li>)}
             </ul>}
           </div>}
