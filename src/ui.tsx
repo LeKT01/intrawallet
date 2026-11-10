@@ -12,6 +12,11 @@ const paths = {
   next: 'm9 6 6 6-6 6', back: 'm15 6-6 6 6 6', refresh: 'M20 7v5h-5 M4 17v-5h5 M5 9a8 8 0 0 1 14-2 M19 15a8 8 0 0 1-14 2',
   moon: 'M20 15A8 8 0 0 1 9 4a8 8 0 1 0 11 11Z',
   sun: 'M12 3v2 M12 19v2 M3 12h2 M19 12h2 M5.6 5.6 7 7 M17 17l1.4 1.4 M5.6 18.4 7 17 M17 7l1.4-1.4 M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0',
+  wallet: 'M19 8V5H6a2 2 0 0 0 0 4h14v10H6a2 2 0 0 1-2-2V7 M20 12h-5a2 2 0 0 0 0 4h5 M15 14h.01',
+  clock: 'M12 7v5l3 2 M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
+  buy: 'M12 4v13m-5-5 5 5 5-5 M5 20h14',
+  sell: 'M12 17V4m-5 5 5-5 5 5 M5 20h14',
+  transfer: 'M4 8h15m-4-4 4 4-4 4 M20 16H5m4-4-4 4 4 4',
 } as const
 
 export type IconName = keyof typeof paths
@@ -28,8 +33,13 @@ export function Change({ value, children }: { value: Decimal | null; children: R
   return <span className={value?.gt(0) ? 'positive' : value?.lt(0) ? 'negative' : 'muted'}>{children}</span>
 }
 
-export function Metric({ label, children, note }: { label: string; children: ReactNode; note?: ReactNode }) {
-  return <div className="metric"><span>{label}</span><strong>{children}</strong>{note && <small>{note}</small>}</div>
+export function Metric({ label, children, note, icon, emphasis = false }: {
+  label: string; children: ReactNode; note?: ReactNode; icon?: IconName; emphasis?: boolean
+}) {
+  return <div className={'metric' + (emphasis ? ' metric-emphasis' : '')}>
+    {icon && <span className="metric-icon"><Icon name={icon} /></span>}
+    <span>{label}</span><strong>{children}</strong>{note && <small>{note}</small>}
+  </div>
 }
 
 export function PanelHeading({ title, description, children }: { title: string; description?: string; children?: ReactNode }) {

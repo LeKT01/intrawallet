@@ -20,14 +20,33 @@ export function platformName(value: string, options: string[]) {
   return options.find(item => platformKey(item) === platformKey(cleaned)) ?? cleaned
 }
 
-export function useModal() {
+export function useModal(onClose: () => void) {
   const dialog = useRef<HTMLDialogElement>(null)
+  const closing = useRef<number | undefined>(undefined)
   useEffect(() => {
     const element = dialog.current
     element?.showModal()
-    return () => element?.close()
+    return () => {
+      window.clearTimeout(closing.current)
+      element?.close()
+    }
   }, [])
-  return dialog
+  function close() {
+    const element = dialog.current
+    if (closing.current !== undefined) return
+    if (!element?.open || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      element?.close()
+      onClose()
+      return
+    }
+    element.dataset.closing = ''
+    element.inert = true
+    closing.current = window.setTimeout(() => {
+      element.close()
+      onClose()
+    }, 150)
+  }
+  return { dialog, close }
 }
 
 interface Props {
@@ -44,7 +63,7 @@ interface Props {
 }
 
 export default function PositionForm({ current, positions, platforms, marks, display, currentRate, quoteKey, onConfigure, onClose, onSave }: Props) {
-  const dialog = useModal()
+  const { dialog, close } = useModal(onClose)
   const [category, setCategory] = useState<Category>(current?.category ?? 'etf')
   const [selected, setSelected] = useState<AssetInput | null>(current)
   const [custom, setCustom] = useState<AssetInput | null>(null)
@@ -207,7 +226,7 @@ export default function PositionForm({ current, positions, platforms, marks, dis
       }
 
       await onSave(entry, quote === fresh ? fresh : undefined)
-      onClose()
+      close()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'L’enregistrement a échoué. Réessaie.')
     } finally {
@@ -219,14 +238,14 @@ export default function PositionForm({ current, positions, platforms, marks, dis
   return (
     <dialog ref={dialog} aria-labelledby="position-title" onCancel={event => {
       event.preventDefault()
-      if (!savePending.current) onClose()
+      if (!savePending.current) close()
     }}>
       <form className="position-form" onSubmit={submit} noValidate>
         <header className="dialog-header">
           <div><p className="eyebrow">PORTEFEUILLE</p>
             <h2 id="position-title">{current ? 'Modifier la position' : 'Ajouter une position'}</h2>
             <p className="hint">Pour des titres ou cryptos que tu détiens déjà.</p></div>
-          <button type="button" className="icon-button" aria-label="Fermer" onClick={onClose} disabled={busy}>×</button>
+          <button type="button" className="icon-button" aria-label="Fermer" onClick={close} disabled={busy}>×</button>
         </header>
         <fieldset disabled={busy} className="form-fields">
           <div className="step"><span>1</span><h3>Choisis ton investissement</h3></div>
@@ -342,7 +361,7 @@ export default function PositionForm({ current, positions, platforms, marks, dis
         </fieldset>
         {error && <p className="error" role="alert">{error}</p>}
         <footer className="dialog-actions">
-          <button type="button" className="secondary" onClick={onClose} disabled={busy}>Annuler</button>
+          <button type="button" className="secondary" onClick={close} disabled={busy}>Annuler</button>
           <button className="primary" type="submit" disabled={busy || !asset}>{busy ? 'Enregistrement…' : 'Enregistrer la position'}</button>
         </footer>
       </form>

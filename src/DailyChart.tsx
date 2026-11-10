@@ -55,18 +55,26 @@ export default function DailyChart({ points, label, format, empty }: {
   })
   const activeCoord = coords.find(item => item?.point === active)
   const segments: NonNullable<typeof coords[number]>[][] = []
-  const path = coords.map((item, index) => {
-    if (!item) return ''
+  coords.forEach((item, index) => {
+    if (!item) return
     const previous = coords[index - 1]
     const contiguous = previous && timeOf(item.point) - timeOf(previous.point) <= (item.point.at === undefined ? 86400000 : 3600000)
     if (!contiguous) segments.push([])
     segments.at(-1)!.push(item)
-    return (contiguous ? 'L' : 'M') + item.x.toFixed(2) + ' ' + item.y.toFixed(2)
-  }).join(' ')
+  })
+  const paths = segments.map(segment => {
+    const start = segment[0]
+    return segment.slice(1).reduce((path, point, index) => {
+      const previous = segment[index]
+      const middle = ((previous.x + point.x) / 2).toFixed(2)
+      return path + ' C' + middle + ' ' + previous.y.toFixed(2) + ' ' + middle + ' ' + point.y.toFixed(2)
+        + ' ' + point.x.toFixed(2) + ' ' + point.y.toFixed(2)
+    }, 'M' + start.x.toFixed(2) + ' ' + start.y.toFixed(2))
+  })
 
   return <>
     <p className="history-readout"><strong>{format(active.value!)}</strong><span>{labelOf(active)}{active.detail ? ' · ' + active.detail : ''}</span></p>
-    <div className="chart-plot">
+    <div className="chart-plot chart-enter">
     <div className="chart-scale" aria-hidden="true">
       <span>{format(max)}</span><span>{format(min.plus(spread.div(2)))}</span><span>{format(min)}</span>
     </div>
@@ -81,12 +89,12 @@ export default function DailyChart({ points, label, format, empty }: {
       <defs><linearGradient id={fillId} x2="0" y2="100%"><stop offset="0%" stopColor="var(--accent)" stopOpacity=".22" />
         <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" /></linearGradient></defs>
       {[22, 85, 150].map(y => <line key={y} x1="24" x2="676" y1={y} y2={y} />)}
-      {segments.filter(segment => segment.length > 1).map(segment => {
-        const area = 'M' + segment[0].x + ' 150 L' + segment.map(item => item.x.toFixed(2) + ' ' + item.y.toFixed(2)).join(' L')
-          + ' L' + segment.at(-1)!.x + ' 150 Z'
+      {segments.map((segment, index) => {
+        if (segment.length < 2) return null
+        const area = paths[index] + ' L' + segment.at(-1)!.x + ' 150 L' + segment[0].x + ' 150 Z'
         return <path className="chart-area" key={segment[0].x} d={area} style={{ fill: 'url(#' + fillId + ')' }} />
       })}
-      <path d={path} className="chart-line" />
+      <path d={paths.join(' ')} className="chart-line" />
       {activeCoord && <line className="chart-crosshair" x1={activeCoord.x}
         x2={activeCoord.x} y1="22" y2="150" />}
       {coords.map(item => item && <circle key={timeOf(item.point)} cx={item.x} cy={item.y} r={active === item.point ? 5 : 3} className={active === item.point ? 'active-point' : 'chart-point'}

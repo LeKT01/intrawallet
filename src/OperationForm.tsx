@@ -23,7 +23,7 @@ interface Props {
 }
 
 export default function OperationForm({ current, initialAsset, data, platforms, marketKey, onSave, onClose }: Props) {
-  const dialog = useModal()
+  const { dialog, close } = useModal(onClose)
   const [kind, setKind] = useState<OperationKind>(current?.kind ?? 'buy')
   const [category, setCategory] = useState<Category>(current?.category ?? initialAsset?.category ?? 'etf')
   const [chosen, setChosen] = useState<AssetInput | null>(current ?? initialAsset ?? null)
@@ -81,7 +81,7 @@ export default function OperationForm({ current, initialAsset, data, platforms, 
         original: { gross: total.toFixed(), fee: costs.toFixed(), currency, rate: rate.toFixed() },
         feeUnits: kind === 'transfer' ? assetCosts.toFixed() : undefined, at, createdAt: current?.createdAt ?? now,
       })
-      onClose()
+      close()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'L’opération n’a pas pu être enregistrée.')
     } finally {
@@ -92,12 +92,12 @@ export default function OperationForm({ current, initialAsset, data, platforms, 
 
   return <dialog ref={dialog} aria-labelledby="operation-title" onCancel={event => {
     event.preventDefault()
-    if (!pending.current) onClose()
+    if (!pending.current) close()
   }}>
     <form className="position-form" onSubmit={submit} noValidate>
       <header className="dialog-header">
         <div><p className="eyebrow">JOURNAL</p><h2 id="operation-title">{current ? 'Modifier l’opération' : 'Enregistrer une opération'}</h2></div>
-        <button type="button" className="icon-button" aria-label="Fermer" onClick={onClose} disabled={busy}>×</button>
+        <button type="button" className="icon-button" aria-label="Fermer" onClick={close} disabled={busy}>×</button>
       </header>
       <fieldset disabled={busy}>
         <div className="segments" role="group" aria-label="Type d’opération">
@@ -156,7 +156,7 @@ export default function OperationForm({ current, initialAsset, data, platforms, 
           : 'Saisis le montant total pour toutes les unités, en CHF.'}</p>
       </fieldset>
       {error && <p className="error" role="alert">{error}</p>}
-      <footer className="dialog-actions"><button type="button" className="secondary" onClick={onClose} disabled={busy}>Annuler</button>
+      <footer className="dialog-actions"><button type="button" className="secondary" onClick={close} disabled={busy}>Annuler</button>
         <button type="submit" className="primary" disabled={busy || !asset}>Enregistrer l’opération</button></footer>
     </form>
   </dialog>

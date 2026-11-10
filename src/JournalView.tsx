@@ -58,7 +58,10 @@ export default function JournalView({ items, platforms, display, sales, onEdit, 
         const gain = operation?.kind === 'sell' ? sales.get(operation.id) : undefined
         const day = dayKey(item.at)
         return <li key={item.type + '/' + value.id}>
-          <span><strong>{value.name}</strong><small>{operation ? operationNames[operation.kind] : 'Acquisition initiale'} · {position?.acquiredOn ?? timestamp.format(item.at)}</small></span>
+          <span className="journal-asset">
+            <span className={'journal-icon ' + (operation?.kind ?? 'initial')}><Icon name={operation?.kind ?? 'wallet'} /></span>
+            <span><strong>{value.name}</strong><small>{operation ? operationNames[operation.kind] : 'Acquisition initiale'} · {position?.acquiredOn ?? timestamp.format(item.at)}</small></span>
+          </span>
           <span><strong>{value.platform}{operation?.destination ? ' → ' + operation.destination : ''}</strong><small>{quantity(value.quantity)} unité(s)</small></span>
           <span>
             {operation && operation.kind !== 'transfer' && <strong>{operation.original ? unitPrice(operation.original.gross, operation.original.currency)

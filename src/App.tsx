@@ -21,7 +21,7 @@ const sections = { overview: 'Vue d’ensemble', positions: 'Portefeuille', jour
   analytics: 'Analyses', platforms: 'Plateformes', data: 'Paramètres' } as const
 type Section = keyof typeof sections
 const mobileLabels: Record<Section, string> = {
-  overview: 'Vue', positions: 'Actifs', journal: 'Journal', analytics: 'Analyses', platforms: 'Places', data: 'Réglages',
+  overview: 'Vue', positions: 'Actifs', journal: 'Journal', analytics: 'Analyses', platforms: 'Comptes', data: 'Réglages',
 }
 const descriptions: Record<Section, string> = {
   overview: 'La valeur et les mouvements de tes investissements.',
@@ -292,7 +292,7 @@ export default function App() {
         <button className="brand mobile-brand" onClick={() => navigate('overview')} aria-label="Portefeuille Local, accueil">
           <span className="brand-mark"><Icon name="analytics" /></span><span>Portefeuille</span>
         </button>
-        <span className="topbar-location"><Icon name={section} />{sections[section]}</span>
+        <span className="topbar-location"><Icon name={section} /><span>Espace privé</span><Icon name="next" />{sections[section]}</span>
         <div className="topbar-actions">
           <label className="currency-picker"><span className="sr-only">Devise d’affichage</span><select aria-label="Devise d’affichage" value={display.currency}
             onChange={event => chooseCurrency(event.target.value as Currency)}>{currencies.map(currency => <option key={currency}>{currency}</option>)}</select></label>
@@ -308,7 +308,8 @@ export default function App() {
           <div><strong>Mode démo</strong><p>Portefeuille fictif · les cours de cet espace sont simulés.</p></div>
           <a className="secondary" href={demoLink(false)}>Revenir à mon portefeuille</a>
         </aside>}
-        <div className="page-title"><div><h1 ref={heading} tabIndex={-1}>{title}</h1>
+        <div className="page-title"><div><p className="page-kicker">{section === 'overview' ? 'Suivi des investissements' : 'Portefeuille Local'}</p>
+          <h1 ref={heading} tabIndex={-1}>{title}</h1>
           <p>{selectedAsset ? 'Cours de marché, positions détenues et transactions.' : descriptions[section]}</p></div></div>
         {display.currency !== 'CHF' && <p className="hint fx-note" role="status">{fxLoading && !fx ? 'Chargement des taux de change…'
           : fx ? `Taux ${demoMode ? 'simulé' : 'de référence BCE'} CHF → ${display.currency} du ${fx.date}`
@@ -316,7 +317,9 @@ export default function App() {
         <div role="status" className={message ? 'status-message toast' : 'sr-only'}>{message}</div>
         {actionError && <p className="error" role="alert">{actionError}</p>}
 
-        {!loaded ? <p className="panel blank" role="status">Ouverture du portefeuille…</p>
+        {!loaded ? <div className="panel blank loading-panel" role="status" aria-busy="true">
+          <span className="loading-line" aria-hidden="true" /><p>Ouverture du portefeuille…</p>
+        </div>
           : loaded.failed ? <div className="panel blank"><h2>Stockage local indisponible</h2><p>Autorise le stockage du site dans ton navigateur, puis recharge la page.</p></div>
           : section === 'data' ? <>
             <section className="panel preference-panel">

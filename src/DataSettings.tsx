@@ -15,14 +15,14 @@ export function ConfirmDialog({ title, description, confirm, busy, onClose, onCo
   onConfirm: () => void
   danger?: boolean
 }) {
-  const dialog = useModal()
+  const { dialog, close } = useModal(onClose)
   return <dialog ref={dialog} className="delete-dialog" aria-labelledby="confirm-title" onCancel={event => {
     event.preventDefault()
-    if (!busy) onClose()
+    if (!busy) close()
   }}>
     <h2 id="confirm-title">{title}</h2><p>{description}</p>
     <div className="dialog-actions">
-      <button className="secondary" onClick={onClose} disabled={busy} autoFocus>Annuler</button>
+      <button className="secondary" onClick={close} disabled={busy} autoFocus>Annuler</button>
       <button className={danger ? 'primary danger-button' : 'primary'} onClick={onConfirm} disabled={busy}>{confirm}</button>
     </div>
   </dialog>
