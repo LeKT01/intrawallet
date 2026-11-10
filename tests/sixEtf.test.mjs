@@ -1,5 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import childProcess from 'node:child_process'
+import os from 'node:os'
 import { createServer } from 'vite'
 import { catalogEntry } from '../src/catalog.ts'
 import { findSixClosing, parseSixClosings, sixEtfLine } from '../src/sixEtf.ts'
@@ -77,4 +79,29 @@ test('le relais SIX bascule sur le deuxième accès et partage le relevé entre 
     assert.deepEqual(await response.json(), feed)
   }
   assert.deepEqual(upstreamPaths, ['/fqs/closing.json', '/itf/fqs/delayed/closing.json'])
+})
+
+test('un délai de connexion Node déclenche la récupération du relevé via Windows', async t => {
+  const server = await createServer({ server: { host: '127.0.0.1', ws: false } })
+  t.after(() => server.close())
+  await server.listen(0)
+  const url = 'http://127.0.0.1:' + server.httpServer.address().port + '/market/six/etf-closings'
+  const fetchLocal = globalThis.fetch
+  const feed = { colNames, rowData: [row(vusa.isin, 'VUSA', 'CHF', 104, 20261109)] }
+  t.mock.method(os, 'platform', () => 'win32')
+  const upstream = t.mock.method(globalThis, 'fetch', async () => {
+    throw new TypeError('fetch failed', { cause: Object.assign(new Error('Connect Timeout Error'), { code: 'UND_ERR_CONNECT_TIMEOUT' }) })
+  })
+  const windows = t.mock.method(childProcess, 'execFile', (file, args, options, done) => {
+    assert.match(file, /\\WindowsPowerShell\\v1\.0\\powershell\.exe$/i)
+    assert.match(args.at(-1), /Invoke-WebRequest -UseBasicParsing/)
+    assert.match(args.at(-1), /https:\/\/www\.six-group\.com\/itf\/fqs\/delayed\/closing\.json/)
+    assert.equal(options.timeout, 12000)
+    done(null, '200\r\n' + JSON.stringify(feed), '')
+  })
+  const response = await fetchLocal(url)
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), feed)
+  assert.equal(upstream.mock.callCount(), 1)
+  assert.equal(windows.mock.callCount(), 1)
 })

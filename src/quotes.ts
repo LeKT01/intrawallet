@@ -297,7 +297,7 @@ async function sixQuotes(assets: QuoteAsset[], force: boolean) {
   const at = Date.now()
   if (!sixSnapshot || (sixSnapshot.failed ? force || at - sixSnapshot.at >= 60000 : at - sixSnapshot.at >= 30 * 60000)) {
     const url = new URL('/market/six/etf-closings', location.origin)
-    const result = json(url, 'Le relais local SIX', 28000).then(parseSixClosings)
+    const result = json(url, 'Le relais local SIX', 40000).then(parseSixClosings)
     sixSnapshot = { at, result }
     void result.catch(() => {
       if (sixSnapshot?.result === result) sixSnapshot = { at: Date.now(), result, failed: true }
