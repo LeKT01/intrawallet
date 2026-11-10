@@ -37,7 +37,7 @@ test('les ETF SIX se cotent sans clé avec une seule requête groupée après un
     if (url.hostname === 'api.frankfurter.dev') return Response.json([{ date: day, quote: 'USD', rate: 1.25 }])
     assert.equal(url.pathname, '/market/six/etf-closings')
     assert.equal(url.search, '')
-    if (++localRequests === 1) return new Response(null, { status: 502 })
+    if (++localRequests === 1) return new Response(null, { status: 502, headers: { 'X-SIX-Error': 'proxy-auth' } })
     return Response.json({ colNames, rowData: [
       row(vusa.isin, 'VUSA', 'CHF', 104, compactDay),
       row(nasdaq.isin, 'CSNDX', 'USD', 125, compactDay),
@@ -45,7 +45,7 @@ test('les ETF SIX se cotent sans clé avec une seule requête groupée après un
   })
   const keys = { coingecko: '', finnhub: '', eodhd: '' }
   assert.equal(quoteAccess(vusa, keys), 'available')
-  assert.match((await fetchQuotes([vusa], keys)).issues[0], /502/)
+  assert.match((await fetchQuotes([vusa], keys)).issues[0], /proxy du réseau demande une authentification \(HTTP 407\)/)
   assert.equal((await fetchQuotes([vusa], keys)).marks.length, 0)
   assert.equal(localRequests, 1)
   const result = await fetchQuotes([vusa, nasdaq], keys, { force: true })
@@ -81,7 +81,7 @@ test('le relais SIX bascule sur le deuxième accès et partage le relevé entre 
   assert.deepEqual(upstreamPaths, ['/fqs/closing.json', '/itf/fqs/delayed/closing.json'])
 })
 
-test('un délai de connexion Node déclenche la récupération du relevé via Windows', async t => {
+test('le relais Windows utilise les identifiants du proxy et signale un refus 407 persistant', async t => {
   const server = await createServer({ server: { host: '127.0.0.1', ws: false } })
   t.after(() => server.close())
   await server.listen(0)
@@ -89,19 +89,30 @@ test('un délai de connexion Node déclenche la récupération du relevé via Wi
   const fetchLocal = globalThis.fetch
   const feed = { colNames, rowData: [row(vusa.isin, 'VUSA', 'CHF', 104, 20261109)] }
   t.mock.method(os, 'platform', () => 'win32')
+  const warnings = t.mock.method(console, 'warn', () => {})
+  let attempts = 0
   const upstream = t.mock.method(globalThis, 'fetch', async () => {
+    if (++attempts === 2) return new Response(null, { status: 407 })
     throw new TypeError('fetch failed', { cause: Object.assign(new Error('Connect Timeout Error'), { code: 'UND_ERR_CONNECT_TIMEOUT' }) })
   })
   const windows = t.mock.method(childProcess, 'execFile', (file, args, options, done) => {
     assert.match(file, /\\WindowsPowerShell\\v1\.0\\powershell\.exe$/i)
     assert.match(args.at(-1), /Invoke-WebRequest -UseBasicParsing/)
     assert.match(args.at(-1), /https:\/\/www\.six-group\.com\/itf\/fqs\/delayed\/closing\.json/)
+    assert.ok(args.at(-1).includes('$proxyOptions.Proxy = $proxy.GetProxy($target)'))
+    assert.ok(args.at(-1).includes('$proxyOptions.ProxyUseDefaultCredentials = $true'))
+    assert.ok(args.at(-1).includes('-Uri $target @proxyOptions'))
+    assert.doesNotMatch(args.at(-1), /-UseDefaultCredentials/)
     assert.equal(options.timeout, 12000)
-    done(null, '200\r\n' + JSON.stringify(feed), '')
+    done(null, attempts === 1 ? '407\r\n' : '200\r\n' + JSON.stringify(feed), '')
   })
+  const rejected = await fetchLocal(url)
+  assert.equal(rejected.status, 502)
+  assert.equal(rejected.headers.get('X-SIX-Error'), 'proxy-auth')
+  assert.match(warnings.mock.calls[0].arguments[0], /authentification \(HTTP 407\)/)
   const response = await fetchLocal(url)
   assert.equal(response.status, 200)
   assert.deepEqual(await response.json(), feed)
-  assert.equal(upstream.mock.callCount(), 1)
-  assert.equal(windows.mock.callCount(), 1)
+  assert.equal(upstream.mock.callCount(), 2)
+  assert.equal(windows.mock.callCount(), 2)
 })

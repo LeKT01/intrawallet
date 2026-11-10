@@ -8,7 +8,7 @@ const sixEndpoints = ['/fqs/closing.json', '/itf/fqs/delayed/closing.json']
   .map(path => 'https://www.six-group.com' + path + sixQuery)
 
 function validateSixResponse(status: number, body: string) {
-  if (status === 429) return { status }
+  if (status === 407 || status === 429) return { status }
   if (status !== 200) throw new Error('SIX HTTP ' + status)
   const data = JSON.parse(body)
   if (!Array.isArray(data?.colNames) || !Array.isArray(data.rowData) || !data.rowData.length) {
@@ -22,8 +22,15 @@ async function fetchSixWithWindows(url: string) {
   const script = [
     "$ErrorActionPreference = 'Stop'",
     '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)',
+    "$target = [uri]'" + url + "'",
+    '$proxy = [System.Net.WebRequest]::DefaultWebProxy',
+    '$proxyOptions = @{}',
+    'if ($proxy -and !$proxy.IsBypassed($target)) {',
+    '  $proxyOptions.Proxy = $proxy.GetProxy($target)',
+    '  $proxyOptions.ProxyUseDefaultCredentials = $true',
+    '}',
     'try {',
-    "  $response = Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 -MaximumRedirection 4 -Headers @{ Accept = 'application/json' } -Uri '" + url + "'",
+    "  $response = Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 -MaximumRedirection 4 -Headers @{ Accept = 'application/json' } -Uri $target @proxyOptions",
     '  [Console]::WriteLine([int]$response.StatusCode)',
     '  [Console]::Out.Flush()',
     '  $bytes = $response.RawContentStream.ToArray()',
@@ -44,22 +51,25 @@ async function fetchSixWithWindows(url: string) {
 }
 
 async function fetchSixClosings() {
+  const onWindows = os.platform() === 'win32'
   let failure: unknown
   for (const url of sixEndpoints) {
     try {
       const upstream = await fetch(url, { signal: AbortSignal.timeout(12000), headers: { Accept: 'application/json' } })
-      return validateSixResponse(upstream.status, upstream.ok ? await upstream.text() : '')
+      if (upstream.status !== 407 || !onWindows) {
+        return validateSixResponse(upstream.status, upstream.ok ? await upstream.text() : '')
+      }
+      failure = new Error('Le proxy réseau exige une authentification (HTTP 407).')
     } catch (error) {
       failure = error
-      if (os.platform() === 'win32' && (error instanceof TypeError || (error instanceof Error && error.name === 'TimeoutError'))) {
-        try {
-          // Windows PowerShell can use the current user's Internet proxy settings.
-          return await fetchSixWithWindows(sixEndpoints[1])
-        } catch (windowsError) {
-          console.warn('[SIX] La connexion via Windows a aussi échoué.', windowsError)
-          break
-        }
-      }
+      const transportError = error instanceof TypeError || (error instanceof Error && error.name === 'TimeoutError')
+      if (!onWindows || !transportError) continue
+    }
+    try {
+      return await fetchSixWithWindows(sixEndpoints[1])
+    } catch (windowsError) {
+      console.warn('[SIX] La connexion via Windows a aussi échoué.', windowsError)
+      break
     }
   }
   console.warn('[SIX] Impossible de télécharger le relevé de clôture.', failure)
@@ -81,7 +91,14 @@ function sixClosings(): Plugin {
         const result = await pending
         body = result.body
         if (!body) {
-          response.writeHead(result.status, { 'Cache-Control': 'no-store' }).end()
+          response.setHeader('Cache-Control', 'no-store')
+          if (result.status === 407) {
+            console.warn('[SIX] Le proxy réseau exige une authentification (HTTP 407).')
+            response.setHeader('X-SIX-Error', 'proxy-auth')
+            response.writeHead(502).end()
+            return
+          }
+          response.writeHead(result.status).end()
           return
         }
       }

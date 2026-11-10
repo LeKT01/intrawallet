@@ -36,6 +36,9 @@ async function json(url: URL, provider: string, timeout = 9000) {
     throw new Error(provider + ' est inaccessible depuis ce navigateur.')
   }
   if (response.status === 429) throw new Error(provider + ' a limité les requêtes. Réessaie plus tard.')
+  if (response.status === 502 && response.headers.get('X-SIX-Error') === 'proxy-auth') {
+    throw new Error('Le proxy du réseau demande une authentification (HTTP 407). Le relais local n’a pas pu joindre SIX.')
+  }
   if ([401, 403].includes(response.status)) throw new Error(provider + ' a refusé l’accès. Vérifie la clé et la couverture de l’offre.')
   if (response.status >= 500) throw new Error(provider + ' est temporairement indisponible (HTTP ' + response.status + ').')
   if (!response.ok) throw new Error(provider + ' n’a pas renvoyé de données pour cette demande.')
