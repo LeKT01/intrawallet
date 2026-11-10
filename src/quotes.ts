@@ -219,9 +219,10 @@ export async function searchMarket(category: 'stock' | 'etf', query: string, key
       const isin = typeof ISIN === 'string' && isinPattern.test(ISIN) ? ISIN : undefined
       const known = catalogEntry(category, listing)
         ?? (Exchange === 'US' ? ['XNAS', 'XNYS', 'ARCX', 'XASE', 'BATS'].map(mic => catalogEntry(category, mic + ':' + Code)).find(Boolean) : undefined)
+      if ((known?.isin && isin && known.isin !== isin) || (known?.market && known.market.currency !== Currency)) return []
       return [{ category, name: (known?.name ?? Name.trim()).slice(0, 100), reference: known?.reference ?? (category === 'etf' && isin ? isin : listing),
         listing: known?.listing ?? listing, detail: venueNames[Exchange] + ' · ' + Code + ' · ' + Currency,
-        isin, market: { code: Code + '.' + Exchange, currency: Currency } }]
+        isin: isin ?? known?.isin, market: { code: Code + '.' + Exchange, currency: Currency } }]
     })
   }).catch(error => { searches.delete(cacheKey); throw error })
   searches.set(cacheKey, result)

@@ -114,6 +114,9 @@ export default function AssetPicker({ category, selected, onCategory, onChoose, 
               onChange={event => { setQuery(event.target.value); resetMarket() }}
               onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void lookup() } }} />
           </label>
+          {category === 'etf' && query.trim() && results.length > 1 && <p className="hint">
+            Vérifie le symbole, la place et la devise sur ton courtier. Tu peux aussi chercher par ISIN.
+          </p>}
           <ul className="picker-list" aria-label="Actifs proposés">
             {results.slice(0, limit).map(asset => <li key={asset.listing ?? asset.reference}>
               <button type="button" onClick={() => { resetCustom(); onChoose(asset) }}>

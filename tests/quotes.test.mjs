@@ -1,6 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { fetchEodSeries, fetchQuotes, searchMarket } from '../src/quotes.ts'
+import { fetchEodSeries, fetchQuotes, quoteAccess, searchMarket } from '../src/quotes.ts'
+import { searchCatalog } from '../src/catalog.ts'
+import { quoteTarget } from '../src/ledger.ts'
 import { closeTimestamp, latestClosingDay, marketOpen } from '../src/marketCalendar.ts'
 
 const eodhd = { code: 'VUAA.XETRA', currency: 'EUR' }
@@ -32,6 +34,38 @@ test('la recherche de marché conserve la place, la devise et le bon type de tit
   assert.equal(results[0].reference, etf.reference)
   assert.equal(results[0].listing, 'XETR:VUAA')
   assert.deepEqual(results[0].market, eodhd)
+})
+
+test('NQSE en EUR sur Xetra garde son propre cours, séparé du CSNDX en USD', async t => {
+  const [nqse] = searchCatalog('etf', 'NQSE')
+  const [csndx] = searchCatalog('etf', 'CSNDX')
+  assert.deepEqual(searchCatalog('etf', 'IE00BYVQ9F29'), [nqse])
+  assert.equal(nqse.listing, 'XETR:NQSE')
+  assert.deepEqual(nqse.market, { code: 'NQSE.XETRA', currency: 'EUR' })
+  assert.notEqual(quoteTarget(nqse), quoteTarget(csndx))
+  assert.equal(quoteAccess(nqse, keys), 'key')
+  assert.equal(quoteAccess(nqse, { ...keys, eodhd: 'test-nqse' }), 'available')
+
+  const listing = { Code: 'NQSE', Name: nqse.name, Exchange: 'XETRA', Currency: 'EUR', Type: 'ETF', ISIN: nqse.isin }
+  t.mock.method(globalThis, 'fetch', async url => {
+    if (url.pathname.endsWith('/search/NQSE')) return Response.json([
+      { ...listing, ISIN: csndx.isin }, { ...listing, Currency: 'USD' }, listing,
+    ])
+    if (url.hostname === 'eodhd.com') {
+      assert.match(url.pathname, /\/eod\/NQSE\.XETRA$/)
+      return Response.json([{ date: '2026-11-09', close: 16.1 }])
+    }
+    assert.equal(url.hostname, 'api.frankfurter.dev')
+    return Response.json([{ date: '2026-11-09', quote: 'EUR', rate: 1.15 }])
+  })
+  const results = await searchMarket('etf', 'NQSE', 'test-nqse')
+  assert.equal(results.length, 1)
+  assert.equal(results[0].isin, nqse.isin)
+  const [mark] = await fetchEodSeries(nqse, nqse.market, 'test-nqse', Date.parse('2026-11-10T08:00Z'))
+  assert.equal(mark.target, quoteTarget(nqse))
+  assert.equal(mark.instrument, 'NQSE.XETRA')
+  assert.equal(mark.originalPrice, '16.1')
+  assert.equal(mark.currency, 'EUR')
 })
 
 test('une clôture d’ETF conserve son prix d’origine, utilise le cours brut et ignore zéro', async t => {

@@ -97,6 +97,19 @@ test('la recherche ETF accepte le nom, l’indice compact et les symboles', () =
   assert.equal(searchCatalog('etf', 'VUSA')[0].detail, 'Distribuant')
 })
 
+test('les recherches par indice distinguent plusieurs émetteurs et classes de parts', () => {
+  const nasdaq = searchCatalog('etf', 'Nasdaq 100')
+  const sp500 = searchCatalog('etf', 'S&P500')
+  for (const [results, listings] of [
+    [nasdaq, ['XETR:NQSE', 'XSWX:CSNDX', 'XSWX:EQQQ', 'XSWX:EQAC', 'XSWX:XNAS', 'XSWX:QQQA']],
+    [sp500, ['XSWX:VUSA', 'XSWX:CSSPX', 'XSWX:SPXS', 'XSWX:XSPX', 'XSWX:SP5USY', 'XSWX:SPYL']],
+  ]) {
+    for (const listing of listings) assert.ok(results.some(asset => asset.listing === listing), listing)
+  }
+  assert.ok(searchCatalog('etf', 'S&P 500').every(asset => asset.name.includes('S&P 500')))
+  assert.notEqual(searchCatalog('etf', 'EQQQ')[0].isin, searchCatalog('etf', 'EQAC')[0].isin)
+})
+
 test('la cotation d’un ETF déjà saisi se regroupe avec son ISIN du catalogue', () => {
   const etf = { category: 'etf', name: 'Vanguard S&P 500 UCITS ETF' }
   const view = replay(data([

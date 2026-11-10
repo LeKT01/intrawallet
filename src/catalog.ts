@@ -13,7 +13,8 @@ export interface CatalogAsset {
 }
 
 function etf(name: string, reference: string, detail: string, aliases: string, listing?: string, currency?: string): CatalogAsset {
-  const market = listing?.startsWith('XSWX:') && currency ? { code: listing.slice(5) + '.SW', currency } : undefined
+  const venue = listing?.startsWith('XSWX:') ? 'SW' : listing?.startsWith('XETR:') ? 'XETRA' : undefined
+  const market = listing && venue && currency ? { code: listing.slice(5) + '.' + venue, currency } : undefined
   return { category: 'etf', name, reference, isin: reference, aliases, detail, listing, market }
 }
 
@@ -22,9 +23,21 @@ export const catalog: CatalogAsset[] = [
   etf('Vanguard S&P 500 UCITS ETF', 'IE00BFMXXD54', 'Capitalisant', 'VUAA VUAG', 'XETR:VUAA'),
   etf('Vanguard S&P 500 UCITS ETF', 'IE00B3XXRP09', 'Distribuant', 'VUSA VUSD', 'XSWX:VUSA', 'CHF'),
   etf('Vanguard S&P 500 ETF', 'US9229083632', 'Distribuant · cotation américaine', 'VOO', 'ARCX:VOO'),
-  etf('iShares Nasdaq 100 UCITS ETF', 'IE00B53SZB19', 'Capitalisant', 'CNDX CSNDX SXRV', 'XSWX:CSNDX', 'USD'),
+  etf('iShares Nasdaq 100 UCITS ETF', 'IE00B53SZB19', 'Capitalisant · SIX Swiss Exchange', 'CNDX CSNDX SXRV', 'XSWX:CSNDX', 'USD'),
   etf('iShares Core S&P 500 UCITS ETF', 'IE00B5BMR087', 'Capitalisant', 'CSPX SXR8 CSSPX', 'XSWX:CSSPX', 'USD'),
   etf('iShares Core S&P 500 UCITS ETF', 'IE0031442068', 'Distribuant', 'IUSA IDUS', 'XSWX:IUSA', 'USD'),
+  etf('iShares Nasdaq 100 UCITS ETF EUR Hedged', 'IE00BYVQ9F29', 'Capitalisant · Couvert en euros · Xetra', 'NQSE', 'XETR:NQSE', 'EUR'),
+  etf('Invesco EQQQ Nasdaq-100 UCITS ETF', 'IE0032077012', 'Distribuant', 'EQQQ', 'XSWX:EQQQ', 'USD'),
+  etf('Invesco EQQQ Nasdaq-100 UCITS ETF', 'IE00BFZXGZ54', 'Capitalisant', 'EQAC', 'XSWX:EQAC', 'USD'),
+  etf('Invesco EQQQ Nasdaq-100 UCITS ETF EUR Hedged', 'IE00BYVTMS52', 'Capitalisant · Couvert en euros', 'EQEU', 'XSWX:EQEU', 'EUR'),
+  etf('Invesco EQQQ Nasdaq-100 UCITS ETF CHF Hedged', 'IE00BYVTMT69', 'Capitalisant · Couvert en francs suisses', 'EQCH', 'XSWX:EQCH', 'CHF'),
+  etf('Invesco Nasdaq-100 Swap UCITS ETF', 'IE00BNRQM384', 'Capitalisant · Réplication synthétique', 'EQQS', 'XSWX:EQQS', 'USD'),
+  etf('Xtrackers Nasdaq 100 UCITS ETF 1C', 'IE00BMFKG444', 'Capitalisant', 'XNAS', 'XSWX:XNAS', 'CHF'),
+  etf('UBS Nasdaq-100 UCITS ETF', 'IE000SB4G4I4', 'Capitalisant', 'QQQA', 'XSWX:QQQA', 'USD'),
+  etf('Invesco S&P 500 UCITS ETF', 'IE00B3YCGJ38', 'Capitalisant · Réplication synthétique', 'SPXS', 'XSWX:SPXS', 'USD'),
+  etf('Xtrackers S&P 500 Swap UCITS ETF 1C', 'LU0490618542', 'Capitalisant · Réplication synthétique', 'XSPX', 'XSWX:XSPX', 'CHF'),
+  etf('UBS Core S&P 500 UCITS ETF', 'IE00B7K93397', 'Distribuant', 'SP5USY', 'XSWX:SP5USY', 'USD'),
+  etf('State Street SPDR S&P 500 UCITS ETF', 'IE000XZSV718', 'Capitalisant', 'SPYL', 'XSWX:SPYL', 'USD'),
   etf('Vanguard FTSE All-World UCITS ETF', 'IE00BK5BQT80', 'Capitalisant', 'VWCE VWRP VWRA', 'XETR:VWCE'),
   etf('Vanguard FTSE All-World UCITS ETF', 'IE00BK5BQT80', 'Capitalisant · cotation suisse', 'VWRA', 'XSWX:VWRA', 'CHF'),
   etf('Vanguard FTSE All-World UCITS ETF', 'IE00B3RBWM25', 'Distribuant', 'VWRL VWRD', 'XSWX:VWRL', 'CHF'),
@@ -67,8 +80,11 @@ function normalize(text: string) {
 
 export function searchCatalog(category: Category, query: string) {
   const words = normalize(query).split(' ').filter(Boolean)
+  const index = category === 'etf' ? query.match(/\b(?:s\s*&?\s*p\s*500|nasdaq[\s-]*100)\b/i)?.[0] : undefined
+  const indexName = index && normalize(index).replaceAll(' ', '')
   return catalog.filter(asset => {
     if (asset.category !== category) return false
+    if (indexName && !normalize(asset.name).replaceAll(' ', '').includes(indexName)) return false
     const searchable = normalize([asset.name, asset.reference, asset.aliases, asset.detail, asset.listing].join(' '))
     return words.every(word => searchable.includes(word))
       || searchable.replaceAll(' ', '').includes(words.join(''))
