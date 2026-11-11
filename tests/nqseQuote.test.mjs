@@ -6,6 +6,7 @@ import { dayKey } from '../src/currency.ts'
 import { replay } from '../src/ledger.ts'
 import { nqseIsin, nqseRoute, parseNqseQuote } from '../src/nqseQuote.ts'
 import { fetchQuotes, quoteAccess } from '../src/quotes.ts'
+import { tradegateRoute } from '../src/tradegateQuote.ts'
 
 test('NQSE récupère le prix Xetra en EUR sans clé et rejette une autre cotation', async t => {
   const sourceAt = Date.now() - 60000
@@ -59,16 +60,32 @@ test('VUSA Tradegate est valorisé en EUR indépendamment de la cotation SIX', a
   Object.defineProperty(globalThis, 'location', { value: new URL('http://127.0.0.1:' + server.httpServer.address().port), configurable: true })
   t.after(() => { delete globalThis.location })
   const fetchLocal = globalThis.fetch
+  let last = 128.91
+  const sourceAt = Date.parse('2025-06-10T10:00:02.123Z')
+  let tradeRequests = 0
   t.mock.method(globalThis, 'fetch', async input => {
     const url = new URL(input)
     if (url.origin === location.origin) return fetchLocal(url)
     if (url.hostname === 'api.frankfurter.dev') {
-      return Response.json([{ date: dayKey(Date.now()), quote: 'EUR', rate: 1.1 }])
+      return Response.json([{ date: dayKey(sourceAt), quote: 'EUR', rate: 1.1 }])
     }
     assert.equal(url.hostname, 'www.tradegatebsx.com')
     assert.equal(url.searchParams.get('isin'), 'IE00B3XXRP09')
-    return Response.json({ last: 128.91 })
+    if (url.pathname === '/refresh.php') return Response.json({ last })
+    assert.equal(url.pathname, '/orderbuch_umsaetze.php')
+    tradeRequests++
+    return new Response(`<table><tbody id="umsaetze_body">
+      <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>4</td><td>2,50</td></tr>
+      <tr><td>10.06.2025</td><td>12:00:02,123</td><td>4</td><td>&nbsp;</td><td>128,915</td></tr>
+      <tr><td>10.06.2025</td><td>12:00:01,001</td><td>2</td><td>&nbsp;</td><td>128,90</td></tr>
+    </tbody></table>`)
   })
+  const route = new URL(tradegateRoute, location.origin)
+  assert.equal((await (await fetchLocal(route)).json()).price, 128.91)
+  last = '128,92'
+  assert.equal((await (await fetchLocal(route)).json()).price, 128.92)
+  assert.equal(tradeRequests, 0)
+  last = null
   const tradegate = catalogEntry('etf', 'TGAT:VUSA')
   const six = catalogEntry('etf', 'XSWX:VUSA')
   const keys = { eodhd: '', finnhub: '', coingecko: '' }
@@ -76,7 +93,11 @@ test('VUSA Tradegate est valorisé en EUR indépendamment de la cotation SIX', a
   const { marks, issues } = await fetchQuotes([tradegate], keys)
   assert.deepEqual(issues, [])
   assert.equal(marks[0].target, 'etf/TGAT:VUSA')
-  assert.equal(marks[0].originalPrice, '128.91')
+  assert.equal(marks[0].originalPrice, '128.915')
+  assert.equal(marks[0].currency, 'EUR')
+  assert.equal(marks[0].sourceAt, sourceAt)
+  assert.equal(marks[0].source, 'Tradegate · transactions')
+  assert.equal(tradeRequests, 1)
   const positions = [tradegate, six].map((asset, index) => ({
     ...asset, id: String(index), platform: 'Démo', quantity: '1', createdAt: Date.now() - 2000, cost: null, valuation: null,
   }))

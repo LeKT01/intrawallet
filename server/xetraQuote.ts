@@ -29,12 +29,12 @@ async function readStream(response: Response) {
   }
 }
 
-export function fetchWithWindows(url: string, stream: boolean) {
+export function fetchWithWindows(url: string, stream: boolean, options?: { accept: string; maxBuffer: number }) {
   const powershell = win32.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
   const script = [
     "$ErrorActionPreference = 'Stop'",
     "$request = [System.Net.HttpWebRequest]::Create('" + url + "')",
-    "$request.Accept = '" + (stream ? "text/event-stream" : "application/json") + "'",
+    "$request.Accept = '" + (options?.accept ?? (stream ? "text/event-stream" : "application/json")) + "'",
     '$request.Timeout = 8000',
     '$request.ReadWriteTimeout = 8000',
     'if ($request.Proxy -and !$request.Proxy.IsBypassed($request.RequestUri)) {',
@@ -50,7 +50,7 @@ export function fetchWithWindows(url: string, stream: boolean) {
   ].join('\n')
   return new Promise<string>((resolve, reject) => {
     execFile(powershell, ['-NoProfile', '-NonInteractive', '-Command', script],
-      { timeout: 10000, maxBuffer: 32768, windowsHide: true },
+      { timeout: 10000, maxBuffer: options?.maxBuffer ?? 32768, windowsHide: true },
       (error, output) => error ? reject(error) : resolve(output))
   })
 }

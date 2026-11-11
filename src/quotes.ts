@@ -354,12 +354,14 @@ function nqseQuote(asset: QuoteAsset) {
 
 function vusaTradegateQuote(asset: QuoteAsset) {
   return cachedRequest('tradegate/vusa', 60000, async () => {
-    const quote = await json(new URL(tradegateRoute, location.origin), 'Tradegate', 21000)
+    const quote = await json(new URL(tradegateRoute, location.origin), 'Tradegate', 38000)
     const price = positive(quote?.price)
     const at = quote?.receivedAt
-    if (!price || !validTime(at)) throw new Error('Relevé Tradegate invalide pour VUSA.')
-    const { rate } = await rateToCHF('EUR', dayKey(at))
-    return [marketMark(asset, price.times(rate), 'Tradegate · relevé', at, at, price, 'EUR', 'reported', 'VUSA.TGAT')]
+    const sourceAt = quote?.sourceAt ?? at
+    if (!price || !validTime(at) || !validTime(sourceAt)) throw new Error('Relevé Tradegate invalide pour VUSA.')
+    const { rate } = await rateToCHF('EUR', dayKey(sourceAt))
+    const source = quote?.sourceAt === undefined ? 'Tradegate · relevé' : 'Tradegate · transactions'
+    return [marketMark(asset, price.times(rate), source, sourceAt, at, price, 'EUR', 'reported', 'VUSA.TGAT')]
   })
 }
 
@@ -448,6 +450,7 @@ export function quoteTiming(mark: Mark) {
   if (mark.timing === 'reported' && mark.source === 'CoinGecko') {
     return Date.now() - mark.sourceAt > 900000 ? 'Dernier cours crypto connu' : 'Cours indicatif · marché 24 h/24'
   }
+  if (mark.source === 'Tradegate · transactions') return 'Dernière transaction publiée · Tradegate'
   if (mark.source === 'Tradegate · relevé') return 'Dernier prix relevé · heure du relevé'
   if (mark.timing === 'reported') return 'Dernier cours reçu · délai variable'
   return mark.source.includes('fictif') ? 'Cours fictif' : 'Dernier cours disponible'
