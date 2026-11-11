@@ -377,7 +377,7 @@ export default function PositionForm({ current, positions, platforms, marks, dis
                   {currencies.map(currency => <option key={currency}>{currency}</option>)}
                 </select>
               </label>
-              <p className="hint full">Pour estimer le coût, recopie la valeur et le pourcentage du même relevé. Si tu laisses la valeur vide, une nouvelle estimation utilise le cours de l’application.</p>
+              <p className="hint full">Recopie la valeur et le pourcentage du même relevé pour la quantité de ce lot. Si tu as plusieurs lots, utilise le montant débité pour chacun. Si tu laisses la valeur vide, une nouvelle estimation utilise le cours de l’application.</p>
             </div>}
             <label className="cost-input">Date d’acquisition <small>facultative</small>
               <input type="date" value={purchaseDate} max={dayKey(Date.now())} onChange={event => setPurchaseDate(event.target.value)} />

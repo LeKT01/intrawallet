@@ -67,6 +67,10 @@ export default function JournalView({ items, platforms, display, sales, onEdit, 
             {operation && operation.kind !== 'transfer' && <strong>{operation.original ? unitPrice(operation.original.gross, operation.original.currency)
               : display.format(operation.gross, { day })}</strong>}
             {position?.purchase && <strong>{unitPrice(position.purchase.total, position.purchase.currency)}</strong>}
+            {position && !position.purchase && (position.cost ? <>
+              <strong>{unitPrice(position.cost.amount, 'CHF')}</strong>
+              <small>{position.cost.kind === 'estimated' ? 'Coût estimé' : 'Coût d’acquisition'}</small>
+            </> : <small>Coût non renseigné</small>)}
             {position?.purchase?.fees && position.purchase.fees !== '0' && <small>Frais {unitPrice(position.purchase.fees, position.purchase.currency)}</small>}
             {operation && operation.fee !== '0' && <small>Frais {operation.original ? unitPrice(operation.original.fee, operation.original.currency) : display.format(operation.fee, { day })}</small>}
             {operation?.feeUnits && operation.feeUnits !== '0' && <small>Frais {quantity(operation.feeUnits)} unité(s)</small>}
