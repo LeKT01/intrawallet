@@ -93,7 +93,7 @@ test('les répartitions successives conservent exactement les quantités saisies
 })
 
 test('la recherche ETF accepte le nom, l’indice compact et les symboles', () => {
-  assert.deepEqual(searchCatalog('etf', 'Vanguard S&P500 UCITS').map(item => item.detail), ['Capitalisant', 'Distribuant'])
+  assert.deepEqual(searchCatalog('etf', 'Vanguard S&P500 UCITS').map(item => item.detail), ['Capitalisant', 'Distribuant', 'Distribuant · Tradegate'])
   assert.equal(searchCatalog('etf', 'CNDX')[0].reference, 'IE00B53SZB19')
   assert.equal(searchCatalog('etf', 'VUSA')[0].detail, 'Distribuant')
 })

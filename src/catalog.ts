@@ -22,6 +22,8 @@ function etf(name: string, reference: string, detail: string, aliases: string, l
 export const catalog: CatalogAsset[] = [
   etf('Vanguard S&P 500 UCITS ETF', 'IE00BFMXXD54', 'Capitalisant', 'VUAA VUAG', 'XETR:VUAA'),
   etf('Vanguard S&P 500 UCITS ETF', 'IE00B3XXRP09', 'Distribuant', 'VUSA VUSD', 'XSWX:VUSA', 'CHF'),
+  { category: 'etf', name: 'Vanguard S&P 500 UCITS ETF', reference: 'TGAT:VUSA', isin: 'IE00B3XXRP09',
+    aliases: 'VUSA', detail: 'Distribuant · Tradegate', listing: 'TGAT:VUSA', market: { code: 'VUSA.TGAT', currency: 'EUR' } },
   etf('Vanguard S&P 500 ETF', 'US9229083632', 'Distribuant · cotation américaine', 'VOO', 'ARCX:VOO'),
   etf('iShares Nasdaq 100 UCITS ETF', 'IE00B53SZB19', 'Capitalisant · SIX Swiss Exchange', 'CNDX CSNDX SXRV', 'XSWX:CSNDX', 'USD'),
   etf('iShares Core S&P 500 UCITS ETF', 'IE00B5BMR087', 'Capitalisant', 'CSPX SXR8 CSSPX', 'XSWX:CSSPX', 'USD'),

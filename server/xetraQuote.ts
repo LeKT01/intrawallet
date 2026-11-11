@@ -29,12 +29,12 @@ async function readStream(response: Response) {
   }
 }
 
-function fetchWithWindows() {
+export function fetchWithWindows(url: string, stream: boolean) {
   const powershell = win32.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
   const script = [
     "$ErrorActionPreference = 'Stop'",
-    "$request = [System.Net.HttpWebRequest]::Create('" + endpoint + "')",
-    "$request.Accept = 'text/event-stream'",
+    "$request = [System.Net.HttpWebRequest]::Create('" + url + "')",
+    "$request.Accept = '" + (stream ? "text/event-stream" : "application/json") + "'",
     '$request.Timeout = 8000',
     '$request.ReadWriteTimeout = 8000',
     'if ($request.Proxy -and !$request.Proxy.IsBypassed($request.RequestUri)) {',
@@ -43,9 +43,9 @@ function fetchWithWindows() {
     '$response = $request.GetResponse()',
     'try {',
     '  $reader = [System.IO.StreamReader]::new($response.GetResponseStream())',
-    '  while ($null -ne ($line = $reader.ReadLine())) {',
+    ...(stream ? ['  while ($null -ne ($line = $reader.ReadLine())) {',
     "    if ($line.StartsWith('data:')) { [Console]::Write($line.Substring(5).Trim()); break }",
-    '  }',
+    '  }'] : ['  [Console]::Write($reader.ReadToEnd())']),
     '} finally { $response.Dispose() }',
   ].join('\n')
   return new Promise<string>((resolve, reject) => {
@@ -62,7 +62,7 @@ async function loadQuote() {
       return await readStream(response)
     } catch (error) {
       if (process.platform !== 'win32') throw error
-      return fetchWithWindows()
+      return fetchWithWindows(endpoint, true)
     }
   })()
   return parseNqseQuote(JSON.parse(body))

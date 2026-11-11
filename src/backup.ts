@@ -31,7 +31,7 @@ function identity(value: Record<string, unknown>) {
     && (value.isin === undefined || (typeof value.isin === 'string' && /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/.test(value.isin)))
     && (value.listing === undefined || string(value.listing, 50))
     && (value.market === undefined || (object(value.market) && typeof value.market.code === 'string'
-      && /^[A-Z0-9][A-Z0-9._-]{0,30}\.(US|SW|XETRA|PA|AS|BR|MI)$/.test(value.market.code)
+      && /^[A-Z0-9][A-Z0-9._-]{0,30}\.(US|SW|XETRA|TGAT|PA|AS|BR|MI)$/.test(value.market.code)
       && typeof value.market.currency === 'string' && /^(CHF|EUR|USD)$/.test(value.market.currency)))
 }
 

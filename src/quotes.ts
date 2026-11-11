@@ -5,6 +5,7 @@ import { dayKey, daysBefore, type FxRate } from './currency.ts'
 import { closeTimestamp, latestClosingDay, marketOpen } from './marketCalendar.ts'
 import { findSixClosing, parseSixClosings, sixEtfLine } from './sixEtf.ts'
 import { loadDailySeries, saveDailyPrices } from './database.ts'
+import { tradegateRoute } from './tradegateQuote.ts'
 import { nqseIsin, nqseRoute, parseNqseQuote } from './nqseQuote.ts'
 
 export type QuoteAsset = Pick<CatalogAsset, 'category' | 'reference' | 'name' | 'listing' | 'isin' | 'market'>
@@ -14,7 +15,7 @@ type QuoteResult = { marks: Mark[]; issues: string[]; checked: number }
 
 const venueCodes: Record<string, string> = {
   XNAS: 'US', XNYS: 'US', ARCX: 'US', XASE: 'US', BATS: 'US', US: 'US',
-  XSWX: 'SW', XETR: 'XETRA', XPAR: 'PA', XAMS: 'AS', XBRU: 'BR', XMIL: 'MI',
+  XSWX: 'SW', TGAT: 'TGAT', XETR: 'XETRA', XPAR: 'PA', XAMS: 'AS', XBRU: 'BR', XMIL: 'MI',
 }
 const venueNames: Record<string, string> = {
   US: 'États-Unis', SW: 'SIX Swiss Exchange', XETRA: 'Xetra', PA: 'Euronext Paris',
@@ -87,9 +88,15 @@ export function hasAutomaticNqseQuote(asset: QuoteAsset) {
     && (asset.market?.currency ?? 'EUR') === 'EUR'
 }
 
+export function hasAutomaticTradegateQuote(asset: QuoteAsset) {
+  return isLocalApp() && asset.category === 'etf' && asset.reference === 'TGAT:VUSA'
+    && (asset.isin ?? 'IE00B3XXRP09') === 'IE00B3XXRP09' && listing(asset)?.mic === 'TGAT'
+    && instrumentCode(asset) === 'VUSA.TGAT' && (asset.market?.currency ?? 'EUR') === 'EUR'
+}
+
 export function quoteAccess(asset: QuoteAsset, keys: QuoteKeys) {
   if (asset.category === 'crypto') return catalogEntry(asset.category, asset.reference)?.coinId ? 'available' : 'manual'
-  if (hasAutomaticSixQuote(asset) || hasAutomaticNqseQuote(asset)) return 'available'
+  if (hasAutomaticSixQuote(asset) || hasAutomaticNqseQuote(asset) || hasAutomaticTradegateQuote(asset)) return 'available'
   const exchange = listing(asset)
   if (!exchange && !asset.market && !asset.isin && !isinPattern.test(asset.reference)) return 'manual'
   return keys.eodhd || (exchange?.venue === 'US' && keys.finnhub) ? 'available' : 'key'
@@ -345,12 +352,24 @@ function nqseQuote(asset: QuoteAsset) {
   })
 }
 
+function vusaTradegateQuote(asset: QuoteAsset) {
+  return cachedRequest('tradegate/vusa', 60000, async () => {
+    const quote = await json(new URL(tradegateRoute, location.origin), 'Tradegate', 21000)
+    const price = positive(quote?.price)
+    const at = quote?.receivedAt
+    if (!price || !validTime(at)) throw new Error('Relevé Tradegate invalide pour VUSA.')
+    const { rate } = await rateToCHF('EUR', dayKey(at))
+    return [marketMark(asset, price.times(rate), 'Tradegate · relevé', at, at, price, 'EUR', 'reported', 'VUSA.TGAT')]
+  })
+}
+
 export async function fetchQuotes(assets: QuoteAsset[], keys: QuoteKeys,
   { force = false, opening = false, stale = new Map<string, Mark>() } = {}): Promise<QuoteResult> {
   const unique = [...new Map(assets.map(asset => [quoteTarget(asset), asset])).values()]
   const crypto = unique.filter(asset => asset.category === 'crypto' && (force || opening
     || Date.now() - (stale.get(quoteTarget(asset))?.at ?? 0) >= cryptoInterval(keys.coingecko)))
   const six = unique.filter(hasAutomaticSixQuote)
+  const tradegate = unique.filter(hasAutomaticTradegateQuote)
   const nqse = unique.filter(hasAutomaticNqseQuote)
   const equities = unique.filter(asset => asset.category !== 'crypto' && quoteAccess(asset, keys) === 'available')
   const eligibleUS = equities.filter(asset => keys.finnhub && listing(asset)?.venue === 'US'
@@ -358,12 +377,13 @@ export async function fetchQuotes(assets: QuoteAsset[], keys: QuoteKeys,
   const rotate = (items: QuoteAsset[], limit: number, offset: number) =>
     items.length <= limit ? items : Array.from({ length: limit }, (_, i) => items[(offset + i) % items.length])
   const us = rotate(eligibleUS, 8, finnhubOffset)
-  const eod = keys.eodhd ? rotate(equities.filter(asset => !hasAutomaticNqseQuote(asset)), 6, eodOffset) : []
+  const eod = keys.eodhd ? rotate(equities.filter(asset => !hasAutomaticNqseQuote(asset) && !hasAutomaticTradegateQuote(asset)), 6, eodOffset) : []
   finnhubOffset += us.length
   eodOffset += eod.length
   const requests = [
     ...(crypto.length ? [cryptoQuotes(crypto, keys.coingecko)] : []),
     ...(six.length ? [sixQuotes(six, force)] : []),
+    ...tradegate.map(vusaTradegateQuote),
     ...nqse.map(asset => nqseQuote(asset).catch(error => {
       if (keys.eodhd) return equityDaily(asset, keys.eodhd, force)
       throw error
@@ -428,6 +448,7 @@ export function quoteTiming(mark: Mark) {
   if (mark.timing === 'reported' && mark.source === 'CoinGecko') {
     return Date.now() - mark.sourceAt > 900000 ? 'Dernier cours crypto connu' : 'Cours indicatif · marché 24 h/24'
   }
+  if (mark.source === 'Tradegate · relevé') return 'Dernier prix relevé · heure du relevé'
   if (mark.timing === 'reported') return 'Dernier cours reçu · délai variable'
   return mark.source.includes('fictif') ? 'Cours fictif' : 'Dernier cours disponible'
 }

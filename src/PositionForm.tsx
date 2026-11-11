@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import AssetPicker, { type AssetInput } from './AssetPicker'
 import { acquisitionCost, estimatedCost, parseAmount, platformKey, unitPrice, type Category, type Cost, type Position } from './portfolio'
 import { isMarketMark, quoteTarget, type Mark } from './ledger'
-import { fetchQuotes, hasAutomaticNqseQuote, hasAutomaticSixQuote, instrumentCode, quoteAccess, quoteIsStale, quoteTiming, rateToCHF, referenceRate, type QuoteKeys } from './quotes'
+import { fetchQuotes, hasAutomaticNqseQuote, hasAutomaticSixQuote, hasAutomaticTradegateQuote, instrumentCode, quoteAccess, quoteIsStale, quoteTiming, rateToCHF, referenceRate, type QuoteKeys } from './quotes'
 import { currencies, dayKey, type Currency, type CurrencyDisplay } from './currency'
 import { Decimal } from 'decimal.js'
 import { demoFxRates, demoMode } from './demo'
@@ -297,6 +297,7 @@ export default function PositionForm({ current, positions, platforms, marks, dis
               {access === 'manual' && <p className="hint">{demoMode ? 'La démo utilise des cours fictifs.' : 'Cet identifiant n’est pas relié à une cotation automatique.'}</p>}
               {!demoMode && hasAutomaticSixQuote(asset) && <p className="hint">Clôture publiée par SIX Swiss Exchange, récupérée sans clé.</p>}
               {!demoMode && hasAutomaticNqseQuote(asset) && <p className="hint">Dernier cours Xetra publié par Deutsche Börse, récupéré sans clé.</p>}
+              {!demoMode && hasAutomaticTradegateQuote(asset) && <p className="hint">Dernier prix relevé sur Tradegate en EUR, sans clé.</p>}
               {access === 'key' && <p className="hint">Active une clé de cotation pour ce titre dans <button type="button" className="text-button" onClick={onConfigure}>Paramètres</button>.</p>}
               {request?.issue && <p className="hint" role="status">{request.issue}{quote ? ' Le dernier cours connu est affiché.' : ' Tu peux saisir la valeur affichée par ton courtier ci-dessous.'}</p>}
             </section>

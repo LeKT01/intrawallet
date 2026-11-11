@@ -51,3 +51,36 @@ test('NQSE récupère le prix Xetra en EUR sans clé et rejette une autre cotati
   assert.equal(replay({ positions: [position], operations: [], marks }, [], undefined, true).holdings[0].valuation.amount, '680.94')
   assert.equal(upstream.mock.calls.filter(call => new URL(call.arguments[0]).hostname === 'api.boerse-frankfurt.de').length, 1)
 })
+
+test('VUSA Tradegate est valorisé en EUR indépendamment de la cotation SIX', async t => {
+  const server = await createServer({ server: { host: '127.0.0.1', ws: false } })
+  t.after(() => server.close())
+  await server.listen(0)
+  Object.defineProperty(globalThis, 'location', { value: new URL('http://127.0.0.1:' + server.httpServer.address().port), configurable: true })
+  t.after(() => { delete globalThis.location })
+  const fetchLocal = globalThis.fetch
+  t.mock.method(globalThis, 'fetch', async input => {
+    const url = new URL(input)
+    if (url.origin === location.origin) return fetchLocal(url)
+    if (url.hostname === 'api.frankfurter.dev') {
+      return Response.json([{ date: dayKey(Date.now()), quote: 'EUR', rate: 1.1 }])
+    }
+    assert.equal(url.hostname, 'www.tradegatebsx.com')
+    assert.equal(url.searchParams.get('isin'), 'IE00B3XXRP09')
+    return Response.json({ last: 128.91 })
+  })
+  const tradegate = catalogEntry('etf', 'TGAT:VUSA')
+  const six = catalogEntry('etf', 'XSWX:VUSA')
+  const keys = { eodhd: '', finnhub: '', coingecko: '' }
+  assert.equal(quoteAccess(tradegate, keys), 'available')
+  const { marks, issues } = await fetchQuotes([tradegate], keys)
+  assert.deepEqual(issues, [])
+  assert.equal(marks[0].target, 'etf/TGAT:VUSA')
+  assert.equal(marks[0].originalPrice, '128.91')
+  const positions = [tradegate, six].map((asset, index) => ({
+    ...asset, id: String(index), platform: 'Démo', quantity: '1', createdAt: Date.now() - 2000, cost: null, valuation: null,
+  }))
+  const { holdings } = replay({ positions, operations: [], marks }, [], undefined, true)
+  assert.ok(holdings.find(position => position.reference === tradegate.reference).valuation)
+  assert.equal(holdings.find(position => position.reference === six.reference).valuation, null)
+})
