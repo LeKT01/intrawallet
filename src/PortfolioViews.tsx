@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import type { Decimal } from 'decimal.js'
 import AssetHistory from './AssetHistory'
 import { assetDescription } from './AssetPicker'
@@ -43,19 +43,28 @@ export function AssetBadge({ asset }: { asset: Pick<Asset, 'name' | 'category' |
   </span>
 }
 
-export function AssetTable({ assets, display, quotes, onOpen, limit }: {
-  assets: Asset[]; display: CurrencyDisplay; quotes: Map<string, Mark>; onOpen: (key: string) => void; limit?: number
+export function AssetTable({ assets, display, quotes, onOpen, limit, order }: {
+  assets: Asset[]; display: CurrencyDisplay; quotes: Map<string, Mark>; onOpen: (key: string) => void; limit?: number; order?: Sort
 }) {
   const [sort, setSort] = useState<Sort>('value')
-  const sorted = sortAssets(assets, sort).slice(0, limit)
+  const sorted = sortAssets(assets, order ?? sort).slice(0, limit)
   return <>
-    <div className="table-tools">
-      <span className="muted">{limit && assets.length > limit ? sorted.length + ' sur ' : ''}{assets.length} actif{assets.length !== 1 ? 's' : ''}</span>
+    {!order && !limit && <div className="table-tools">
+      <span className="muted">{assets.length} actif{assets.length !== 1 ? 's' : ''}</span>
       <label>Trier par <select value={sort} onChange={event => setSort(event.target.value as Sort)}>
         <option value="value">Valeur</option><option value="performance">Performance</option><option value="name">Nom</option>
       </select></label>
-    </div>
-    {sorted.length ? <table className="financial-table">
+    </div>}
+    {sorted.length ? <><ul className="mobile-positions">{sorted.map(asset => <li key={asset.key}>
+      <button type="button" onClick={() => onOpen(asset.key)}>
+        <AssetBadge asset={asset} />
+        <span className="mobile-position-name"><strong>{asset.name}</strong><small>{[assetSymbol(asset, asset.entries[0].listing), categories[asset.category]].filter(Boolean).join(' · ')}</small>
+          {!limit && <small className="mobile-quantity">{quantity(asset.quantity)} unité(s)</small>}</span>
+        <span className="mobile-position-value"><strong>{asset.priced ? display.format(asset.amount) : '—'}</strong>
+          <small><span className="sr-only">Rendement latent </span><Change value={asset.returnRate}>{percentLabel(asset.returnRate)}</Change></small>
+          {asset.entries.some(entry => entry.partiallyValued) && <small>{asset.priced ? 'Valeur partielle' : 'Cours manquant'}</small>}</span>
+      </button></li>)}</ul>
+    <table className="financial-table">
       <thead><tr><th>Actif</th><th>Quantité</th><th>Cours</th><th>Valeur</th><th>Gain latent</th><th><span className="sr-only">Fiche</span></th></tr></thead>
       <tbody>{sorted.map(asset => {
         const quote = quotes.get(asset.key)
@@ -81,30 +90,50 @@ export function AssetTable({ assets, display, quotes, onOpen, limit }: {
           <td className="open-asset"><button className="icon-button" type="button" onClick={() => onOpen(asset.key)} aria-label={'Voir ' + asset.name}><Icon name="next" /></button></td>
         </tr>
       })}</tbody>
-    </table> : <p className="inline-empty">Aucun actif pour cette sélection.</p>}
+    </table></> : <p className="inline-empty">Aucun actif pour cette sélection.</p>}
   </>
 }
 
-export function PortfolioView({ holdings, platforms, display, quotes, onOpen }: {
-  holdings: Holding[]; platforms: string[]; display: CurrencyDisplay; quotes: Map<string, Mark>; onOpen: (key: string) => void
+export function PortfolioView({ holdings, platforms, display, quotes, onOpen, onAdd }: {
+  holdings: Holding[]; platforms: string[]; display: CurrencyDisplay; quotes: Map<string, Mark>; onOpen: (key: string) => void; onAdd: () => void
 }) {
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<Category | ''>('')
   const [platform, setPlatform] = useState('')
+  const [sort, setSort] = useState<Sort>('value')
+  const [showFilters, setShowFilters] = useState(false)
+  const filtersId = useId()
   const assets = useMemo(() => consolidate(holdings.filter(holding =>
     (!category || holding.category === category) && (!platform || platformKey(holding.platform) === platform))), [holdings, category, platform])
-  return <section className="panel table-panel">
-    <PanelHeading title="Positions consolidées" description="Les quantités et les montants suivent les filtres. La fiche de l’actif présente toutes ses plateformes." />
-    <div className="filter-bar">
-      <label>Rechercher un actif<input type="search" placeholder="Nom, symbole ou ISIN" value={query} onChange={event => setQuery(event.target.value)} /></label>
-      <label>Catégorie<select value={category} onChange={event => setCategory(event.target.value as Category | '')}>
-        <option value="">Toutes les catégories</option>{categoryEntries.map(([key]) => <option key={key} value={key}>{categoryLabels[key]}</option>)}
-      </select></label>
-      <label>Plateforme<select value={platform} onChange={event => setPlatform(event.target.value)}>
-        <option value="">Toutes les plateformes</option>{platforms.map(name => <option key={name} value={platformKey(name)}>{name}</option>)}
-      </select></label>
+  return <section className="panel table-panel portfolio-panel">
+    <PanelHeading title="Positions consolidées">
+      <button className="primary portfolio-add" onClick={onAdd}><Icon name="plus" /> Ajouter un investissement</button>
+    </PanelHeading>
+    <div className="portfolio-filters">
+      <label className="portfolio-search"><span className="sr-only">Rechercher un actif</span>
+        <input type="search" placeholder="Nom, symbole ou ISIN" value={query} onChange={event => setQuery(event.target.value)} />
+      </label>
+      <div className="category-chips" role="group" aria-label="Catégorie">
+        <button className="secondary" type="button" aria-pressed={!category} onClick={() => setCategory('')}>Tous</button>
+        {categoryEntries.map(([key]) => <button className="secondary" type="button" key={key} aria-pressed={category === key}
+          onClick={() => setCategory(key)}>{categoryLabels[key]}</button>)}
+      </div>
+      <button type="button" className="secondary portfolio-filter-button" aria-expanded={showFilters} aria-controls={filtersId}
+        onClick={() => setShowFilters(value => !value)}><Icon name="data" /> Filtrer{(platform || sort !== 'value') && <>
+          <span className="filter-active" aria-hidden="true" /><span className="sr-only">Options actives</span>
+        </>}</button>
+      <div id={filtersId} hidden={!showFilters} className="portfolio-filter-options">
+        <div className="filter-bar">
+          <label>Plateforme<select value={platform} onChange={event => setPlatform(event.target.value)}>
+            <option value="">Toutes les plateformes</option>{platforms.map(name => <option key={name} value={platformKey(name)}>{name}</option>)}
+          </select></label>
+          <label>Trier par<select value={sort} onChange={event => setSort(event.target.value as Sort)}>
+            <option value="value">Valeur</option><option value="performance">Performance</option><option value="name">Nom</option>
+          </select></label>
+        </div>
+      </div>
     </div>
-    <AssetTable assets={assets.filter(asset => matchesAsset(asset, query))} display={display} quotes={quotes} onOpen={onOpen} />
+    <AssetTable assets={assets.filter(asset => matchesAsset(asset, query))} display={display} quotes={quotes} onOpen={onOpen} order={sort} />
   </section>
 }
 

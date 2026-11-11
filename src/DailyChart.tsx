@@ -24,7 +24,7 @@ export function inPeriod<T extends { date: string }>(points: T[], days: number) 
 }
 
 export function PeriodButtons({ range, choose, minimumDays = 1 }: { range: number; choose: (days: number) => void; minimumDays?: number }) {
-  return <div className="segments" role="group" aria-label="Période">
+  return <div className="segments period-segments" role="group" aria-label="Période">
     {periods.filter(period => period.days >= minimumDays).map(period => <button type="button" key={period.label} className="secondary segment-button"
       aria-pressed={range === period.days} onClick={() => choose(period.days)}>{period.label}</button>)}
   </div>
@@ -44,6 +44,11 @@ export default function DailyChart({ points, label, format, empty }: {
   const active = points.find(point => timeOf(point) === selectedTime && point.value !== null)
     ?? [...points].reverse().find(point => point.value !== null)
   if (!values.length || !active || !first || !last) return <p className="history-empty">{empty}</p>
+  if (values.length === 1) return <div className="history-empty single-reading">
+    <strong>{format(active.value!)}</strong>
+    <span>{labelOf(active)}{active.detail ? ' · ' + active.detail : ''}</span>
+    <p>L’historique se construit. Un seul relevé est disponible sur cette période.</p>
+  </div>
   const min = values.reduce((total, value) => Decimal.min(total, value), values[0])
   const max = values.reduce((total, value) => Decimal.max(total, value), values[0])
   const spread = max.minus(min)
@@ -78,7 +83,7 @@ export default function DailyChart({ points, label, format, empty }: {
     <div className="chart-scale" aria-hidden="true">
       <span>{format(max)}</span><span>{format(min.plus(spread.div(2)))}</span><span>{format(min)}</span>
     </div>
-    <svg className="history-chart" viewBox="0 0 700 175" preserveAspectRatio="none" role="group" aria-label={label}
+    <svg className={values.length <= 3 ? 'history-chart compact-chart' : 'history-chart'} viewBox="0 0 700 175" preserveAspectRatio="none" role="group" aria-label={label}
       onPointerMove={event => {
         const bounds = event.currentTarget.getBoundingClientRect()
         const pointer = (event.clientX - bounds.left) * 700 / bounds.width
@@ -110,6 +115,5 @@ export default function DailyChart({ points, label, format, empty }: {
         <title>{labelOf(item.point) + ' · ' + format(item.point.value!)}</title></circle>)}
     </svg></div>
     <div className="history-axis"><span>{labelOf(first)}</span><span>{first !== last && labelOf(last)}</span></div>
-    {values.length === 1 && <p className="hint">La courbe se dessinera à partir de deux relevés valorisés.</p>}
   </>
 }

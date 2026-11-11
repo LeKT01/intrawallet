@@ -20,7 +20,7 @@ export default function HistoryChart({ history, selection, display, range, choos
   const id = useId()
   const [metric, setMetric] = useState<'value' | 'result'>('value')
   const recent = history.at(-1)
-  const { points, first, last, change: periodChange } = selection
+  const { points, first, last } = selection
   const result = recent?.result ?? null
   const flow = recent?.netFlows ?? null
   const graph = points.map(point => ({
@@ -43,12 +43,9 @@ export default function HistoryChart({ history, selection, display, range, choos
       <div><h2 id={id}>Évolution du portefeuille</h2><p className="hint">{range === 1 ? 'Relevés horodatés enregistrés dans les dernières 24 heures.' : 'Relevés quotidiens et estimations lorsque les cours nécessaires sont disponibles.'}</p></div>
       <PeriodButtons range={range} choose={chooseRange} />
     </div>
-    <div className="period-result"><span>Résultat sur les relevés de la période</span>
-      <strong className={periodChange?.gt(0) ? 'positive' : periodChange?.lt(0) ? 'negative' : ''}>
-        {periodChange === null ? '—' : display.format(periodChange, { day: last?.date, signed: true })}
-      </strong>
-      {periodChange !== null && first && last && <small>{range === 1 ? 'Dernières 24 h · ' : formatDay(first.date) + ' → ' + formatDay(last.date) + ' · '}Hors flux d’achat, de vente et d’ouverture de position</small>}
-    </div>
+    <p className="hint history-coverage">{first && last && first !== last
+      ? (range === 1 ? 'Relevés des dernières 24 h' : 'Résultat mesuré du ' + formatDay(first.date) + ' au ' + formatDay(last.date)) + ' · hors flux d’achat, de vente et d’ouverture.'
+      : 'La performance sur la période nécessite deux relevés comparables. Les apports et retraits sont neutralisés.'}</p>
     <div className="segments history-toggle"  role="group" aria-label="Indicateur">
       <button type="button" className="secondary segment-button" aria-pressed={metric === 'value'} onClick={() => setMetric('value')}>Valeur</button>
       <button type="button" className="secondary segment-button" aria-pressed={metric === 'result'} onClick={() => setMetric('result')}>Performance</button>
@@ -57,6 +54,7 @@ export default function HistoryChart({ history, selection, display, range, choos
       format={value => (metric === 'result' && value.gt(0) ? '+' : '') + money(value, 2, display.currency)}
       empty={range === 1 ? 'Aucun relevé complet dans les dernières 24 heures.' : metric === 'value' ? 'La courbe apparaîtra avec une valorisation complète et un taux disponible.'
         : 'Le calcul nécessite une valorisation complète et des montants investis connus.'} />
+    <details className="history-details"><summary>Détails du calcul</summary>
     <div className="history-stats">
       <span>Flux nets suivis <strong>{flow === null ? '—' : display.format(flow, { day: recent?.date, signed: true })}</strong></span>
       <span>Résultat depuis le début du suivi <strong>{result === null ? '—' : display.format(result, { day: recent?.date, signed: true })}</strong></span>
@@ -65,6 +63,7 @@ export default function HistoryChart({ history, selection, display, range, choos
     {range !== 1 && graph.some((point, index) => point.value === null
       || (index > 0 && graph[index - 1].date !== daysBefore(point.date, 1))) && <p className="hint">Les jours aux données incomplètes sont laissés vides.</p>}
     {points.some(point => point.usesNonMarketPrices) && <p className="hint">Certains relevés historiques utilisent des prix déclarés ou d’opération. Les cours de marché sont prioritaires pour la valorisation actuelle.</p>}
+    </details>
     {range !== 1 && points.length > 0 && <details className="daily-table"><summary>Voir les chiffres par jour</summary>
       <div className="daily-table-scroll"><table>
         <thead><tr><th>Date</th><th>Valeur</th><th>Résultat du jour</th><th>Résultat cumulé</th><th>Source</th></tr></thead>

@@ -20,9 +20,8 @@ import { Icon } from './ui'
 const sections = { overview: 'Vue d’ensemble', positions: 'Portefeuille', journal: 'Transactions',
   analytics: 'Analyses', platforms: 'Plateformes', data: 'Paramètres' } as const
 type Section = keyof typeof sections
-const mobileLabels: Record<Section, string> = {
-  overview: 'Vue', positions: 'Actifs', journal: 'Journal', analytics: 'Analyses', platforms: 'Comptes', data: 'Réglages',
-}
+const mobilePrimary = { overview: 'Accueil', positions: 'Portefeuille', analytics: 'Analyses' } as const
+const mobileSecondary = ['journal', 'platforms', 'data'] as const
 const descriptions: Record<Section, string> = {
   overview: 'La valeur et les mouvements de tes investissements.',
   positions: 'Tes actions, ETF et cryptomonnaies, regroupés par actif.',
@@ -33,7 +32,7 @@ const descriptions: Record<Section, string> = {
 }
 const emptyData: PortfolioData = { positions: [], operations: [], marks: [] }
 const quoteInterval = 60000
-type Theme = 'light' | 'dark'
+type Theme = 'light' | 'dark' | 'system'
 type Route = { section: Section; asset?: string }
 
 function readRoute(): Route {
@@ -49,7 +48,7 @@ function initialTheme(): Theme {
     const stored = localStorage.getItem('portefeuille.theme')
     if (stored === 'light' || stored === 'dark') return stored
   } catch { /* Use system preference. */ }
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  return 'system'
 }
 
 function initialAutoRefresh() {
@@ -74,6 +73,7 @@ export default function App() {
   const [refreshStatus, setRefreshStatus] = useState('')
   const [lastChecked, setLastChecked] = useState<number | null>(null)
   const heading = useRef<HTMLHeadingElement>(null)
+  const moreSheet = useRef<HTMLDialogElement>(null)
   const quotePending = useRef(false)
   const lastAuto = useRef(0)
 
@@ -222,7 +222,11 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const apply = () => { document.documentElement.dataset.theme = theme === 'system' ? (media.matches ? 'dark' : 'light') : theme }
+    apply()
+    media.addEventListener('change', apply)
+    return () => media.removeEventListener('change', apply)
   }, [theme])
 
   useEffect(() => {
@@ -237,6 +241,7 @@ export default function App() {
   }
 
   function navigate(destination: Section, asset?: string) {
+    moreSheet.current?.close()
     const hash = '#' + destination + (asset ? '/' + encodeURIComponent(asset) : '')
     if (location.hash !== hash) location.hash = hash
     setActionError('')
@@ -283,10 +288,27 @@ export default function App() {
       <nav aria-label="Navigation principale">
         {(Object.keys(sections) as Section[]).map(item => <button type="button" key={item} className={section === item ? 'selected' : ''}
           aria-current={section === item ? 'page' : undefined} aria-label={sections[item]} onClick={() => navigate(item)}><Icon name={item} />
-          <span className="desktop-nav-label">{sections[item]}</span><span className="mobile-nav-label">{mobileLabels[item]}</span></button>)}
+          <span>{sections[item]}</span></button>)}
       </nav>
       <div className="sidebar-footer"><Icon name="lock" /><div><strong>Stockage local</strong><small>Sur cet appareil</small></div></div>
     </aside>
+    <nav className="mobile-nav" aria-label="Navigation mobile">
+      {(Object.entries(mobilePrimary) as [keyof typeof mobilePrimary, string][]).map(([item, label]) =>
+        <button type="button" key={item} aria-current={section === item ? 'page' : undefined} onClick={() => navigate(item)}>
+          <Icon name={item} /><span>{label}</span>
+        </button>)}
+      <button type="button" className={mobileSecondary.some(item => section === item) ? 'selected' : undefined}
+        aria-haspopup="dialog" aria-controls="more-sheet" onClick={() => moreSheet.current?.showModal()}><Icon name="more" /><span>Plus</span></button>
+    </nav>
+    <dialog id="more-sheet" className="mobile-sheet" ref={moreSheet} aria-labelledby="more-title"
+      onClick={event => { if (event.target === event.currentTarget) event.currentTarget.close() }}>
+      <div className="sheet-content">
+        <div className="section-heading"><h2 id="more-title">Plus</h2><button className="icon-button" aria-label="Fermer le menu"
+          onClick={() => moreSheet.current?.close()}><Icon name="close" /></button></div>
+        {mobileSecondary.map(item => <button type="button" key={item} className="sheet-link" aria-current={section === item ? 'page' : undefined}
+          onClick={() => navigate(item)}><Icon name={item} /><span>{sections[item]}</span><Icon name="next" /></button>)}
+      </div>
+    </dialog>
     <div className="workspace">
       <header className="topbar">
         <button className="brand mobile-brand" onClick={() => navigate('overview')} aria-label="IntraWallet, accueil">
@@ -296,10 +318,8 @@ export default function App() {
         <div className="topbar-actions">
           <label className="currency-picker"><span className="sr-only">Devise d’affichage</span><select aria-label="Devise d’affichage" value={display.currency}
             onChange={event => chooseCurrency(event.target.value as Currency)}>{currencies.map(currency => <option key={currency}>{currency}</option>)}</select></label>
-          <button className="icon-button theme-button" onClick={() => chooseTheme(theme === 'dark' ? 'light' : 'dark')}
-            aria-label={theme === 'dark' ? 'Activer le mode clair' : 'Activer le mode sombre'}><Icon name={theme === 'dark' ? 'sun' : 'moon'} /></button>
-          <button className="primary header-add" aria-label="Ajouter un investissement" disabled={!ready} onClick={() => setEditor('new')}><Icon name="plus" />
-            <span className="wide-label">Ajouter un investissement</span><span className="short-label">Ajouter</span></button>
+          {(section !== 'positions' || selectedAsset) && <button className="primary header-add" disabled={!ready}
+            onClick={() => setEditor('new')}><Icon name="plus" /> Ajouter un investissement</button>}
         </div>
       </header>
 
@@ -308,7 +328,7 @@ export default function App() {
           <div><strong>Mode démo</strong><p>Portefeuille fictif · les cours de cet espace sont simulés.</p></div>
           <a className="secondary" href={demoLink(false)}>Revenir à mon portefeuille</a>
         </aside>}
-        <div className="page-title"><div><p className="page-kicker">{section === 'overview' ? 'Suivi des investissements' : 'IntraWallet'}</p>
+        <div className="page-title"><div>
           <h1 ref={heading} tabIndex={-1}>{title}</h1>
           <p>{selectedAsset ? 'Cours de marché, positions détenues et transactions.' : descriptions[section]}</p></div></div>
         {display.currency !== 'CHF' && <p className="hint fx-note" role="status">{fxLoading && !fx ? 'Chargement des taux de change…'
@@ -323,10 +343,12 @@ export default function App() {
           : loaded.failed ? <div className="panel blank"><h2>Stockage local indisponible</h2><p>Autorise le stockage du site dans ton navigateur, puis recharge la page.</p></div>
           : section === 'data' ? <>
             <section className="panel preference-panel">
-              <h2>Préférences</h2><div className="filter-bar">
-                <label>Thème<select value={theme} onChange={event => chooseTheme(event.target.value as Theme)}><option value="light">Clair</option><option value="dark">Sombre</option></select></label>
+              <h2>Apparence</h2><div className="filter-bar">
+                <label>Thème<select value={theme} onChange={event => chooseTheme(event.target.value as Theme)}><option value="light">Clair</option><option value="dark">Sombre</option><option value="system">Système</option></select></label>
                 <label>Devise du portefeuille<select value={display.currency} onChange={event => chooseCurrency(event.target.value as Currency)}>
                   {currencies.map(currency => <option key={currency}>{currency}</option>)}</select></label>
+              </div>
+              <h2>Cotations</h2><div className="filter-bar">
                 <label>Actualisation des cours<select value={autoRefresh ? 'auto' : 'manual'} disabled={demoMode} onChange={event => {
                   const enabled = event.target.value === 'auto'
                   setAutoRefresh(enabled)
@@ -351,14 +373,14 @@ export default function App() {
             journal={<JournalView {...journalProps} items={journal.filter(item => quoteTarget(item.value) === selectedAsset.key)} filters={false} />} />
           : !journal.length ? <section className="panel empty start-card"><span className="empty-icon"><Icon name="positions" /></span>
             <h2>Ajoute ton premier investissement</h2><p>Rassemble les actifs que tu détiens déjà pour suivre leur valeur et tes performances.</p>
-            <div className="empty-actions"><button className="primary" onClick={() => setEditor('new')}><Icon name="plus" /> Ajouter une position</button>
+            <div className="empty-actions"><button className="primary" onClick={() => setEditor('new')}><Icon name="plus" /> Ajouter un investissement</button>
               {!demoMode && <a className="secondary" href={demoLink(true)}>Ouvrir la démo</a>}</div>
           </section>
-          : section === 'positions' ? <PortfolioView holdings={holdings} platforms={platforms} display={display} quotes={marketByAsset} onOpen={openAsset} />
+          : section === 'positions' ? <PortfolioView holdings={holdings} platforms={platforms} display={display} quotes={marketByAsset} onOpen={openAsset} onAdd={() => setEditor('new')} />
           : <Dashboard assets={assets} holdings={holdings} platforms={activePlatforms} history={history}
             intraday={loaded.view.intraday} display={display} quotes={marketByAsset} realized={loaded.view.realized} unknownSales={loaded.view.unknownSales}
             lastChecked={lastChecked} refreshing={refreshing} refreshStatus={refreshStatus} demo={demoMode}
-            onRefresh={() => void refreshQuotes(true)} onOpen={openAsset} onPortfolio={() => navigate('positions')} onAnalytics={() => navigate('analytics')} />}
+            onRefresh={() => void refreshQuotes(true)} onOpen={openAsset} onPortfolio={() => navigate('positions')} />}
       </main>
     </div>
     {editor !== null && <PositionForm current={editor === 'new' ? null : editor} positions={data.positions}
