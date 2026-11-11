@@ -4,7 +4,7 @@ import AssetHistory from './AssetHistory'
 import { assetDescription } from './AssetPicker'
 import type { DailySeries } from './database'
 import { catalogEntry } from './catalog'
-import type { Currency, CurrencyDisplay } from './currency'
+import { currencies, type Currency, type CurrencyDisplay } from './currency'
 import { assetChartMarks, type Holding, type Mark, type PortfolioData } from './ledger'
 import { categories, consolidate, platformKey, quantity, summarize, unitPrice, type Category } from './portfolio'
 import { quoteIsStale, quoteTiming } from './quotes'
@@ -60,6 +60,7 @@ export function AssetTable({ assets, display, quotes, onOpen, limit }: {
       <tbody>{sorted.map(asset => {
         const quote = quotes.get(asset.key)
         const price = asset.entries[0].unitPrice
+        const quoteCurrency = currencies.find(code => code === quote?.currency)
         return <tr key={asset.key}>
           <th scope="row"><button type="button" className="asset-link" onClick={() => onOpen(asset.key)}>
             <AssetBadge asset={asset} /><span><strong>{asset.name}</strong>
@@ -67,13 +68,16 @@ export function AssetTable({ assets, display, quotes, onOpen, limit }: {
           </button></th>
           <td data-label="Quantité">{quantity(asset.quantity)}</td>
           <td data-label="Cours">{price === null ? '—' : display.format(price, { unit: true })}
+            {quote && <small>{[quote.instrument, quote.originalPrice && quoteCurrency && quoteCurrency !== display.currency
+              ? unitPrice(quote.originalPrice, quoteCurrency) : null, quote.source].filter(Boolean).join(' · ')}</small>}
             {asset.entries[0].usesManualValuation && <small>Prix unitaire estimé</small>}
             {quote && quoteIsStale(quote) && <small className="stale-label">Cours ancien</small>}</td>
           <td data-label="Valeur"><strong>{asset.priced ? display.format(asset.amount) : '—'}</strong>
             {asset.entries.some(entry => entry.usesManualValuation) && <small>Saisie manuelle incluse</small>}
             {asset.entries.some(entry => entry.partiallyValued) && <small>{asset.priced ? 'Partielle' : 'En attente de cours'}</small>}</td>
           <td data-label="Gain latent"><Change value={asset.gain}>{asset.gain === null ? '—' : display.format(asset.gain, { signed: true })}
-            {asset.returnRate !== null && <small>{percentLabel(asset.returnRate)}</small>}</Change></td>
+            {asset.returnRate !== null && <small>{percentLabel(asset.returnRate)}</small>}</Change>
+            {asset.estimated && <small>Coût estimé</small>}</td>
           <td className="open-asset"><button className="icon-button" type="button" onClick={() => onOpen(asset.key)} aria-label={'Voir ' + asset.name}><Icon name="next" /></button></td>
         </tr>
       })}</tbody>

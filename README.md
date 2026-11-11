@@ -1,4 +1,4 @@
-# Portefeuille Local
+# IntraWallet
 
 Application de suivi local pour les actions, ETF et cryptos, avec regroupement par actif et par plateforme. La devise de référence est le CHF. Le sélecteur du portefeuille affiche aussi les montants en EUR ou USD. Les achats et transactions peuvent être saisis en CHF, EUR ou USD. Le coût d’origine est conservé.
 

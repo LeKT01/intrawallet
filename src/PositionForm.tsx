@@ -77,9 +77,13 @@ export default function PositionForm({ current, positions, platforms, marks, dis
     current?.cost?.kind === 'exact' ? 'exact' : current?.cost ? 'percent' : 'none',
   )
   const [costInput, setCostInput] = useState(current?.cost?.kind === 'estimated'
-    ? current.cost.initialPercent : current?.purchase?.unit ?? '')
+    ? current.cost.initialPercent : current?.purchase?.unit
+      ?? (current?.purchase ? new Decimal(current.purchase.total).minus(current.purchase.fees ?? '0').toFixed() : ''))
+  const [totalCostInput, setTotalCostInput] = useState(Boolean(current?.purchase && !current.purchase.unit))
+  const [brokerValueInput, setBrokerValueInput] = useState('')
+  const [brokerCurrency, setBrokerCurrency] = useState<Currency>(display.currency)
   const [fees, setFees] = useState(current?.purchase?.fees ?? '')
-  const [keepCost, setKeepCost] = useState(Boolean(current?.cost?.kind === 'exact' && !current.purchase?.unit))
+  const [keepCost, setKeepCost] = useState(Boolean(current?.cost?.kind === 'exact' && !current.purchase))
   const [previewRate, setPreviewRate] = useState<{ key: string; rate: Decimal | null }>()
   const [confirmedInstrument, setConfirmedInstrument] = useState(false)
   const [error, setError] = useState('')
@@ -149,13 +153,17 @@ export default function PositionForm({ current, positions, platforms, marks, dis
   }, [costMode, keepCost, purchaseCurrency, purchaseDay, rateKey])
 
   const purchaseRate = purchaseCurrency === 'CHF' ? new Decimal(1) : savedRate ?? (previewRate?.key === rateKey ? previewRate.rate : null)
-  const purchaseTotal = qty?.gt(0) && enteredCost?.gte(0) && fee?.gte(0) ? acquisitionCost(qty, enteredCost, fee) : null
+  const purchaseTotal = qty?.gt(0) && enteredCost?.gte(0) && fee?.gte(0)
+    ? totalCostInput ? enteredCost.plus(fee) : acquisitionCost(qty, enteredCost, fee) : null
+  const brokerValue = parseAmount(brokerValueInput)
+  const brokerRate = brokerValueInput.trim() ? currentRate(brokerCurrency) : null
+  const estimateValue = brokerValueInput.trim() ? brokerValue?.gt(0) && brokerRate ? brokerValue.times(brokerRate) : null : currentValue
   const sameEstimate = costMode === 'percent' && sameAsset && current.cost?.kind === 'estimated'
-    && enteredCost?.eq(current.cost.initialPercent)
+    && enteredCost?.eq(current.cost.initialPercent) && !brokerValueInput.trim()
   const estimate = costMode === 'percent' && enteredCost?.gt(-100)
     ? sameEstimate && current?.cost?.kind === 'estimated'
       ? current.cost.amount
-      : currentValue?.gt(0) ? estimatedCost(currentValue, enteredCost).toFixed() : null
+      : estimateValue?.gt(0) ? estimatedCost(estimateValue, enteredCost).toFixed() : null
     : null
 
   const basis = costMode === 'exact' ? keepCost && current?.cost ? new Decimal(current.cost.amount)
@@ -179,9 +187,13 @@ export default function PositionForm({ current, positions, platforms, marks, dis
     if (purchaseDate && (!/^\d{4}-\d{2}-\d{2}$/.test(purchaseDate) || purchaseDate > dayKey(Date.now()))) {
       return setError('Choisis une date d’acquisition valide, au plus tard aujourd’hui.')
     }
-    if (costMode === 'exact' && !keepCost && !purchaseTotal) return setError('Indique un prix unitaire et des frais positifs ou nuls.')
+    if (costMode === 'exact' && !keepCost && !purchaseTotal) return setError('Indique un prix d’achat et des frais positifs ou nuls.')
     if (costMode === 'percent' && !enteredCost?.gt(-100)) {
       return setError('Indique un pourcentage supérieur à −100 %. Pour une perte totale, saisis le coût d’acquisition.')
+    }
+    if (costMode === 'percent' && brokerValueInput.trim()) {
+      if (!brokerValue?.gt(0)) return setError('Indique une valeur du courtier supérieure à zéro.')
+      if (!brokerRate) return setError('Taux de change indisponible pour la devise du courtier.')
     }
     if (costMode === 'percent' && !estimate) return setError('Il faut une valeur de position positive pour estimer le coût.')
 
@@ -196,13 +208,13 @@ export default function PositionForm({ current, positions, platforms, marks, dis
       } else if (costMode === 'exact' && enteredCost && purchaseTotal && fee) {
         const rate = purchaseRate ?? (!demoMode ? (await rateToCHF(purchaseCurrency, purchaseDay)).rate : null)
         if (!rate) throw new Error('Taux de change indisponible pour cette acquisition.')
-        purchase = { total: purchaseTotal.toFixed(), unit: enteredCost.toFixed(), fees: fee.toFixed(),
+        purchase = { total: purchaseTotal.toFixed(), unit: totalCostInput ? undefined : enteredCost.toFixed(), fees: fee.toFixed(),
           currency: purchaseCurrency, date: purchaseDate || undefined, rate: rate.toFixed() }
         cost = { kind: 'exact', amount: purchaseTotal.times(rate).toFixed() }
       }
       if (costMode === 'percent' && estimate && enteredCost) {
         cost = sameEstimate && current?.cost?.kind === 'estimated' ? current.cost : {
-          kind: 'estimated', amount: estimate, initialPercent: enteredCost.toFixed(), initialValue: currentValue!.toFixed(),
+          kind: 'estimated', amount: estimate, initialPercent: enteredCost.toFixed(), initialValue: estimateValue!.toFixed(),
         }
       }
 
@@ -259,6 +271,7 @@ export default function PositionForm({ current, positions, platforms, marks, dis
               setRetry(0)
               setManualInput(previousManual?.amount ?? '')
               setManualCurrencyChoice(previousManual?.currency)
+              setBrokerValueInput('')
             }} onCustom={item => {
               setCustom(item)
               setConfirmedInstrument(false)
@@ -320,15 +333,23 @@ export default function PositionForm({ current, positions, platforms, marks, dis
                 <label key={mode}><input type="radio" name="costMode" checked={costMode === mode} onChange={() => {
                   setCostMode(mode)
                   setCostInput(mode === 'percent' && current?.cost?.kind === 'estimated' ? current.cost.initialPercent
-                    : mode === 'exact' ? current?.purchase?.unit ?? '' : '')
+                    : mode === 'exact' && current?.purchase ? current.purchase.unit
+                      ?? new Decimal(current.purchase.total).minus(current.purchase.fees ?? '0').toFixed() : '')
+                  if (mode === 'exact') setTotalCostInput(Boolean(current?.purchase && !current.purchase.unit))
                 }} /><span>{label}</span></label>
               ))}
             </div>
             {costMode === 'exact' && (keepCost ? <div className="estimate">
               <div><dt>Coût total enregistré</dt><dd>{display.format(current!.cost!.amount)}</dd></div>
-              <button type="button" className="text-button" onClick={() => setKeepCost(false)}>Remplacer par un prix unitaire</button>
+              <button type="button" className="text-button" onClick={() => setKeepCost(false)}>Corriger le coût d’achat</button>
             </div> : <div className="form-grid">
-              <label>Prix d’achat par unité
+              <label>Type de montant
+                <select value={totalCostInput ? 'total' : 'unit'} onChange={event => {
+                  setTotalCostInput(event.target.value === 'total')
+                  setCostInput('')
+                }}><option value="unit">Prix par unité</option><option value="total">Montant total hors frais</option></select>
+              </label>
+              <label>{totalCostInput ? 'Montant total hors frais' : 'Prix d’achat par unité'}
                 <input value={costInput} inputMode="decimal" maxLength={38} placeholder="Ex. 105,50" onChange={event => setCostInput(event.target.value)} />
               </label>
               <label>Devise d’achat
@@ -341,10 +362,22 @@ export default function PositionForm({ current, positions, platforms, marks, dis
               </label>
               {purchaseTotal && <p className="hint">Total payé <strong>{unitPrice(purchaseTotal, purchaseCurrency)}</strong></p>}
             </div>)}
-            {costMode === 'percent' && <label className="cost-input">Gain ou perte affiché à l’ajout (%)
-              <input value={costInput} inputMode="decimal" maxLength={38} placeholder="Ex. +12 ou −8"
-                onChange={event => setCostInput(event.target.value.replaceAll('−', '-'))} />
-            </label>}
+            {costMode === 'percent' && <div className="form-grid">
+              <label>Gain ou perte affiché par le courtier (%)
+                <input value={costInput} inputMode="decimal" maxLength={38} placeholder="Ex. +12 ou −8"
+                  onChange={event => setCostInput(event.target.value.replaceAll('−', '-'))} />
+              </label>
+              <label>Valeur affichée par le courtier <small>facultative</small>
+                <input value={brokerValueInput} inputMode="decimal" maxLength={38} placeholder="Ex. 430,80"
+                  onChange={event => setBrokerValueInput(event.target.value)} />
+              </label>
+              <label>Devise de la valeur du courtier
+                <select value={brokerCurrency} onChange={event => setBrokerCurrency(event.target.value as Currency)}>
+                  {currencies.map(currency => <option key={currency}>{currency}</option>)}
+                </select>
+              </label>
+              <p className="hint full">Pour estimer le coût, recopie la valeur et le pourcentage du même relevé. Si tu laisses la valeur vide, une nouvelle estimation utilise le cours de l’application.</p>
+            </div>}
             <label className="cost-input">Date d’acquisition <small>facultative</small>
               <input type="date" value={purchaseDate} max={dayKey(Date.now())} onChange={event => setPurchaseDate(event.target.value)} />
             </label>

@@ -276,8 +276,8 @@ export default function App() {
 
   return <div className="app-layout">
     <aside className="sidebar">
-      <button className="brand" onClick={() => navigate('overview')} aria-label="Portefeuille Local, accueil">
-        <span className="brand-mark"><Icon name="analytics" /></span><span>Portefeuille<small>LOCAL</small></span>
+      <button className="brand" onClick={() => navigate('overview')} aria-label="IntraWallet, accueil">
+        <span className="brand-mark"><Icon name="analytics" /></span><span>IntraWallet<small>PORTEFEUILLE LOCAL</small></span>
       </button>
       <p className="sidebar-label">ESPACE INVESTISSEMENTS</p>
       <nav aria-label="Navigation principale">
@@ -289,8 +289,8 @@ export default function App() {
     </aside>
     <div className="workspace">
       <header className="topbar">
-        <button className="brand mobile-brand" onClick={() => navigate('overview')} aria-label="Portefeuille Local, accueil">
-          <span className="brand-mark"><Icon name="analytics" /></span><span>Portefeuille</span>
+        <button className="brand mobile-brand" onClick={() => navigate('overview')} aria-label="IntraWallet, accueil">
+          <span className="brand-mark"><Icon name="analytics" /></span><span>IntraWallet</span>
         </button>
         <span className="topbar-location"><Icon name={section} /><span>Espace privé</span><Icon name="next" />{sections[section]}</span>
         <div className="topbar-actions">
@@ -308,7 +308,7 @@ export default function App() {
           <div><strong>Mode démo</strong><p>Portefeuille fictif · les cours de cet espace sont simulés.</p></div>
           <a className="secondary" href={demoLink(false)}>Revenir à mon portefeuille</a>
         </aside>}
-        <div className="page-title"><div><p className="page-kicker">{section === 'overview' ? 'Suivi des investissements' : 'Portefeuille Local'}</p>
+        <div className="page-title"><div><p className="page-kicker">{section === 'overview' ? 'Suivi des investissements' : 'IntraWallet'}</p>
           <h1 ref={heading} tabIndex={-1}>{title}</h1>
           <p>{selectedAsset ? 'Cours de marché, positions détenues et transactions.' : descriptions[section]}</p></div></div>
         {display.currency !== 'CHF' && <p className="hint fx-note" role="status">{fxLoading && !fx ? 'Chargement des taux de change…'
