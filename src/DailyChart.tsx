@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useId, useState, type PointerEvent } from 'react'
 import { Decimal } from 'decimal.js'
 import { dayKey, daysBefore } from './currency'
 
@@ -77,20 +77,23 @@ export default function DailyChart({ points, label, format, empty }: {
     }, 'M' + start.x.toFixed(2) + ' ' + start.y.toFixed(2))
   })
 
+  function selectNearest(event: PointerEvent<SVGSVGElement>) {
+    const bounds = event.currentTarget.getBoundingClientRect()
+    if (!bounds.width) return
+    const pointer = (event.clientX - bounds.left) * 700 / bounds.width
+    const nearest = coords.reduce<typeof coords[number]>((best, item) =>
+      item && (!best || Math.abs(pointer - item.x) < Math.abs(pointer - best.x)) ? item : best, null)
+    if (nearest) setSelectedTime(timeOf(nearest.point))
+  }
+
   return <>
-    <p className="history-readout"><strong>{format(active.value!)}</strong><span>{labelOf(active)}{active.detail ? ' · ' + active.detail : ''}</span></p>
     <div className="chart-plot chart-enter">
+    <p className="history-readout"><strong>{format(active.value!)}</strong><span>{labelOf(active)}{active.detail ? ' · ' + active.detail : ''}</span></p>
     <div className="chart-scale" aria-hidden="true">
       <span>{format(max)}</span><span>{format(min.plus(spread.div(2)))}</span><span>{format(min)}</span>
     </div>
     <svg className={values.length <= 3 ? 'history-chart compact-chart' : 'history-chart'} viewBox="0 0 700 175" preserveAspectRatio="none" role="group" aria-label={label}
-      onPointerMove={event => {
-        const bounds = event.currentTarget.getBoundingClientRect()
-        const pointer = (event.clientX - bounds.left) * 700 / bounds.width
-        const nearest = coords.reduce<typeof coords[number]>((best, item) =>
-          item && (!best || Math.abs(pointer - item.x) < Math.abs(pointer - best.x)) ? item : best, null)
-        if (nearest) setSelectedTime(timeOf(nearest.point))
-      }}>
+      onPointerDown={selectNearest} onPointerMove={selectNearest}>
       <defs><linearGradient id={fillId} x2="0" y2="100%"><stop offset="0%" stopColor="var(--accent)" stopOpacity=".22" />
         <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" /></linearGradient></defs>
       {[22, 85, 150].map(y => <line key={y} x1="24" x2="676" y1={y} y2={y} />)}

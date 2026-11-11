@@ -43,29 +43,32 @@ export default function Dashboard({ assets, holdings, display, quotes, history, 
 
   return <div className="dashboard-grid">
     <section className="panel valuation-panel" aria-labelledby="valuation-title">
-      <h2 className="valuation-label" id="valuation-title">{unknown ? 'Valeur connue du portefeuille' : 'Valeur du portefeuille'}</h2>
-      <p className="valuation-amount" key={valuationAmount}>{valuationAmount}</p>
-      <p className="hero-performance">
-        <span>{total.gain === null ? 'Gain latent indéterminé' : display.format(total.gain, { signed: true }) + (total.gain.lt(0) ? ' de perte latente' : ' de gain latent')}</span>
-        {total.returnRate !== null && <strong>{percentLabel(total.returnRate)}</strong>}
-      </p>
-      <div className="market-status">
-        {!demo && <button type="button" className="secondary" onClick={onRefresh} disabled={refreshing}><Icon name="refresh" />
-          {refreshing ? 'Actualisation…' : 'Actualiser les cours'}</button>}
-        {demo ? <small>Cotations simulées</small> : lastChecked !== null && <small>Vérifiés à {marketTime.format(lastChecked)}</small>}
-        {(!demo && latest || unknown > 0 || manual > 0 || stale > 0 || refreshStatus) && <details className="market-details">
-          <summary>Détails des cours</summary>
-          <ul>
-            {lastChecked !== null && <li>Dernière vérification · {timestamp.format(lastChecked)}</li>}
-            {latest && !demo && <li>Dernier cours · {timestamp.format(latest.sourceAt)} · {latest.source}</li>}
-            {unknown > 0 && <li>{unknown} actif(s) sans valorisation complète</li>}
-            {manual > 0 && <li>{manual} actif(s) avec une valeur manuelle</li>}
-            {stale > 0 && <li>{stale} cours ancien(s)</li>}
-            {refreshStatus && <li>{refreshStatus}</li>}
-          </ul>
-        </details>}
+      <div className="valuation-art" aria-hidden="true"><span /><span /><span><Icon name="wallet" /></span></div>
+      <div className="valuation-content">
+        <h2 className="valuation-label" id="valuation-title">{unknown ? 'Valeur connue du portefeuille' : 'Valeur totale du portefeuille'}</h2>
+        <p className="valuation-amount" key={valuationAmount}>{valuationAmount}</p>
+        <p className="hero-performance">
+          <span>{total.gain === null ? 'Gain latent indéterminé' : display.format(total.gain, { signed: true }) + (total.gain.lt(0) ? ' de perte latente' : ' de gain latent')}</span>
+          {total.returnRate !== null && <strong className={total.returnRate.gt(0) ? 'hero-up' : total.returnRate.lt(0) ? 'hero-down' : undefined}>{percentLabel(total.returnRate)}</strong>}
+        </p>
+        <div className="market-status">
+          {!demo && <button type="button" className="secondary" onClick={onRefresh} disabled={refreshing}><Icon name="refresh" />
+            {refreshing ? 'Actualisation…' : 'Actualiser les cours'}</button>}
+          {demo ? <small>Cotations simulées</small> : lastChecked !== null && <small>Vérifiés à {marketTime.format(lastChecked)}</small>}
+          {(!demo && latest || unknown > 0 || manual > 0 || stale > 0 || refreshStatus) && <details className="market-details">
+            <summary>Détails des cours</summary>
+            <ul>
+              {lastChecked !== null && <li>Dernière vérification · {timestamp.format(lastChecked)}</li>}
+              {latest && !demo && <li>Dernier cours · {timestamp.format(latest.sourceAt)} · {latest.source}</li>}
+              {unknown > 0 && <li>{unknown} actif(s) sans valorisation complète</li>}
+              {manual > 0 && <li>{manual} actif(s) avec une valeur manuelle</li>}
+              {stale > 0 && <li>{stale} cours ancien(s)</li>}
+              {refreshStatus && <li>{refreshStatus}</li>}
+            </ul>
+          </details>}
+        </div>
+        <span className="sr-only" role="status">{refreshStatus}</span>
       </div>
-      <span className="sr-only" role="status">{refreshStatus}</span>
     </section>
 
     <div className="metric-grid dashboard-metrics" aria-label="Indicateurs du portefeuille">
@@ -80,8 +83,8 @@ export default function Dashboard({ assets, holdings, display, quotes, history, 
     <HistoryChart history={history} selection={selection} display={display} range={range} chooseRange={setRange} />
 
     <section className="panel table-panel dashboard-positions"><PanelHeading title="Positions principales">
-      <button className="secondary" onClick={onPortfolio}>Tout le portefeuille <Icon name="next" /></button></PanelHeading>
-      <AssetTable assets={assets} display={display} quotes={quotes} onOpen={onOpen} limit={6} />
+      <button className="secondary" aria-label="Voir tout le portefeuille" onClick={onPortfolio}>Tout voir <Icon name="next" /></button></PanelHeading>
+      <AssetTable assets={assets} display={display} quotes={quotes} onOpen={onOpen} limit={6} compact />
     </section>
 
     <section className="panel allocation-panel">
@@ -92,7 +95,7 @@ export default function Dashboard({ assets, holdings, display, quotes, history, 
           </select>
         </label>
       </PanelHeading>
-      <Allocation rows={rows} display={display} />
+      <Allocation rows={rows} display={display} ring />
     </section>
 
     <details className="panel dashboard-insights"><summary>Résultats et classement</summary>

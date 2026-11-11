@@ -43,8 +43,8 @@ export function AssetBadge({ asset }: { asset: Pick<Asset, 'name' | 'category' |
   </span>
 }
 
-export function AssetTable({ assets, display, quotes, onOpen, limit, order }: {
-  assets: Asset[]; display: CurrencyDisplay; quotes: Map<string, Mark>; onOpen: (key: string) => void; limit?: number; order?: Sort
+export function AssetTable({ assets, display, quotes, onOpen, limit, order, compact = false }: {
+  assets: Asset[]; display: CurrencyDisplay; quotes: Map<string, Mark>; onOpen: (key: string) => void; limit?: number; order?: Sort; compact?: boolean
 }) {
   const [sort, setSort] = useState<Sort>('value')
   const sorted = sortAssets(assets, order ?? sort).slice(0, limit)
@@ -55,7 +55,7 @@ export function AssetTable({ assets, display, quotes, onOpen, limit, order }: {
         <option value="value">Valeur</option><option value="performance">Performance</option><option value="name">Nom</option>
       </select></label>
     </div>}
-    {sorted.length ? <><ul className="mobile-positions">{sorted.map(asset => <li key={asset.key}>
+    {sorted.length ? <><ul className={compact ? "position-list compact-positions" : "position-list mobile-positions"}>{sorted.map(asset => <li key={asset.key}>
       <button type="button" onClick={() => onOpen(asset.key)}>
         <AssetBadge asset={asset} />
         <span className="mobile-position-name"><strong>{asset.name}</strong><small>{[assetSymbol(asset, asset.entries[0].listing), categories[asset.category]].filter(Boolean).join(' · ')}</small>
@@ -64,7 +64,7 @@ export function AssetTable({ assets, display, quotes, onOpen, limit, order }: {
           <small><span className="sr-only">Rendement latent </span><Change value={asset.returnRate}>{percentLabel(asset.returnRate)}</Change></small>
           {asset.entries.some(entry => entry.partiallyValued) && <small>{asset.priced ? 'Valeur partielle' : 'Cours manquant'}</small>}</span>
       </button></li>)}</ul>
-    <table className="financial-table">
+    {!compact && <table className="financial-table">
       <thead><tr><th>Actif</th><th>Quantité</th><th>Cours</th><th>Valeur</th><th>Gain latent</th><th><span className="sr-only">Fiche</span></th></tr></thead>
       <tbody>{sorted.map(asset => {
         const quote = quotes.get(asset.key)
@@ -90,7 +90,7 @@ export function AssetTable({ assets, display, quotes, onOpen, limit, order }: {
           <td className="open-asset"><button className="icon-button" type="button" onClick={() => onOpen(asset.key)} aria-label={'Voir ' + asset.name}><Icon name="next" /></button></td>
         </tr>
       })}</tbody>
-    </table></> : <p className="inline-empty">Aucun actif pour cette sélection.</p>}
+    </table>}</> : <p className="inline-empty">Aucun actif pour cette sélection.</p>}
   </>
 }
 
@@ -125,7 +125,7 @@ export function PortfolioView({ holdings, platforms, display, quotes, onOpen, on
       <div id={filtersId} hidden={!showFilters} className="portfolio-filter-options">
         <div className="filter-bar">
           <label>Plateforme<select value={platform} onChange={event => setPlatform(event.target.value)}>
-            <option value="">Toutes les plateformes</option>{platforms.map(name => <option key={name} value={platformKey(name)}>{name}</option>)}
+            <option value="">Toutes</option>{platforms.map(name => <option key={name} value={platformKey(name)}>{name}</option>)}
           </select></label>
           <label>Trier par<select value={sort} onChange={event => setSort(event.target.value as Sort)}>
             <option value="value">Valeur</option><option value="performance">Performance</option><option value="name">Nom</option>
@@ -138,17 +138,29 @@ export function PortfolioView({ holdings, platforms, display, quotes, onOpen, on
 }
 
 export type AllocationRow = { label: string; amount: Decimal }
-export function Allocation({ rows, display }: { rows: AllocationRow[]; display: CurrencyDisplay }) {
+export function Allocation({ rows, display, ring = false }: { rows: AllocationRow[]; display: CurrencyDisplay; ring?: boolean }) {
   const valued = rows.filter(row => row.amount.gt(0)).sort((a, b) => b.amount.cmp(a.amount))
   if (!valued.length) return <p className="inline-empty">Répartition disponible dès qu’une position est valorisée.</p>
   const total = valued.reduce((sum, row) => sum.plus(row.amount), valued[0].amount.times(0))
-  return <ul className="allocation-list">{valued.map((row, index) => {
+  const legend = <ul className="allocation-list">{valued.map((row, index) => {
     const fraction = row.amount.div(total)
     return <li key={row.label}><div><span><i className={'allocation-color color-' + index % 5} />{row.label}</span>
       <strong>{display.format(row.amount)}</strong><small>{fraction.times(100).toFixed(1).replace('.', ',')} %</small></div>
-      <span className="allocation-track" aria-hidden="true"><i className={'allocation-color color-' + index % 5} style={{ width: fraction.times(100).toFixed(3) + '%' }} /></span>
+      {!ring && <span className="allocation-track" aria-hidden="true"><i className={'allocation-color color-' + index % 5} style={{ width: fraction.times(100).toFixed(3) + '%' }} /></span>}
     </li>
   })}</ul>
+  if (!ring) return legend
+  let offset = 0
+  const segments = valued.map((row, index) => {
+    const start = offset
+    offset += row.amount.div(total).times(100).toNumber()
+    const end = index === valued.length - 1 ? 100 : offset
+    return `var(--series-${index % 5}) ${start}% ${end}%`
+  })
+  return <div className="allocation-composition">
+    <span className="allocation-ring" aria-hidden="true" style={{ backgroundImage: `conic-gradient(from -90deg, ${segments.join(', ')})` }}><Icon name="analytics" /></span>
+    {legend}
+  </div>
 }
 
 export function AssetDetail({ asset, data, series, quote, display, cryptoKey, onBack, onTrade, journal }: {

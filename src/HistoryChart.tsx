@@ -40,12 +40,10 @@ export default function HistoryChart({ history, selection, display, range, choos
 
   return <section className="panel history-panel" aria-labelledby={id}>
     <div className="section-heading">
-      <div><h2 id={id}>Évolution du portefeuille</h2><p className="hint">{range === 1 ? 'Relevés horodatés enregistrés dans les dernières 24 heures.' : 'Relevés quotidiens et estimations lorsque les cours nécessaires sont disponibles.'}</p></div>
+      <h2 id={id}>Évolution du portefeuille</h2>
       <PeriodButtons range={range} choose={chooseRange} />
     </div>
-    <p className="hint history-coverage">{first && last && first !== last
-      ? (range === 1 ? 'Relevés des dernières 24 h' : 'Résultat mesuré du ' + formatDay(first.date) + ' au ' + formatDay(last.date)) + ' · hors flux d’achat, de vente et d’ouverture.'
-      : 'La performance sur la période nécessite deux relevés comparables. Les apports et retraits sont neutralisés.'}</p>
+    {(!first || !last || first === last) && <p className="hint history-coverage">Deux relevés comparables sont nécessaires pour mesurer le résultat sur la période.</p>}
     <div className="segments history-toggle"  role="group" aria-label="Indicateur">
       <button type="button" className="secondary segment-button" aria-pressed={metric === 'value'} onClick={() => setMetric('value')}>Valeur</button>
       <button type="button" className="secondary segment-button" aria-pressed={metric === 'result'} onClick={() => setMetric('result')}>Performance</button>
@@ -55,6 +53,9 @@ export default function HistoryChart({ history, selection, display, range, choos
       empty={range === 1 ? 'Aucun relevé complet dans les dernières 24 heures.' : metric === 'value' ? 'La courbe apparaîtra avec une valorisation complète et un taux disponible.'
         : 'Le calcul nécessite une valorisation complète et des montants investis connus.'} />
     <details className="history-details"><summary>Détails du calcul</summary>
+    <p className="hint">{range === 1 ? 'Relevés horodatés des dernières 24 heures.' : 'Relevés quotidiens et estimations selon les cours disponibles.'}
+      {' '}Le résultat est calculé hors flux d’achat, de vente et d’ouverture.
+      {first && last && first !== last && range !== 1 && ' Période mesurée du ' + formatDay(first.date) + ' au ' + formatDay(last.date) + '.'}</p>
     <div className="history-stats">
       <span>Flux nets suivis <strong>{flow === null ? '—' : display.format(flow, { day: recent?.date, signed: true })}</strong></span>
       <span>Résultat depuis le début du suivi <strong>{result === null ? '—' : display.format(result, { day: recent?.date, signed: true })}</strong></span>

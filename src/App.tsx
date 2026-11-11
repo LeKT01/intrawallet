@@ -284,7 +284,6 @@ export default function App() {
       <button className="brand" onClick={() => navigate('overview')} aria-label="IntraWallet, accueil">
         <span className="brand-mark"><Icon name="analytics" /></span><span>IntraWallet<small>PORTEFEUILLE LOCAL</small></span>
       </button>
-      <p className="sidebar-label">ESPACE INVESTISSEMENTS</p>
       <nav aria-label="Navigation principale">
         {(Object.keys(sections) as Section[]).map(item => <button type="button" key={item} className={section === item ? 'selected' : ''}
           aria-current={section === item ? 'page' : undefined} aria-label={sections[item]} onClick={() => navigate(item)}><Icon name={item} />

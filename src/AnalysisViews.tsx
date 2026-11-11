@@ -5,7 +5,7 @@ import { savePlatform } from './database'
 import type { CurrencyDisplay } from './currency'
 import type { HistoryPoint, Holding, Mark } from './ledger'
 import { categories, consolidate, platformKey, summarize, type Category } from './portfolio'
-import { Allocation, AssetTable, type AllocationRow } from './PortfolioViews'
+import { Allocation, AssetTable, assetSymbol, type AllocationRow } from './PortfolioViews'
 import { Change, Icon, Metric, PanelHeading, percentLabel } from './ui'
 
 const categoryEntries = Object.entries(categories) as [Category, string][]
@@ -64,7 +64,7 @@ export function AnalyticsView({ holdings, history, display }: {
     </section>
     <div className="analysis-grid">
       {groups.map(group => <section className="panel analysis-panel" key={group.title}><PanelHeading title={'Par ' + group.title.toLowerCase()} />
-        <Allocation rows={group.rows.map(({ label, entries }) => ({ label, amount: summarize(entries).amount }))} display={display} />
+        <Allocation rows={group.rows.map(({ label, entries }) => ({ label, amount: summarize(entries).amount }))} display={display} ring={group.title === 'Catégorie'} />
         {group.rows.length > 0 && <ul className="analysis-results">{group.rows.map(({ label, entries }) => {
           const sum = summarize(entries)
           return <li key={label}><span>{label}</span><Change value={sum.gain}>{sum.gain === null ? 'Gain latent indéterminé' : display.format(sum.gain, { signed: true }) + ' · ' + percentLabel(sum.returnRate)}</Change></li>
@@ -127,7 +127,8 @@ export function PlatformsView({ holdings, platforms, quotes, display, onOpen, on
     </form>}
     {!groups.length && <p className="inline-empty">Crée une plateforme ou saisis son nom lors d’un premier investissement.</p>}</section>
     {groups.map(({ label, assets, entries, totals }) => <details className="panel platform-panel" key={label}>
-      <summary><span className="platform-icon"><Icon name="platforms" /></span><span><strong>{label}</strong><small>{assets.length} actif(s)</small></span>
+      <summary><span className="platform-icon"><Icon name="platforms" /></span><span><strong>{label}</strong><small>{assets.length} {assets.length === 1 ? 'actif' : 'actifs'}{assets.length > 0 && ' · ' + assets.slice(0, 3)
+          .map(asset => assetSymbol(asset, asset.entries[0].listing) || asset.name).join(' · ')}</small></span>
         <span><strong>{totals.priced ? display.format(totals.amount) : '—'}</strong><small>{totals.gain === null ? 'Gain latent indéterminé' : display.format(totals.gain, { signed: true })}</small></span><Icon name="next" /></summary>
       <div className="platform-detail">
         <button className="secondary" onClick={() => edit(label)}>Renommer la plateforme</button>
