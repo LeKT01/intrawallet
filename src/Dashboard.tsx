@@ -54,7 +54,7 @@ export default function Dashboard({ assets, holdings, display, quotes, history, 
         <div className="market-status">
           {!demo && <button type="button" className="secondary" onClick={onRefresh} disabled={refreshing}><Icon name="refresh" />
             {refreshing ? 'Actualisation…' : 'Actualiser les cours'}</button>}
-          {demo ? <small>Cotations simulées</small> : lastChecked !== null && <small>Vérifiés à {marketTime.format(lastChecked)}</small>}
+          {demo ? <small>Cotations simulées</small> : lastChecked !== null && <small>Vérifiés à {marketTime.format(lastChecked)}{stale > 0 ? ' · ' + stale + (stale === 1 ? ' cours ancien' : ' cours anciens') : ''}</small>}
           {(!demo && latest || unknown > 0 || manual > 0 || stale > 0 || refreshStatus) && <details className="market-details">
             <summary>Détails des cours</summary>
             <ul>

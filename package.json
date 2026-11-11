@@ -6,7 +6,10 @@
     "dev": "vite --host 127.0.0.1 --port 4173 --strictPort",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
-    "test": "node --test"
+    "test": "node --test",
+    "test:browser": "playwright test --grep-invert @visual",
+    "test:visual": "playwright test --grep @visual",
+    "check": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",
@@ -20,6 +23,8 @@
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "@playwright/test": "^1.62.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "typescript": "^7.0.2",

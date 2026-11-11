@@ -88,10 +88,10 @@ export function AnalyticsView({ holdings, history, display }: {
   </div>
 }
 
-export function PlatformsView({ holdings, platforms, quotes, display, onOpen, onSaved }: {
-  holdings: Holding[]; platforms: string[]; quotes: Map<string, Mark>; display: CurrencyDisplay; onOpen: (key: string) => void; onSaved: () => void
+export function PlatformsView({ holdings, platforms, quotes, display, onOpen, onSaved, startCreating, onCreateClosed }: {
+  holdings: Holding[]; platforms: string[]; quotes: Map<string, Mark>; display: CurrencyDisplay; onOpen: (key: string) => void; onSaved: () => void; startCreating: boolean; onCreateClosed: () => void
 }) {
-  const [editor, setEditor] = useState<string | null>(null)
+  const [editor, setEditor] = useState<string | null>(startCreating ? '' : null)
   const [name, setName] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -109,6 +109,7 @@ export function PlatformsView({ holdings, platforms, quotes, display, onOpen, on
     try {
       await savePlatform(name, editor || undefined)
       setEditor(null)
+      onCreateClosed()
       onSaved()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'La plateforme n’a pas pu être enregistrée.')
@@ -122,7 +123,7 @@ export function PlatformsView({ holdings, platforms, quotes, display, onOpen, on
     {editor !== null && <form className="platform-editor" onSubmit={submit}>
       <label>Nom de la plateforme<input value={name} onChange={event => setName(event.target.value)} maxLength={80} required autoFocus /></label>
       <button className="primary" disabled={busy}>{busy ? 'Enregistrement…' : 'Enregistrer'}</button>
-      <button type="button" className="secondary" onClick={() => setEditor(null)} disabled={busy}>Annuler</button>
+      <button type="button" className="secondary" onClick={() => { setEditor(null); onCreateClosed() }} disabled={busy}>Annuler</button>
       {error && <p className="error" role="alert">{error}</p>}
     </form>}
     {!groups.length && <p className="inline-empty">Crée une plateforme ou saisis son nom lors d’un premier investissement.</p>}</section>

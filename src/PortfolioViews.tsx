@@ -106,7 +106,7 @@ export function PortfolioView({ holdings, platforms, display, quotes, onOpen, on
   const assets = useMemo(() => consolidate(holdings.filter(holding =>
     (!category || holding.category === category) && (!platform || platformKey(holding.platform) === platform))), [holdings, category, platform])
   return <section className="panel table-panel portfolio-panel">
-    <PanelHeading title="Positions consolidées">
+    <PanelHeading title="Positions consolidées" description="Les lots et opérations de chaque actif sont disponibles dans sa fiche.">
       <button className="primary portfolio-add" onClick={onAdd}><Icon name="plus" /> Ajouter un investissement</button>
     </PanelHeading>
     <div className="portfolio-filters">

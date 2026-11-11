@@ -128,3 +128,15 @@ test('les clôtures d’ETF sont enregistrées avec leur ligne de cotation', asy
   assert.ok(result.receivedAt > markTime)
   assert.notEqual(instrumentCode(etf), instrumentCode({ ...etf, listing: 'XSWX:VUAA' }))
 })
+
+test('un ETF hors catalogue garde une identité par place et devise', async t => {
+  const isin = 'IE00B1234567'
+  t.mock.method(globalThis, 'fetch', async () => Response.json([
+    { Code: 'ABC', Exchange: 'XETRA', Currency: 'EUR', Name: 'ETF témoin', Type: 'ETF', ISIN: isin },
+    { Code: 'ABC', Exchange: 'SW', Currency: 'CHF', Name: 'ETF témoin', Type: 'ETF', ISIN: isin },
+  ]))
+  const [xetra, six] = await searchMarket('etf', isin, 'test-lignes-distinctes')
+  assert.equal(xetra.isin, six.isin)
+  assert.notEqual(quoteTarget(xetra), quoteTarget(six))
+  assert.deepEqual([xetra.reference, six.reference], ['XETR:ABC:EUR', 'XSWX:ABC:CHF'])
+})

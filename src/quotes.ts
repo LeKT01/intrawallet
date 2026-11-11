@@ -115,10 +115,10 @@ export function saveSessionQuoteKey(provider: Provider, key: string) {
 }
 
 const fxRequests = new Map<string, { at: number; result: Promise<FxRate[]> }>()
-export function fetchFxRates(from: string, to?: string) {
+export function fetchFxRates(from: string, to?: string, fresh = false) {
   const key = from + '/' + (to ?? '')
   const previous = fxRequests.get(key)
-  if (previous && Date.now() - previous.at < 3600000) return previous.result
+  if (!fresh && previous && Date.now() - previous.at < 3600000) return previous.result
   const url = new URL('https://api.frankfurter.dev/v2/rates')
   url.search = new URLSearchParams({ base: 'CHF', quotes: 'EUR,USD', from, providers: 'ecb', ...(to ? { to } : {}) }).toString()
   const result = json(url, 'Frankfurter').then((data): FxRate[] => {
@@ -129,10 +129,10 @@ export function fetchFxRates(from: string, to?: string) {
       return [{ date: row.date, quote: row.quote, rate: rate.toFixed() }]
     })
   }).catch(error => {
-    fxRequests.delete(key)
+    if (!fresh) fxRequests.delete(key)
     throw error
   })
-  fxRequests.set(key, { at: Date.now(), result })
+  if (!fresh) fxRequests.set(key, { at: Date.now(), result })
   return result
 }
 
@@ -235,7 +235,7 @@ export async function searchMarket(category: 'stock' | 'etf', query: string, key
       const known = catalogEntry(category, listing)
         ?? (Exchange === 'US' ? ['XNAS', 'XNYS', 'ARCX', 'XASE', 'BATS'].map(mic => catalogEntry(category, mic + ':' + Code)).find(Boolean) : undefined)
       if ((known?.isin && isin && known.isin !== isin) || (known?.market && known.market.currency !== Currency)) return []
-      return [{ category, name: (known?.name ?? Name.trim()).slice(0, 100), reference: known?.reference ?? (category === 'etf' && isin ? isin : listing),
+      return [{ category, name: (known?.name ?? Name.trim()).slice(0, 100), reference: known?.reference ?? (category === 'etf' ? listing + ':' + Currency : listing),
         listing: known?.listing ?? listing, detail: venueNames[Exchange] + ' · ' + Code + ' · ' + Currency,
         isin: isin ?? known?.isin, market: { code: Code + '.' + Exchange, currency: Currency } }]
     })
@@ -251,10 +251,11 @@ async function instrument(asset: QuoteAsset, key: string) {
   if (asset.category === 'crypto') return null
   const isin = asset.isin ?? (isinPattern.test(asset.reference) ? asset.reference : '')
   const matches = await searchMarket(asset.category, isin || exchange?.symbol || asset.reference, key)
-  const exact = exchange
-    ? matches.find(item => item.market.code === exchange.symbol + '.' + exchange.venue && (!isin || item.isin === isin))
-    : matches.find(item => item.isin === isin)
-  return exact?.market ?? null
+  const candidates = matches.filter(item => exchange
+    ? item.market.code === exchange.symbol + '.' + exchange.venue && (!isin || item.isin === isin)
+    : Boolean(isin) && item.isin === isin)
+  const instruments = new Map(candidates.map(item => [item.market.code + '/' + item.market.currency, item.market]))
+  return instruments.size === 1 ? [...instruments.values()][0] : null
 }
 
 export async function fetchEodSeries(asset: QuoteAsset, meta: Instrument, key: string, at: number, previous?: Mark) {
@@ -454,4 +455,55 @@ export function quoteTiming(mark: Mark) {
   if (mark.source === 'Tradegate · relevé') return 'Dernier prix relevé · heure du relevé'
   if (mark.timing === 'reported') return 'Dernier cours reçu · délai variable'
   return mark.source.includes('fictif') ? 'Cours fictif' : 'Dernier cours disponible'
+}
+
+export const diagnosticProviders = ['CoinGecko', 'Finnhub', 'EODHD', 'SIX', 'Xetra', 'Tradegate'] as const
+export type DiagnosticProvider = typeof diagnosticProviders[number]
+export function providerIsConfigured(provider: DiagnosticProvider, keys: QuoteKeys) {
+  return provider === 'Finnhub' ? Boolean(keys.finnhub) : provider === 'EODHD' ? Boolean(keys.eodhd) : true
+}
+
+// Fixed public instruments keep the probe independent of personal holdings.
+export async function probeQuoteProvider(provider: DiagnosticProvider, keys: QuoteKeys): Promise<number | null> {
+  const day = dayKey(Date.now())
+  switch (provider) {
+    case 'CoinGecko': {
+      const url = new URL('https://api.coingecko.com/api/v3/simple/price')
+      url.search = new URLSearchParams({ ids: 'bitcoin', vs_currencies: 'chf', include_last_updated_at: 'true',
+        ...(keys.coingecko ? { x_cg_demo_api_key: keys.coingecko } : {}) }).toString()
+      const { bitcoin } = await json(url, provider)
+      const time = markTime(bitcoin?.last_updated_at)
+      return positive(bitcoin?.chf) && validTime(time) ? time : null
+    }
+    case 'Finnhub': {
+      const url = new URL('https://finnhub.io/api/v1/quote')
+      url.search = new URLSearchParams({ symbol: 'AAPL', token: keys.finnhub }).toString()
+      const data = await json(url, provider)
+      const time = markTime(data?.t)
+      return positive(data?.c) && validTime(time) ? time : null
+    }
+    case 'EODHD': {
+      const data = await eodJson('eod/AAPL.US', keys.eodhd, { from: daysBefore(day, 7), to: day, period: 'd', order: 'd' })
+      const row = Array.isArray(data) ? data.find(row => datePattern.test(row?.date) && positive(row?.close)) : undefined
+      const time = row ? closeTimestamp('US', row.date) : NaN
+      return validTime(time) ? time : null
+    }
+    case 'SIX': {
+      const lines = parseSixClosings(await json(new URL('/market/six/etf-closings', location.origin), provider, 40000))
+      const asset = catalogEntry('etf', 'XSWX:VUSA')
+      const line = asset && sixEtfLine(asset)
+      const quote = line && findSixClosing(lines, line)
+      const time = quote ? closeTimestamp('SW', quote.day) : NaN
+      return validTime(time) ? time : null
+    }
+    case 'Xetra': {
+      const data = parseNqseQuote(await json(new URL(nqseRoute, location.origin), provider, 21000))
+      return Date.parse(data.timestampLastPrice)
+    }
+    case 'Tradegate': {
+      const data = await json(new URL(tradegateRoute, location.origin), provider, 38000)
+      const time = data?.sourceAt ?? data?.receivedAt
+      return positive(data?.price) && validTime(time) ? time : null
+    }
+  }
 }

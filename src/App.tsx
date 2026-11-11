@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { deleteOperation, deletePosition, loadPortfolio, saveMarks, saveOperation, savePosition } from './database'
 import { consolidate, platformKey, type Position } from './portfolio'
@@ -15,13 +15,26 @@ import Dashboard from './Dashboard'
 import { AssetDetail, PortfolioView, type Asset } from './PortfolioViews'
 import JournalView, { journalEntries, type JournalItem } from './JournalView'
 import { AnalyticsView, PlatformsView } from './AnalysisViews'
-import { Icon } from './ui'
+import { Icon, type IconName } from './ui'
+
+const DiagnosticView = lazy(() => import('./DiagnosticView'))
 
 const sections = { overview: 'Vue d’ensemble', positions: 'Portefeuille', journal: 'Transactions',
-  analytics: 'Analyses', platforms: 'Plateformes', data: 'Paramètres' } as const
+  analytics: 'Analyses', platforms: 'Plateformes', data: 'Paramètres', space: 'Espace', diagnostic: 'Diagnostic' } as const
 type Section = keyof typeof sections
-const mobilePrimary = { overview: 'Accueil', positions: 'Portefeuille', analytics: 'Analyses' } as const
-const mobileSecondary = ['journal', 'platforms', 'data'] as const
+const spaceSections: Section[] = ['space', 'journal', 'platforms', 'data', 'diagnostic']
+const spaceGroups: { title: string; links: { label: string; description: string; section: Section; anchor?: string }[] }[] = [
+  { title: 'Activité', links: [{ label: 'Transactions', description: 'Historique des achats, ventes et transferts', section: 'journal' }] },
+  { title: 'Gestion', links: [
+    { label: 'Plateformes', description: 'Comptes et établissements', section: 'platforms' },
+    { label: 'Sauvegarde locale', description: 'Exporter ou restaurer les données', section: 'data', anchor: 'backup' },
+  ] },
+  { title: 'Préférences', links: [
+    { label: 'Paramètres', description: 'Devises et cotations', section: 'data' },
+    { label: 'Apparence', description: 'Thème clair, sombre ou système', section: 'data', anchor: 'appearance' },
+  ] },
+  { title: 'Fiabilité', links: [{ label: 'Diagnostic', description: 'Vérifier le stockage, les cours et les calculs', section: 'diagnostic' }] },
+]
 const descriptions: Record<Section, string> = {
   overview: 'La valeur et les mouvements de tes investissements.',
   positions: 'Tes actions, ETF et cryptomonnaies, regroupés par actif.',
@@ -29,17 +42,21 @@ const descriptions: Record<Section, string> = {
   analytics: 'Explore le poids de tes positions et leurs gains ou pertes.',
   platforms: 'Consulte et organise tes investissements par établissement.',
   data: 'Gère l’affichage, les sources de marché et tes sauvegardes.',
+  space: 'Gère ton portefeuille et tes préférences.',
+  diagnostic: 'Vérifie les composants d’IntraWallet à la demande.',
 }
 const emptyData: PortfolioData = { positions: [], operations: [], marks: [] }
 const quoteInterval = 60000
 type Theme = 'light' | 'dark' | 'system'
-type Route = { section: Section; asset?: string }
+type Route = { section: Section; asset?: string; anchor?: string }
 
 function readRoute(): Route {
   const [path, key] = window.location.hash.slice(1).split('/')
   if (path === 'positions' && key) {
     try { return { section: 'positions', asset: decodeURIComponent(key) } } catch { /* Fall back to the list. */ }
   }
+  if (path === 'data' && (key === 'appearance' || key === 'backup')) return { section: path, anchor: key }
+  if (path === 'platforms' && key === 'new') return { section: path, anchor: key }
   return { section: Object.hasOwn(sections, path) ? path as Section : 'overview' }
 }
 
@@ -73,7 +90,7 @@ export default function App() {
   const [refreshStatus, setRefreshStatus] = useState('')
   const [lastChecked, setLastChecked] = useState<number | null>(null)
   const heading = useRef<HTMLHeadingElement>(null)
-  const moreSheet = useRef<HTMLDialogElement>(null)
+  const actionSheet = useRef<HTMLDialogElement>(null)
   const quotePending = useRef(false)
   const lastAuto = useRef(0)
 
@@ -213,13 +230,27 @@ export default function App() {
 
   useEffect(() => {
     const sync = () => {
-      setRoute(readRoute())
+      actionSheet.current?.close()
+      setEditor(null); setTradeEditor(null); setToDelete(null)
+      const next = readRoute()
+      setRoute(next)
       window.scrollTo({ top: 0 })
-      requestAnimationFrame(() => heading.current?.focus())
+      if (!next.anchor) requestAnimationFrame(() => heading.current?.focus())
     }
     window.addEventListener('hashchange', sync)
     return () => window.removeEventListener('hashchange', sync)
   }, [])
+
+  const ready = Boolean(loaded && !loaded.failed)
+  useEffect(() => {
+    if (route.section !== 'data' || !route.anchor || !ready) return
+    const frame = requestAnimationFrame(() => {
+      const target = document.getElementById(route.anchor!)
+      target?.scrollIntoView({ block: 'start' })
+      target?.focus({ preventScroll: true })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [route, ready])
 
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
@@ -240,9 +271,9 @@ export default function App() {
     try { localStorage.setItem('portefeuille.theme', next) } catch { /* Use in-memory preference. */ }
   }
 
-  function navigate(destination: Section, asset?: string) {
-    moreSheet.current?.close()
-    const hash = '#' + destination + (asset ? '/' + encodeURIComponent(asset) : '')
+  function navigate(destination: Section, detail?: string) {
+    actionSheet.current?.close()
+    const hash = '#' + destination + (detail ? '/' + encodeURIComponent(detail) : '')
     if (location.hash !== hash) location.hash = hash
     setActionError('')
   }
@@ -269,7 +300,6 @@ export default function App() {
   const journal = useMemo(() => journalEntries(data), [data])
   const selectedAsset = route.asset ? assets.find(asset => asset.key === route.asset) : undefined
   const title = selectedAsset ? 'Fiche de l’actif' : sections[section]
-  const ready = Boolean(loaded && !loaded.failed)
   const journalProps = {
     platforms, display, sales: loaded?.view.sales ?? new Map(),
     onEdit: (item: JournalItem) => {
@@ -292,20 +322,25 @@ export default function App() {
       <div className="sidebar-footer"><Icon name="lock" /><div><strong>Stockage local</strong><small>Sur cet appareil</small></div></div>
     </aside>
     <nav className="mobile-nav" aria-label="Navigation mobile">
-      {(Object.entries(mobilePrimary) as [keyof typeof mobilePrimary, string][]).map(([item, label]) =>
-        <button type="button" key={item} aria-current={section === item ? 'page' : undefined} onClick={() => navigate(item)}>
-          <Icon name={item} /><span>{label}</span>
-        </button>)}
-      <button type="button" className={mobileSecondary.some(item => section === item) ? 'selected' : undefined}
-        aria-haspopup="dialog" aria-controls="more-sheet" onClick={() => moreSheet.current?.showModal()}><Icon name="more" /><span>Plus</span></button>
+      <button type="button" aria-current={section === 'overview' ? 'page' : undefined} onClick={() => navigate('overview')}><Icon name="overview" /><span>Accueil</span></button>
+      <button type="button" aria-current={section === 'positions' ? 'page' : undefined} onClick={() => navigate('positions')}><Icon name="positions" /><span>Portefeuille</span></button>
+      <button type="button" className="mobile-add" aria-label="Ouvrir les actions d’ajout" aria-haspopup="dialog"
+        aria-controls="action-sheet" disabled={!ready} onClick={() => actionSheet.current?.showModal()}><Icon name="plus" /></button>
+      <button type="button" aria-current={section === 'analytics' ? 'page' : undefined} onClick={() => navigate('analytics')}><Icon name="analytics" /><span>Analyses</span></button>
+      <button type="button" aria-current={section === 'space' ? 'page' : undefined} className={spaceSections.includes(section) ? 'selected' : undefined}
+        onClick={() => navigate('space')}><Icon name="space" /><span>Espace</span></button>
     </nav>
-    <dialog id="more-sheet" className="mobile-sheet" ref={moreSheet} aria-labelledby="more-title"
+    <dialog id="action-sheet" className="mobile-sheet" ref={actionSheet} aria-labelledby="action-title"
       onClick={event => { if (event.target === event.currentTarget) event.currentTarget.close() }}>
       <div className="sheet-content">
-        <div className="section-heading"><h2 id="more-title">Plus</h2><button className="icon-button" aria-label="Fermer le menu"
-          onClick={() => moreSheet.current?.close()}><Icon name="close" /></button></div>
-        {mobileSecondary.map(item => <button type="button" key={item} className="sheet-link" aria-current={section === item ? 'page' : undefined}
-          onClick={() => navigate(item)}><Icon name={item} /><span>{sections[item]}</span><Icon name="next" /></button>)}
+        <div className="section-heading"><h2 id="action-title">Ajouter</h2><button className="icon-button" aria-label="Fermer les actions"
+          onClick={() => actionSheet.current?.close()}><Icon name="close" /></button></div>
+        {([
+          ['positions', 'Ajouter un investissement', () => setEditor('new')],
+          ['journal', 'Enregistrer une transaction', () => openTrade()],
+          ['platforms', 'Ajouter une plateforme', () => navigate('platforms', 'new')],
+        ] as const).map(([icon, label, action]) => <button type="button" key={icon} className="sheet-link"
+          onClick={() => { actionSheet.current?.close(); action() }}><Icon name={icon} /><span>{label}</span><Icon name="next" /></button>)}
       </div>
     </dialog>
     <div className="workspace">
@@ -336,13 +371,20 @@ export default function App() {
         <div role="status" className={message ? 'status-message toast' : 'sr-only'}>{message}</div>
         {actionError && <p className="error" role="alert">{actionError}</p>}
 
-        {!loaded ? <div className="panel blank loading-panel" role="status" aria-busy="true">
+        {section === 'diagnostic' ? <Suspense fallback={<p role="status">Chargement du diagnostic…</p>}><DiagnosticView quoteKeys={quoteKey} /></Suspense>
+          : section === 'space' ? <div className="space-grid">{spaceGroups.map(group => <section className="panel space-panel" key={group.title}>
+            <h2>{group.title}</h2>{group.links.map(link => <a className="space-link" key={link.label}
+              href={'#' + link.section + (link.anchor ? '/' + link.anchor : '')}>
+              <span className="platform-icon"><Icon name={(link.anchor === 'backup' ? 'lock' : link.section) as IconName} /></span>
+              <span><strong>{link.label}</strong><small>{link.description}</small></span><Icon name="next" />
+            </a>)}</section>)}</div>
+          : !loaded ? <div className="panel blank loading-panel" role="status" aria-busy="true">
           <span className="loading-line" aria-hidden="true" /><p>Ouverture du portefeuille…</p>
         </div>
           : loaded.failed ? <div className="panel blank"><h2>Stockage local indisponible</h2><p>Autorise le stockage du site dans ton navigateur, puis recharge la page.</p></div>
           : section === 'data' ? <>
             <section className="panel preference-panel">
-              <h2>Apparence</h2><div className="filter-bar">
+              <h2 id="appearance" tabIndex={-1}>Apparence</h2><div className="filter-bar">
                 <label>Thème<select value={theme} onChange={event => chooseTheme(event.target.value as Theme)}><option value="light">Clair</option><option value="dark">Sombre</option><option value="system">Système</option></select></label>
                 <label>Devise du portefeuille<select value={display.currency} onChange={event => chooseCurrency(event.target.value as Currency)}>
                   {currencies.map(currency => <option key={currency}>{currency}</option>)}</select></label>
@@ -362,7 +404,13 @@ export default function App() {
               }} />
           </>
           : section === 'journal' ? <JournalView {...journalProps} items={journal} onAdd={() => openTrade()} />
-          : section === 'platforms' ? <PlatformsView holdings={holdings} platforms={platforms} quotes={marketByAsset}
+          : section === 'platforms' ? <PlatformsView key={route.anchor ?? 'list'} startCreating={route.anchor === 'new'}
+            onCreateClosed={() => {
+              if (route.anchor !== 'new') return
+              window.history.replaceState(null, '', '#platforms')
+              setRoute({ section: 'platforms' })
+              requestAnimationFrame(() => heading.current?.focus())
+            }} holdings={holdings} platforms={platforms} quotes={marketByAsset}
             display={display} onOpen={openAsset} onSaved={() => setMessage('Plateforme enregistrée.')} />
           : section === 'analytics' ? <AnalyticsView holdings={holdings} history={history} display={display} />
           : selectedAsset ? <AssetDetail key={selectedAsset.key} asset={selectedAsset} data={data}

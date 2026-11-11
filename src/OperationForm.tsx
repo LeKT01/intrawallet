@@ -153,7 +153,7 @@ export default function OperationForm({ current, initialAsset, data, platforms, 
           </label>}
         </div>
         <p className="hint">{kind === 'transfer' ? 'Les éventuels frais en unités sont déduits en plus de la quantité reçue.'
-          : 'Saisis le montant total pour toutes les unités, en CHF.'}</p>
+          : 'Saisis le montant total pour toutes les unités, dans la devise sélectionnée.'}</p>
       </fieldset>
       {error && <p className="error" role="alert">{error}</p>}
       <footer className="dialog-actions"><button type="button" className="secondary" onClick={close} disabled={busy}>Annuler</button>

@@ -56,3 +56,24 @@ La migration IndexedDB ajoute une table de plateformes. Les positions, mouvement
 ## Sources du catalogue
 
 Les références du catalogue sont des données de repérage, distinctes des cours automatiques. Voir notamment les [listes de fonds Vanguard](https://www.ch.vanguard/content/dam/intl/europe/documents/ch/en/fund-range-product-list_eu_chq_en_pro.pdf), le [répertoire suisse justETF](https://www.justetf.com/en-ch/etf-profile.html?isin=IE00B53SZB19) et les fiches [Amundi S&P 500](https://www.amundietf.lu/pdfDocuments/monthly-factsheet/LU1135865084/ENG/LUX/RETAIL/ETF/20260531) et [Amundi marchés émergents](https://www.amundietf.ch/pdfDocuments/monthly-factsheet/LU2573967036/ENG/CHE/INSTITUTIONNEL/ETF).
+
+## Diagnostic et contrôle qualité
+
+Dans **Espace → Diagnostic**, lance les vérifications pour contrôler IndexedDB, relire la sauvegarde en mémoire et rejouer des scénarios financiers isolés. Les contrôles réseau utilisent des instruments publics et les clés déjà configurées dans la session. Ils distinguent l’heure de la cotation témoin et celle de la dernière cotation enregistrée. Le rapport copiable ne contient ni noms d’actifs détenus, ni montants, ni clés, ni réponses brutes des fournisseurs. Les appels externes sont désactivés en mode démo.
+
+Les exports JSON incluent les historiques de cotation téléchargés. Les anciens fichiers de sauvegarde restent compatibles.
+
+```powershell
+npm ci
+npx playwright install chromium
+npm test
+npm run check
+npm run build
+npm run test:browser
+npm run test:visual
+```
+
+- `npm test` lance les tests métier et les intégrations de cotations avec le runner Node.
+- `npm run test:browser` lance Playwright dans des profils neufs sur le port 4174. Il vérifie les parcours, la restauration, les pannes simulées, les deux thèmes à sept largeurs et l’accessibilité des nouveaux écrans avec axe.
+- `npm run test:visual` compare l’accueil, le portefeuille et l’Espace dans les deux thèmes à 390 et 1440 px. Les tests utilisent la démo, une date fixe et des animations désactivées. Les images de référence dépendent de l’OS et du rendu Chromium. Sur un nouvel environnement de référence, lance `npm run test:visual -- --update-snapshots` et inspecte les PNG avant de les adopter.
+- `INTRAWALLET_CHROMIUM` permet d’utiliser un exécutable Chromium déjà installé. Compare les captures avec le même navigateur, le même OS et les mêmes polices que la référence.

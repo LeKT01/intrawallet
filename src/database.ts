@@ -1,3 +1,4 @@
+import type { PortfolioBackup } from './backup.ts'
 import { Dexie, type EntityTable } from 'dexie'
 import { assetKey, platformKey, type Position } from './portfolio.ts'
 import { dayKey } from './currency.ts'
@@ -164,11 +165,31 @@ export function savePlatform(name: string, previous?: string) {
   })
 }
 
-export function restorePortfolio(data: PortfolioData) {
+export function loadPortfolioBackup(): Promise<PortfolioBackup> {
+  return db.transaction('r', [db.positions, db.operations, db.marks, db.platforms, db.dailyPrices], async () => {
+    const [data, dailyPrices] = await Promise.all([loadPortfolio(), loadDailyPrices()])
+    return { ...data, dailyPrices }
+  })
+}
+
+export function restorePortfolio(data: PortfolioBackup) {
   replay(data)
-  return write(async () => {
+  return db.transaction('rw', [db.positions, db.operations, db.marks, db.platforms, db.dailyPrices], async () => {
     await Promise.all([db.positions.clear(), db.operations.clear(), db.marks.clear(), db.platforms.clear()])
     await Promise.all([db.positions.bulkAdd(data.positions), db.operations.bulkAdd(data.operations), db.marks.bulkAdd(data.marks),
       db.platforms.bulkPut((data.platforms ?? []).map(name => ({ id: platformKey(name), name })))])
+    if (data.dailyPrices) {
+      await db.dailyPrices.clear()
+      await db.dailyPrices.bulkAdd(data.dailyPrices)
+    }
+  })
+}
+
+export async function probeLocalStorage() {
+  const id = 'diagnostic/' + crypto.randomUUID()
+  await db.transaction('rw', db.platforms, async () => {
+    await db.platforms.add({ id, name: 'Diagnostic' })
+    if ((await db.platforms.get(id))?.name !== 'Diagnostic') throw new Error('Lecture de contrôle impossible.')
+    await db.platforms.delete(id)
   })
 }

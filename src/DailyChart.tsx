@@ -24,10 +24,15 @@ export function inPeriod<T extends { date: string }>(points: T[], days: number) 
 }
 
 export function PeriodButtons({ range, choose, minimumDays = 1 }: { range: number; choose: (days: number) => void; minimumDays?: number }) {
-  return <div className="segments period-segments" role="group" aria-label="Période">
-    {periods.filter(period => period.days >= minimumDays).map(period => <button type="button" key={period.label} className="secondary segment-button"
+  const choices = periods.filter(period => period.days >= minimumDays)
+  return <><div className="segments period-segments" role="group" aria-label="Période">
+    {choices.map(period => <button type="button" key={period.label} className="secondary segment-button"
       aria-pressed={range === period.days} onClick={() => choose(period.days)}>{period.label}</button>)}
-  </div>
+  </div><label className="period-select">Période
+    <select value={String(range)} onChange={event => choose(Number(event.target.value))}>
+      {choices.map(period => <option key={period.days} value={String(period.days)}>{period.label}</option>)}
+    </select>
+  </label></>
 }
 
 export default function DailyChart({ points, label, format, empty }: {
