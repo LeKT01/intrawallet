@@ -2,6 +2,7 @@ import childProcess from 'node:child_process'
 import os from 'node:os'
 import { win32 } from 'node:path'
 import { defineConfig, type Connect, type Plugin } from 'vite'
+import { xetraQuote } from './server/xetraQuote.ts'
 
 const sixQuery = '?select=ISIN,ValorSymbol,TradingBaseCurrency,ClosingPrice,LatestTradeDate,MarketDate,Exchange&where=ProductLine=ET&pagesize=10000'
 const sixEndpoints = ['/fqs/closing.json', '/itf/fqs/delayed/closing.json']
@@ -119,7 +120,7 @@ const proxy = {
 
 export default defineConfig({
   base: './',
-  plugins: [sixClosings()],
+  plugins: [sixClosings(), xetraQuote()],
   server: { allowedHosts: ['terminal.local'], proxy },
   preview: { proxy },
 })
