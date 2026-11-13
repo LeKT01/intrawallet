@@ -26,8 +26,9 @@ test('la PWA précharge son interface et recharge les données locales hors lign
     await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true)
     await context.setOffline(true)
     await expect(page.getByText('Hors ligne · données locales et derniers cours enregistrés.')).toBeVisible()
+    const requestsBeforeNavigation = seen.length
     await page.goto(page.url() + '&offline-check=1')
-    await expect(page.getByText('Hors ligne · données locales et derniers cours enregistrés.')).toBeVisible()
+    expect(seen).toHaveLength(requestsBeforeNavigation)
     await expect(page.getByText('Mode démo', { exact: true })).toBeVisible()
     await page.evaluate(() => { location.hash = '#positions' })
     await expect(page.getByRole('heading', { name: 'Positions consolidées' })).toBeVisible()

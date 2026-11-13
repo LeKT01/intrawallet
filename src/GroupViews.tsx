@@ -90,7 +90,7 @@ export function GroupEditor({ current, platforms, marketKey, onSave, onClose }: 
         <h2>{current ? 'Modifier le portefeuille groupé' : 'Créer un portefeuille groupé'}</h2>
         <button type="button" className="icon-button" aria-label="Fermer" onClick={close} disabled={busy}><Icon name="close" /></button>
       </header>
-      <fieldset className="dialog-body" disabled={busy} aria-busy={busy}>
+      <div className="dialog-body"><fieldset disabled={busy} aria-busy={busy}>
         <section className="group-editor-section" aria-labelledby="group-info">
           <h3 id="group-info">Informations générales</h3>
           <div className="form-grid">
@@ -132,7 +132,7 @@ export function GroupEditor({ current, platforms, marketKey, onSave, onClose }: 
           <p className="hint">{mode === 'estimate' ? 'Tu peux ajouter des relevés de valeur totale après la création.'
             : 'Tu pourras enregistrer les quantités réelles, les achats et les ventes depuis la fiche du groupe.'}</p>
         </section>
-      </fieldset>
+      </fieldset></div>
       <footer className="dialog-actions">
         {error && <p role="alert" className="error dialog-error">{error}</p>}
         <button type="button" className="secondary" disabled={busy} onClick={close}>Annuler</button>
