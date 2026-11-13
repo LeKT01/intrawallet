@@ -59,7 +59,8 @@ export function AssetTable({ assets, display, quotes, onOpen, limit, order, comp
       <button type="button" onClick={() => onOpen(asset.key)}>
         <AssetBadge asset={asset} />
         <span className="mobile-position-name"><strong>{asset.name}</strong><small>{[assetSymbol(asset, asset.entries[0].listing), categories[asset.category]].filter(Boolean).join(' · ')}</small>
-          {!limit && <small className="mobile-quantity">{quantity(asset.quantity)} unité(s)</small>}</span>
+          {!limit && <small className="mobile-quantity">{quantity(asset.quantity)} unité(s)</small>}
+          {!compact && asset.entries[0].unitPrice !== null && <small>Cours · {display.format(asset.entries[0].unitPrice, { unit: true })}</small>}</span>
         <span className="mobile-position-value"><strong>{asset.priced ? display.format(asset.amount) : '—'}</strong>
           <small><span className="sr-only">Rendement latent </span><Change value={asset.returnRate}>{percentLabel(asset.returnRate)}</Change></small>
           {asset.entries.some(entry => entry.partiallyValued) && <small>{asset.priced ? 'Valeur partielle' : 'Cours manquant'}</small>}</span>

@@ -101,6 +101,16 @@ export default function App() {
   const [lastChecked, setLastChecked] = useState<number | null>(null)
   const heading = useRef<HTMLHeadingElement>(null)
   const actionSheet = useRef<HTMLDialogElement>(null)
+
+  function openAddActions(trigger: HTMLButtonElement) {
+    const dialog = actionSheet.current
+    if (!dialog || dialog.open) return
+    const bounds = trigger.getBoundingClientRect()
+    dialog.style.setProperty('--add-top', Math.ceil(bounds.bottom + 8) + 'px')
+    dialog.style.setProperty('--add-right', Math.max(12, Math.round(window.innerWidth - bounds.right)) + 'px')
+    trigger.focus({ preventScroll: true })
+    dialog.showModal()
+  }
   const quotePending = useRef(false)
   const lastAuto = useRef(0)
 
@@ -356,13 +366,17 @@ export default function App() {
       <button type="button" aria-current={section === 'overview' ? 'page' : undefined} onClick={() => navigate('overview')}><Icon name="overview" /><span>Accueil</span></button>
       <button type="button" aria-current={section === 'positions' ? 'page' : undefined} onClick={() => navigate('positions')}><Icon name="positions" /><span>Portefeuille</span></button>
       <button type="button" className="mobile-add" aria-label="Ouvrir les actions d’ajout" aria-haspopup="dialog"
-        aria-controls="action-sheet" disabled={!ready} onClick={() => actionSheet.current?.showModal()}><Icon name="plus" /></button>
+        aria-controls="action-sheet" disabled={!ready} onClick={event => openAddActions(event.currentTarget)}><Icon name="plus" /></button>
       <button type="button" aria-current={section === 'analytics' ? 'page' : undefined} onClick={() => navigate('analytics')}><Icon name="analytics" /><span>Analyses</span></button>
       <button type="button" aria-current={section === 'space' ? 'page' : undefined} className={spaceSections.includes(section) ? 'selected' : undefined}
         onClick={() => navigate('space')}><Icon name="space" /><span>Espace</span></button>
     </nav>
-    <dialog id="action-sheet" className="mobile-sheet" ref={actionSheet} aria-labelledby="action-title"
-      onClick={event => { if (event.target === event.currentTarget) event.currentTarget.close() }}>
+    <dialog id="action-sheet" className="add-actions-dialog" ref={actionSheet} aria-labelledby="action-title"
+      onClick={event => {
+        if (event.target !== event.currentTarget) return
+        const { left, top, right, bottom } = event.currentTarget.getBoundingClientRect()
+        if (event.clientX < left || event.clientX > right || event.clientY < top || event.clientY > bottom) event.currentTarget.close()
+      }}>
       <div className="sheet-content">
         <div className="section-heading"><h2 id="action-title">Ajouter</h2><button className="icon-button" aria-label="Fermer les actions"
           onClick={() => actionSheet.current?.close()}><Icon name="close" /></button></div>
@@ -384,8 +398,8 @@ export default function App() {
         <div className="topbar-actions">
           <label className="currency-picker"><span className="sr-only">Devise d’affichage</span><select aria-label="Devise d’affichage" value={display.currency}
             onChange={event => chooseCurrency(event.target.value as Currency)}>{currencies.map(currency => <option key={currency}>{currency}</option>)}</select></label>
-          {(section !== 'positions' || selectedAsset) && <button className="primary header-add" disabled={!ready}
-            onClick={() => actionSheet.current?.showModal()}><Icon name="plus" /> Ajouter un investissement</button>}
+          <button className="primary header-add" aria-haspopup="dialog" aria-controls="action-sheet" disabled={!ready}
+            onClick={event => openAddActions(event.currentTarget)}><Icon name="plus" /> Ajouter un investissement</button>
         </div>
       </header>
 

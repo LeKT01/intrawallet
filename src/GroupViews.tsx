@@ -83,46 +83,61 @@ export function GroupEditor({ current, platforms, marketKey, onSave, onClose }: 
     } finally { pending.current = false; setBusy(false) }
   }
 
-  return <dialog className="editor-dialog" ref={dialog} aria-label={current ? "Modifier le portefeuille groupé" : "Créer un portefeuille groupé"}
+  return <dialog className="form-dialog group-dialog" ref={dialog} aria-label={current ? "Modifier le portefeuille groupé" : "Créer un portefeuille groupé"}
     onCancel={event => { event.preventDefault(); if (!busy) close() }}>
     <form className="group-form" onSubmit={submit}>
-      <PanelHeading title={current ? 'Modifier le portefeuille groupé' : 'Créer un portefeuille groupé'} />
-      <h3>Informations du groupe</h3>
-      <div className="form-grid">
-        <label>Nom du groupe<input required maxLength={100} value={name} onChange={event => setName(event.target.value)} /></label>
-        <label>Plateforme<input required list="group-platforms" maxLength={80} value={platform} onChange={event => setPlatform(event.target.value)} /></label>
-        <datalist id="group-platforms">{platforms.map(item => <option key={item} value={item} />)}</datalist>
-        <label>Type<select value={type} onChange={event => setType(event.target.value as InvestmentGroup['type'])}>
-          {Object.entries(groupTypes).map(([key, label]) => <option value={key} key={key}>{label}</option>)}
-        </select></label>
-        <label>Date du premier investissement<input required type="date" max={dateInput(Date.now())} disabled={Boolean(current)} value={date} onChange={event => setDate(event.target.value)} /></label>
-        <label>Capital initial<input required inputMode="decimal" value={initial} onChange={event => setInitial(event.target.value)} /></label>
-        <label>Devise de référence<select value={currency} disabled={Boolean(current?.flows.length || current?.valuations.length)}
-          onChange={event => setCurrency(event.target.value as Currency)}>{currencies.map(code => <option key={code}>{code}</option>)}</select></label>
-      </div>
-      <label className="cost-input">Description facultative<textarea maxLength={500} value={description} onChange={event => setDescription(event.target.value)} /></label>
-      <h3>Composition · {total.toFixed()} % alloué</h3>
-      {entries.map(({ asset, percent }, index) => <div className="group-editor-line" key={quoteTarget(asset)}>
-        <label className="cost-input">{asset.name} · {asset.listing ?? asset.reference}
-          <input value={percent} inputMode="decimal" aria-label={'Allocation de ' + (asset.listing ?? asset.name)}
-            onChange={event => setEntries(entries.map((entry, i) => i === index ? { ...entry, percent: event.target.value } : entry))} /></label>
-        <button type="button" className="secondary" aria-label={'Retirer ' + (asset.listing ?? asset.name)}
-          onClick={() => setEntries(entries.filter((_, i) => i !== index))}>Retirer</button>
-      </div>)}
-      {picker ? <AssetPicker category="etf" selected={null} onCategory={() => {}} onChoose={choose}
-        onCustom={() => {}} marketKey={marketKey} fixedCategory disableManual />
-        : <button type="button" className="secondary" onClick={() => setPicker(true)}><Icon name="plus" /> Ajouter un ETF</button>}
-      {total.lt(100) && <label className="check-row"><input type="checkbox" checked={keepCash}
-        onChange={event => setKeepCash(event.target.checked)} /> Conserver {new Decimal(100).minus(total).toFixed()} % non alloués</label>}
-      {current && allocationsChanged && <label className="cost-input">Date d’effet de l’allocation<input type="date" required
-        value={effective} min={date} max={dateInput(Date.now())} onChange={event => setEffective(event.target.value)} /></label>}
-      <label className="cost-input">Mode de suivi<select value={mode} onChange={event => setMode(event.target.value as InvestmentGroup['mode'])}>
-        <option value="estimate">Allocation estimative</option><option value="exact">Positions exactes</option></select></label>
-      <p className="hint">{mode === 'estimate' ? 'Tu peux ajouter des relevés de valeur totale après la création.'
-        : 'Tu pourras enregistrer les quantités réelles, les achats et les ventes depuis la fiche du groupe.'}</p>
-      {error && <p role="alert" className="error">{error}</p>}
-      <div className="group-actions"><button type="button" className="secondary" disabled={busy} onClick={close}>Annuler</button>
-        <button type="submit" className="primary" disabled={busy}>Enregistrer le groupe</button></div>
+      <header className="dialog-header">
+        <h2>{current ? 'Modifier le portefeuille groupé' : 'Créer un portefeuille groupé'}</h2>
+        <button type="button" className="icon-button" aria-label="Fermer" onClick={close} disabled={busy}><Icon name="close" /></button>
+      </header>
+      <fieldset className="dialog-body" disabled={busy} aria-busy={busy}>
+        <section className="group-editor-section" aria-labelledby="group-info">
+          <h3 id="group-info">Informations générales</h3>
+          <div className="form-grid">
+            <label>Nom du groupe<input required maxLength={100} value={name} onChange={event => setName(event.target.value)} /></label>
+            <label>Plateforme<input required list="group-platforms" maxLength={80} value={platform} onChange={event => setPlatform(event.target.value)} /></label>
+            <datalist id="group-platforms">{platforms.map(item => <option key={item} value={item} />)}</datalist>
+            <label>Type<select value={type} onChange={event => setType(event.target.value as InvestmentGroup['type'])}>
+              {Object.entries(groupTypes).map(([key, label]) => <option value={key} key={key}>{label}</option>)}
+            </select></label>
+            <label>Date du premier investissement<input required type="date" max={dateInput(Date.now())} disabled={Boolean(current)} value={date} onChange={event => setDate(event.target.value)} /></label>
+            <label>Capital initial<input required inputMode="decimal" value={initial} onChange={event => setInitial(event.target.value)} /></label>
+            <label>Devise de référence<select value={currency} disabled={Boolean(current?.flows.length || current?.valuations.length)}
+              onChange={event => setCurrency(event.target.value as Currency)}>{currencies.map(code => <option key={code}>{code}</option>)}</select></label>
+          </div>
+          <label className="cost-input">Description facultative<textarea maxLength={500} value={description} onChange={event => setDescription(event.target.value)} /></label>
+        </section>
+        <section className="group-editor-section" aria-labelledby="group-composition">
+          <h3 id="group-composition">Composition</h3>
+          <p className="hint" role="status">{total.toFixed()} % alloué</p>
+          {entries.map(({ asset, percent }, index) => <div className="group-editor-line" key={quoteTarget(asset)}>
+            <label className="cost-input">{asset.name} · {asset.listing ?? asset.reference}
+              <input value={percent} inputMode="decimal" aria-label={'Allocation de ' + (asset.listing ?? asset.name)}
+                onChange={event => setEntries(entries.map((entry, i) => i === index ? { ...entry, percent: event.target.value } : entry))} /></label>
+            <button type="button" className="secondary" aria-label={'Retirer ' + (asset.listing ?? asset.name)}
+              onClick={() => setEntries(entries.filter((_, i) => i !== index))}>Retirer</button>
+          </div>)}
+          {picker ? <AssetPicker category="etf" selected={null} onCategory={() => {}} onChoose={choose}
+            onCustom={() => {}} marketKey={marketKey} fixedCategory disableManual />
+            : <button type="button" className="secondary" onClick={() => setPicker(true)}><Icon name="plus" /> Ajouter un ETF</button>}
+          {total.lt(100) && <label className="check-row"><input type="checkbox" checked={keepCash}
+            onChange={event => setKeepCash(event.target.checked)} /> Conserver {new Decimal(100).minus(total).toFixed()} % non alloués</label>}
+          {current && allocationsChanged && <label className="cost-input">Date d’effet de l’allocation<input type="date" required
+            value={effective} min={date} max={dateInput(Date.now())} onChange={event => setEffective(event.target.value)} /></label>}
+        </section>
+        <section className="group-editor-section" aria-labelledby="group-tracking">
+          <h3 id="group-tracking">Suivi</h3>
+          <label className="cost-input">Mode de suivi<select value={mode} onChange={event => setMode(event.target.value as InvestmentGroup['mode'])}>
+            <option value="estimate">Allocation estimative</option><option value="exact">Positions exactes</option></select></label>
+          <p className="hint">{mode === 'estimate' ? 'Tu peux ajouter des relevés de valeur totale après la création.'
+            : 'Tu pourras enregistrer les quantités réelles, les achats et les ventes depuis la fiche du groupe.'}</p>
+        </section>
+      </fieldset>
+      <footer className="dialog-actions">
+        {error && <p role="alert" className="error dialog-error">{error}</p>}
+        <button type="button" className="secondary" disabled={busy} onClick={close}>Annuler</button>
+        <button type="submit" className="primary" disabled={busy}>Enregistrer le groupe</button>
+      </footer>
     </form>
   </dialog>
 }

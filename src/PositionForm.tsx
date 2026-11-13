@@ -25,8 +25,23 @@ export function useModal(onClose: () => void) {
   const closing = useRef<number | undefined>(undefined)
   useEffect(() => {
     const element = dialog.current
+    const viewport = window.visualViewport
+    const updateViewport = () => {
+      if (!viewport || viewport.scale !== 1) {
+        element?.style.removeProperty('--dialog-visible-height')
+        element?.style.removeProperty('--dialog-visible-top')
+        return
+      }
+      element?.style.setProperty('--dialog-visible-height', viewport.height + 'px')
+      element?.style.setProperty('--dialog-visible-top', viewport.offsetTop + 'px')
+    }
     element?.showModal()
+    updateViewport()
+    viewport?.addEventListener('resize', updateViewport)
+    viewport?.addEventListener('scroll', updateViewport)
     return () => {
+      viewport?.removeEventListener('resize', updateViewport)
+      viewport?.removeEventListener('scroll', updateViewport)
       window.clearTimeout(closing.current)
       element?.close()
     }
@@ -250,7 +265,7 @@ export default function PositionForm({ current, fixedPlatform, fixedCategory, po
   }
 
   return (
-    <dialog ref={dialog} aria-labelledby="position-title" onCancel={event => {
+    <dialog className="form-dialog" ref={dialog} aria-labelledby="position-title" onCancel={event => {
       event.preventDefault()
       if (!savePending.current) close()
     }}>
@@ -261,7 +276,7 @@ export default function PositionForm({ current, fixedPlatform, fixedCategory, po
             <p className="hint">Pour des titres ou cryptos que tu détiens déjà.</p></div>
           <button type="button" className="icon-button" aria-label="Fermer" onClick={close} disabled={busy}>×</button>
         </header>
-        <fieldset disabled={busy} className="form-fields">
+        <fieldset disabled={busy} className="form-fields dialog-body">
           <div className="step"><span>1</span><h3>Choisis ton investissement</h3></div>
           <AssetPicker fixedCategory={Boolean(fixedCategory)} category={category} selected={selected} onCategory={setCategory}
             onChoose={item => {
@@ -396,8 +411,8 @@ export default function PositionForm({ current, fixedPlatform, fixedCategory, po
             </p>}
           </>}
         </fieldset>
-        {error && <p className="error" role="alert">{error}</p>}
         <footer className="dialog-actions">
+          {error && <p className="error dialog-error" role="alert">{error}</p>}
           <button type="button" className="secondary" onClick={close} disabled={busy}>Annuler</button>
           <button className="primary" type="submit" disabled={busy || !asset}>{busy ? 'Enregistrement…' : 'Enregistrer la position'}</button>
         </footer>

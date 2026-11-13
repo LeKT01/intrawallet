@@ -91,7 +91,7 @@ export default function OperationForm({ current, initialAsset, data, platforms, 
     }
   }
 
-  return <dialog ref={dialog} aria-labelledby="operation-title" onCancel={event => {
+  return <dialog className="form-dialog" ref={dialog} aria-labelledby="operation-title" onCancel={event => {
     event.preventDefault()
     if (!pending.current) close()
   }}>
@@ -100,7 +100,7 @@ export default function OperationForm({ current, initialAsset, data, platforms, 
         <div><p className="eyebrow">JOURNAL</p><h2 id="operation-title">{current ? 'Modifier l’opération' : 'Enregistrer une opération'}</h2></div>
         <button type="button" className="icon-button" aria-label="Fermer" onClick={close} disabled={busy}>×</button>
       </header>
-      <fieldset disabled={busy}>
+      <fieldset className="dialog-body" disabled={busy}>
         <div className="segments" role="group" aria-label="Type d’opération">
           {(Object.keys(operationNames) as OperationKind[]).filter(key => !fixedPlatform || key !== 'transfer').map(key => <button className="secondary segment-button"
             type="button" aria-pressed={kind === key} key={key} onClick={() => { setKind(key); setError('') }}>
@@ -156,8 +156,8 @@ export default function OperationForm({ current, initialAsset, data, platforms, 
         <p className="hint">{kind === 'transfer' ? 'Les éventuels frais en unités sont déduits en plus de la quantité reçue.'
           : 'Saisis le montant total pour toutes les unités, dans la devise sélectionnée.'}</p>
       </fieldset>
-      {error && <p className="error" role="alert">{error}</p>}
-      <footer className="dialog-actions"><button type="button" className="secondary" onClick={close} disabled={busy}>Annuler</button>
+      <footer className="dialog-actions">
+        {error && <p className="error dialog-error" role="alert">{error}</p>}<button type="button" className="secondary" onClick={close} disabled={busy}>Annuler</button>
         <button type="submit" className="primary" disabled={busy || !asset}>Enregistrer l’opération</button></footer>
     </form>
   </dialog>
