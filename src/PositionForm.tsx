@@ -51,6 +51,8 @@ export function useModal(onClose: () => void) {
 
 interface Props {
   current: Position | null
+  fixedPlatform?: string
+  fixedCategory?: Category
   positions: Position[]
   platforms: string[]
   marks: Mark[]
@@ -62,12 +64,12 @@ interface Props {
   onSave: (position: Position, quote?: Mark) => Promise<unknown>
 }
 
-export default function PositionForm({ current, positions, platforms, marks, display, currentRate, quoteKey, onConfigure, onClose, onSave }: Props) {
+export default function PositionForm({ current, fixedPlatform, fixedCategory, positions, platforms, marks, display, currentRate, quoteKey, onConfigure, onClose, onSave }: Props) {
   const { dialog, close } = useModal(onClose)
-  const [category, setCategory] = useState<Category>(current?.category ?? 'etf')
+  const [category, setCategory] = useState<Category>(current?.category ?? fixedCategory ?? 'etf')
   const [selected, setSelected] = useState<AssetInput | null>(current)
   const [custom, setCustom] = useState<AssetInput | null>(null)
-  const [platform, setPlatform] = useState(current?.platform ?? '')
+  const [platform, setPlatform] = useState(current?.platform ?? fixedPlatform ?? '')
   const [units, setUnits] = useState(current?.quantity ?? '')
   const [manualInput, setManualInput] = useState(current?.valuation?.manual?.amount ?? '')
   const [manualCurrencyChoice, setManualCurrencyChoice] = useState(current?.valuation?.manual?.currency)
@@ -261,7 +263,7 @@ export default function PositionForm({ current, positions, platforms, marks, dis
         </header>
         <fieldset disabled={busy} className="form-fields">
           <div className="step"><span>1</span><h3>Choisis ton investissement</h3></div>
-          <AssetPicker category={category} selected={selected} onCategory={setCategory}
+          <AssetPicker fixedCategory={Boolean(fixedCategory)} category={category} selected={selected} onCategory={setCategory}
             onChoose={item => {
               const previousManual = item && current && quoteTarget(item) === quoteTarget(current) && instrumentCode(item) === instrumentCode(current)
                 ? current.valuation?.manual : undefined
@@ -307,7 +309,7 @@ export default function PositionForm({ current, positions, platforms, marks, dis
             <div className="step"><span>2</span><h3>Indique ce que tu détiens</h3></div>
             <div className="form-grid">
               <label>Plateforme
-                <input value={platform} list="plateformes" maxLength={80} placeholder="Ex. Revolut"
+                <input value={platform} readOnly={Boolean(fixedPlatform)} list="plateformes" maxLength={80} placeholder="Ex. Revolut"
                   onChange={event => setPlatform(event.target.value)} />
                 <datalist id="plateformes">{platforms.map(item => <option key={item} value={item} />)}</datalist>
               </label>

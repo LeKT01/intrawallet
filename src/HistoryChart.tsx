@@ -13,7 +13,8 @@ export function portfolioPeriod(history: HistoryPoint[], intraday: HistoryPoint[
   return { points, first, last, change }
 }
 
-export default function HistoryChart({ history, selection, display, range, chooseRange }: {
+export default function HistoryChart({ history, selection, display, range, chooseRange, individualOnly }: {
+  individualOnly?: boolean
   history: HistoryPoint[]; selection: ReturnType<typeof portfolioPeriod>
   display: CurrencyDisplay; range: number; chooseRange: (range: number) => void
 }) {
@@ -40,7 +41,7 @@ export default function HistoryChart({ history, selection, display, range, choos
 
   return <section className="panel history-panel" aria-labelledby={id}>
     <div className="section-heading">
-      <h2 id={id}>Évolution du portefeuille</h2>
+      <h2 id={id}>{individualOnly ? 'Évolution des positions individuelles' : 'Évolution du portefeuille'}</h2>
       <PeriodButtons range={range} choose={chooseRange} />
     </div>
     {(!first || !last || first === last) && <p className="hint history-coverage">Deux relevés comparables sont nécessaires pour mesurer le résultat sur la période.</p>}

@@ -12,6 +12,7 @@ const paths = {
   next: 'm9 6 6 6-6 6', back: 'm15 6-6 6 6 6', refresh: 'M20 7v5h-5 M4 17v-5h5 M5 9a8 8 0 0 1 14-2 M19 15a8 8 0 0 1-14 2',
   space: 'M4 4h16v16H4z M4 9h16 M9 9v11', diagnostic: 'M3 12h4l3-6 4 12 3-6h4',
   more: 'M5 12h.01 M12 12h.01 M19 12h.01', close: 'm6 6 12 12 M18 6 6 18',
+  group: 'm12 3 9 5-9 5-9-5 9-5Z M3 12l9 5 9-5 M3 16l9 5 9-5',
   wallet: 'M19 8V5H6a2 2 0 0 0 0 4h14v10H6a2 2 0 0 1-2-2V7 M20 12h-5a2 2 0 0 0 0 4h5 M15 14h.01',
   clock: 'M12 7v5l3 2 M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
   buy: 'M12 4v13m-5-5 5 5 5-5 M5 20h14',

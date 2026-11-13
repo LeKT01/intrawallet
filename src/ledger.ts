@@ -2,6 +2,7 @@ import { Decimal } from 'decimal.js'
 import { assetKey, platformKey, type Category, type Position } from './portfolio.ts'
 import { dayKey, daysBefore } from './currency.ts'
 import { marketClosedDay } from './marketCalendar.ts'
+import type { InvestmentGroup } from './groups.ts'
 import { catalogEntry } from './catalog.ts'
 
 export type OperationKind = 'buy' | 'sell' | 'transfer'
@@ -78,6 +79,7 @@ export interface PortfolioData {
   operations: Operation[]
   marks: Mark[]
   platforms?: string[]
+  groups?: InvestmentGroup[]
 }
 
 const D = (value: Decimal.Value) => new Decimal(value)
