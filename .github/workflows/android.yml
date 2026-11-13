@@ -1,0 +1,85 @@
+name: Android et release
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  quality:
+    uses: ./.github/workflows/quality.yml
+  android:
+    needs: quality
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - run: npm ci
+      - run: npm run android:sync
+        env:
+          VITE_MARKET_RELAY_URL: ${{ vars.MARKET_RELAY_URL }}
+      - name: Assembler l’APK de développement
+        if: github.ref_type != 'tag'
+        working-directory: android
+        run: ./gradlew :app:assembleDebug
+      - uses: actions/upload-artifact@v4
+        if: github.ref_type != 'tag'
+        with:
+          name: IntraWallet-android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+      - name: Compiler et vérifier l’APK de distribution
+        if: github.ref_type == 'tag'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF_NAME" == "v$(node -p 'require("./package.json").version')" ]]
+          [[ -n "$KEYSTORE_BASE64" && -n "$ANDROID_KEYSTORE_PASSWORD" && -n "$ANDROID_KEY_ALIAS" && -n "$ANDROID_KEY_PASSWORD" ]]
+          export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/intrawallet-signing.jks"
+          trap 'rm -f "$ANDROID_KEYSTORE_PATH"' EXIT
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
+          export ANDROID_VERSION_CODE=$((30000 + GITHUB_RUN_NUMBER))
+          (cd android && ./gradlew :app:assembleRelease)
+          apk=android/app/build/outputs/apk/release/app-release.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$apk"
+          mkdir -p release
+          cp "$apk" "release/IntraWallet-$GITHUB_REF_NAME.apk"
+          (cd dist && zip -qr "../release/IntraWallet-web-$GITHUB_REF_NAME.zip" .)
+          (cd release && sha256sum ./*.apk ./*.zip > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        if: github.ref_type == 'tag'
+        with:
+          name: release-files
+          path: release/
+          if-no-files-found: error
+  release:
+    if: github.ref_type == 'tag'
+    needs: android
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-files
+      - name: Préparer la release pour validation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flags=()
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then flags+=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" ./*.apk ./*.zip SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes --draft "${flags[@]}"
