@@ -32,11 +32,13 @@ interface Props {
   selected: AssetInput | null
   onCategory: (category: Category) => void
   onChoose: (asset: AssetInput | null) => void
+  disableManual?: boolean
+  fixedCategory?: boolean
   marketKey?: string
   onCustom: (asset: ChosenAsset | null) => void
 }
 
-export default function AssetPicker({ category, selected, onCategory, onChoose, onCustom, marketKey }: Props) {
+export default function AssetPicker({ category, selected, onCategory, onChoose, onCustom, marketKey, fixedCategory, disableManual }: Props) {
   const [query, setQuery] = useState('')
   const [manual, setManual] = useState(false)
   const [name, setName] = useState('')
@@ -88,11 +90,11 @@ export default function AssetPicker({ category, selected, onCategory, onChoose, 
 
   return (
     <div className="picker">
-      <div className="segments" role="group" aria-label="Catégorie d’actif">
+      {!fixedCategory && <div className="segments" role="group" aria-label="Catégorie d’actif">
         {(Object.keys(categories) as Category[]).map(key => <button className="secondary segment-button"
           aria-pressed={category === key} type="button" key={key}
           onClick={() => { onCategory(key); resetCustom(); setQuery(''); resetMarket() }}>{categories[key]}</button>)}
-      </div>
+      </div>}
       {manual ? (
         <div className="form-grid manual-asset">
           <label className="full">Nom de l’actif
@@ -137,7 +139,7 @@ export default function AssetPicker({ category, selected, onCategory, onChoose, 
           </div>}
           {results.length === 0 && <p className="hint">Aucun résultat dans le catalogue.</p>}
           {results.length > limit && <p className="hint">Tape un nom ou un symbole pour affiner la liste.</p>}
-          <button type="button" className="text-button picker-link" onClick={() => setManual(true)}>Ajouter un actif manuellement</button>
+          {!disableManual && <button type="button" className="text-button picker-link" onClick={() => setManual(true)}>Ajouter un actif manuellement</button>}
         </>
       )}
     </div>

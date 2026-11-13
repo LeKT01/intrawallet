@@ -1,3 +1,5 @@
+import type { DailySeries } from './database.ts'
+import { validateGroup, type InvestmentGroup } from './groups.ts'
 import { Decimal } from 'decimal.js'
 import { replay, type PortfolioData } from './ledger.ts'
 import { categories, platformKey } from './portfolio.ts'
@@ -86,7 +88,9 @@ function validList(value: unknown, validate: (entry: unknown) => boolean) {
   return Array.isArray(value) && value.every(validate) && new Set(value.map(entry => entry.id)).size === value.length
 }
 
-export function backupText(data: PortfolioData) {
+export type PortfolioBackup = PortfolioData & { dailyPrices?: DailySeries[] }
+
+export function backupText(data: PortfolioBackup) {
   return JSON.stringify({ format: 'portefeuille-local', version: 1, exportedAt: new Date().toISOString(), ...data }, null, 2)
 }
 
@@ -103,7 +107,28 @@ export function readBackup(text: string) {
   }
   if (parsed.platforms !== undefined && (!Array.isArray(parsed.platforms) || !parsed.platforms.every(name => string(name, 80))
     || new Set(parsed.platforms.map(platformKey)).size !== parsed.platforms.length)) throw new Error('Liste de plateformes invalide.')
-  const data = { ...(parsed.platforms === undefined ? {} : { platforms: parsed.platforms }), positions: parsed.positions, operations: parsed.operations, marks: parsed.marks } as PortfolioData
+  const daily = parsed.dailyPrices
+  if (daily !== undefined && (!Array.isArray(daily) || !daily.every(series => object(series)
+    && string(series.target, 512) && time(series.fetchedAt)
+    && (series.instrument === undefined || (object(series.instrument)
+      && string(series.instrument.code, 64) && ['CHF', 'EUR', 'USD'].includes(String(series.instrument.currency))))
+    && validList(series.marks, entry => mark(entry) && object(entry) && entry.kind === 'market'))
+    || new Set(daily.map(series => series.target)).size !== daily.length)) {
+    throw new Error('Historique des cotations invalide.')
+  }
+  if (parsed.groups !== undefined && !validList(parsed.groups, value => {
+    if (!object(value) || !string(value.id, 512) || !string(value.name, 100) || !string(value.platform, 80)
+      || !validList(value.positions, opening) || !validList(value.operations, operation)
+      || !Array.isArray(value.allocations) || !value.allocations.every(snapshot => object(snapshot) && time(snapshot.at)
+        && Array.isArray(snapshot.entries) && snapshot.entries.every(entry => object(entry) && object(entry.asset)
+          && identity({ ...entry.asset, id: value.id, platform: value.platform })))
+      || !validList(value.flows, entry => object(entry) && string(entry.id) && time(entry.at))
+      || !validList(value.valuations, entry => object(entry) && string(entry.id) && time(entry.at))) return false
+    try { validateGroup(value as unknown as InvestmentGroup); return true } catch { return false }
+  })) throw new Error('Portefeuilles groupés invalides.')
+  const data = { ...(parsed.groups === undefined ? {} : { groups: parsed.groups }), ...(parsed.platforms === undefined ? {} : { platforms: parsed.platforms }),
+    ...(daily === undefined ? {} : { dailyPrices: daily }), positions: parsed.positions,
+    operations: parsed.operations, marks: parsed.marks } as PortfolioBackup
   replay(data)
   return data
 }

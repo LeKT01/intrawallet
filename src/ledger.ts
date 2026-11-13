@@ -2,6 +2,7 @@ import { Decimal } from 'decimal.js'
 import { assetKey, platformKey, type Category, type Position } from './portfolio.ts'
 import { dayKey, daysBefore } from './currency.ts'
 import { marketClosedDay } from './marketCalendar.ts'
+import type { InvestmentGroup } from './groups.ts'
 import { catalogEntry } from './catalog.ts'
 
 export type OperationKind = 'buy' | 'sell' | 'transfer'
@@ -78,6 +79,7 @@ export interface PortfolioData {
   operations: Operation[]
   marks: Mark[]
   platforms?: string[]
+  groups?: InvestmentGroup[]
 }
 
 const D = (value: Decimal.Value) => new Decimal(value)
@@ -95,6 +97,12 @@ export function unitMark(position: Position): Mark | null {
     source: manual ? manualValuationSource : 'Saisie manuelle',
     ...(manual ? { originalPrice: D(manual.amount).div(position.quantity).toFixed(), currency: manual.currency,
       instrument: position.listing ?? position.reference } : {}) }
+}
+
+export const hasUnknownQuoteTime = (mark: Mark) => mark.source === 'Tradegate · relevé'
+
+export function compareMarketMarks(a: Mark, b: Mark) {
+  return Number(hasUnknownQuoteTime(b)) - Number(hasUnknownQuoteTime(a)) || a.sourceAt - b.sourceAt || a.at - b.at
 }
 
 export const isMarketMark = (mark: Mark) =>
@@ -294,10 +302,10 @@ export function replay(data: PortfolioData, historical: Mark[] = [],
     } else if (event.type === 'trade') applyTrade(event.value)
     else if (event.value.kind === 'market') {
       const previous = marketMarks.get(event.value.target)
-      if (!previous || previous.sourceAt <= event.value.sourceAt) marketMarks.set(event.value.target, event.value)
+      if (!previous || compareMarketMarks(event.value, previous) >= 0) marketMarks.set(event.value.target, event.value)
       if (isMarketMark(event.value)) {
         const verified = verifiedMarks.get(event.value.target)
-        if (!verified || verified.sourceAt <= event.value.sourceAt) verifiedMarks.set(event.value.target, event.value)
+        if (!verified || compareMarketMarks(event.value, verified) >= 0) verifiedMarks.set(event.value.target, event.value)
       }
     } else manualMarks.set(event.value.target, event.value)
     resolveOpenings()
@@ -376,11 +384,11 @@ export function dailyPortfolioHistory(data: PortfolioData, recorded: HistoryPoin
 
 export function assetChartMarks(data: PortfolioData, target: string, external: Mark[]) {
   const observed = data.marks.filter(mark => mark.kind === 'market' && mark.target === target && mark.price !== null)
-  const market = [...external, ...observed.filter(mark => mark.source !== 'Cours manuel')]
+  const market = [...external, ...observed.filter(mark => mark.source !== 'Cours manuel' && !hasUnknownQuoteTime(mark))]
   if (market.length) return { marks: market, official: true }
   const positions = data.positions.filter(position => assetKey(position) === target)
   const byId = new Map(positions.map(position => [position.id, position]))
-  const marks = [...observed, ...data.marks.filter(mark => {
+  const marks = [...observed.filter(mark => !hasUnknownQuoteTime(mark)), ...data.marks.filter(mark => {
     const position = byId.get(mark.target)
     return mark.kind === 'manual' && mark.price !== null && position && manualMarkMatches(mark, position)
   })]

@@ -25,7 +25,8 @@ function platformGroups(holdings: Holding[]) {
   return grouped(holdings, item => platformKey(item.platform)).map(group => ({ ...group, label: group.entries[0].platform }))
 }
 
-export function AnalyticsView({ holdings, history, display }: {
+export function AnalyticsView({ holdings, history, display, individualHistory }: {
+  individualHistory?: boolean
   holdings: Holding[]; history: HistoryPoint[]; display: CurrencyDisplay
 }) {
   const [category, setCategory] = useState<Category | ''>('')
@@ -78,7 +79,7 @@ export function AnalyticsView({ holdings, history, display }: {
           .slice(0, 10).map(item => <li key={item.key}><span>{item.name}</span><Change value={item.gain}>{display.format(item.gain!, { signed: true })}</Change></li>)}</ul>
       </section>
     </div>
-    <section className="panel chart-panel"><PanelHeading title="Évolution de la répartition" description="Poids historique dans l’ensemble du portefeuille, sur les dates valorisables." />
+    <section className="panel chart-panel"><PanelHeading title="Évolution de la répartition" description={individualHistory ? "Poids historique des positions individuelles, sur les dates valorisables." : "Poids historique dans l’ensemble du portefeuille, sur les dates valorisables."} />
       <div className="filter-bar"><label>Catégorie historique<select value={historyCategory} onChange={event => setHistoryCategory(event.target.value as Category)}>
         {categoryEntries.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
         <PeriodButtons range={range} choose={setRange} minimumDays={7} /></div>
@@ -88,17 +89,21 @@ export function AnalyticsView({ holdings, history, display }: {
   </div>
 }
 
-export function PlatformsView({ holdings, platforms, quotes, display, onOpen, onSaved }: {
-  holdings: Holding[]; platforms: string[]; quotes: Map<string, Mark>; display: CurrencyDisplay; onOpen: (key: string) => void; onSaved: () => void
+export function PlatformsView({ holdings, declaredGroups, platforms, quotes, display, onOpen, onSaved, startCreating, onCreateClosed }: {
+  declaredGroups: { platform: string; value: Decimal | null }[]
+  holdings: Holding[]; platforms: string[]; quotes: Map<string, Mark>; display: CurrencyDisplay; onOpen: (key: string) => void; onSaved: () => void; startCreating: boolean; onCreateClosed: () => void
 }) {
-  const [editor, setEditor] = useState<string | null>(null)
+  const [editor, setEditor] = useState<string | null>(startCreating ? '' : null)
   const [name, setName] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const groups = useMemo(() => platforms.map(label => {
     const entries = holdings.filter(item => platformKey(item.platform) === platformKey(label))
-    return { label, assets: consolidate(entries), entries, totals: summarize(entries) }
-  }).sort((a, b) => b.totals.amount.cmp(a.totals.amount) || a.label.localeCompare(b.label, 'fr')), [holdings, platforms])
+    const declared = declaredGroups.filter(group => platformKey(group.platform) === platformKey(label))
+    const known = declared.flatMap(group => group.value === null ? [] : [group.value])
+    const declaredValue = known.reduce((sum, amount) => sum.plus(amount), new Decimal(0))
+    return { label, assets: consolidate(entries), entries, totals: summarize(entries), declared, known, declaredValue }
+  }).sort((a, b) => b.totals.amount.cmp(a.totals.amount) || a.label.localeCompare(b.label, 'fr')), [holdings, platforms, declaredGroups])
 
   function edit(label: string) { setError(''); setName(label); setEditor(label) }
 
@@ -109,6 +114,7 @@ export function PlatformsView({ holdings, platforms, quotes, display, onOpen, on
     try {
       await savePlatform(name, editor || undefined)
       setEditor(null)
+      onCreateClosed()
       onSaved()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'La plateforme n’a pas pu être enregistrée.')
@@ -122,15 +128,16 @@ export function PlatformsView({ holdings, platforms, quotes, display, onOpen, on
     {editor !== null && <form className="platform-editor" onSubmit={submit}>
       <label>Nom de la plateforme<input value={name} onChange={event => setName(event.target.value)} maxLength={80} required autoFocus /></label>
       <button className="primary" disabled={busy}>{busy ? 'Enregistrement…' : 'Enregistrer'}</button>
-      <button type="button" className="secondary" onClick={() => setEditor(null)} disabled={busy}>Annuler</button>
+      <button type="button" className="secondary" onClick={() => { setEditor(null); onCreateClosed() }} disabled={busy}>Annuler</button>
       {error && <p className="error" role="alert">{error}</p>}
     </form>}
     {!groups.length && <p className="inline-empty">Crée une plateforme ou saisis son nom lors d’un premier investissement.</p>}</section>
-    {groups.map(({ label, assets, entries, totals }) => <details className="panel platform-panel" key={label}>
+    {groups.map(({ label, assets, entries, totals, declared, known, declaredValue }) => <details className="panel platform-panel" key={label}>
       <summary><span className="platform-icon"><Icon name="platforms" /></span><span><strong>{label}</strong><small>{assets.length} {assets.length === 1 ? 'actif' : 'actifs'}{assets.length > 0 && ' · ' + assets.slice(0, 3)
           .map(asset => assetSymbol(asset, asset.entries[0].listing) || asset.name).join(' · ')}</small></span>
-        <span><strong>{totals.priced ? display.format(totals.amount) : '—'}</strong><small>{totals.gain === null ? 'Gain latent indéterminé' : display.format(totals.gain, { signed: true })}</small></span><Icon name="next" /></summary>
+        <span><strong>{totals.priced || known.length ? display.format(totals.amount.plus(declaredValue)) : '—'}</strong><small>{declared.length || totals.gain === null ? 'Gain latent indéterminé' : display.format(totals.gain, { signed: true })}</small></span><Icon name="next" /></summary>
       <div className="platform-detail">
+        {known.length > 0 && <p className="hint">Valeurs déclarées incluses · {display.format(declaredValue)}</p>}
         <button className="secondary" onClick={() => edit(label)}>Renommer la plateforme</button>
         <Allocation rows={grouped(entries, item => categories[item.category]).map(group => ({ label: group.label, amount: summarize(group.entries).amount }))} display={display} />
         <AssetTable assets={assets} display={display} quotes={quotes} onOpen={onOpen} />

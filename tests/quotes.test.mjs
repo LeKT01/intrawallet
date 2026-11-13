@@ -128,3 +128,42 @@ test('les clôtures d’ETF sont enregistrées avec leur ligne de cotation', asy
   assert.ok(result.receivedAt > markTime)
   assert.notEqual(instrumentCode(etf), instrumentCode({ ...etf, listing: 'XSWX:VUAA' }))
 })
+
+test('un ETF hors catalogue garde une identité par place et devise', async t => {
+  const isin = 'IE00B1234567'
+  t.mock.method(globalThis, 'fetch', async () => Response.json([
+    { Code: 'ABC', Exchange: 'XETRA', Currency: 'EUR', Name: 'ETF témoin', Type: 'ETF', ISIN: isin },
+    { Code: 'ABC', Exchange: 'SW', Currency: 'CHF', Name: 'ETF témoin', Type: 'ETF', ISIN: isin },
+  ]))
+  const [xetra, six] = await searchMarket('etf', isin, 'test-lignes-distinctes')
+  assert.equal(xetra.isin, six.isin)
+  assert.notEqual(quoteTarget(xetra), quoteTarget(six))
+  assert.deepEqual([xetra.reference, six.reference], ['XETR:ABC:EUR', 'XSWX:ABC:CHF'])
+})
+
+test('le cache crypto permet de relancer après une erreur et de forcer une vérification', async t => {
+  const now = Math.floor(Date.now() / 1000)
+  let status = 503
+  let price = 63000
+  const request = t.mock.method(globalThis, 'fetch', async () => status === 200
+    ? Response.json({ bitcoin: { chf: price, last_updated_at: now } })
+    : new Response(null, { status }))
+  const options = { ...keys, coingecko: 'test-cache-relance' }
+  const failed = await fetchQuotes([bitcoin], options)
+  assert.equal(failed.marks.length, 0)
+  status = 200
+  const valid = await fetchQuotes([bitcoin], options)
+  assert.equal(valid.marks[0].price, '63000')
+  assert.deepEqual((await fetchQuotes([bitcoin], options)).marks, valid.marks)
+  assert.equal(request.mock.callCount(), 2)
+  price = 63001
+  const fresh = await Promise.all([
+    fetchQuotes([bitcoin], options, { force: true }), fetchQuotes([bitcoin], options, { force: true }),
+  ])
+  assert.equal(request.mock.callCount(), 3)
+  assert.equal(fresh[0].marks[0].price, '63001')
+  assert.deepEqual(fresh[0].marks, fresh[1].marks)
+  status = 429
+  assert.match((await fetchQuotes([bitcoin], options, { force: true })).issues[0], /limité les requêtes/)
+  assert.equal(valid.marks[0].price, '63000')
+})

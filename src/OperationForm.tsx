@@ -16,19 +16,20 @@ interface Props {
   current: Operation | null
   initialAsset?: AssetInput
   data: PortfolioData
+  fixedPlatform?: string
   platforms: string[]
   marketKey?: string
   onSave: (operation: Operation) => Promise<void>
   onClose: () => void
 }
 
-export default function OperationForm({ current, initialAsset, data, platforms, marketKey, onSave, onClose }: Props) {
+export default function OperationForm({ current, initialAsset, data, platforms, fixedPlatform, marketKey, onSave, onClose }: Props) {
   const { dialog, close } = useModal(onClose)
   const [kind, setKind] = useState<OperationKind>(current?.kind ?? 'buy')
   const [category, setCategory] = useState<Category>(current?.category ?? initialAsset?.category ?? 'etf')
   const [chosen, setChosen] = useState<AssetInput | null>(current ?? initialAsset ?? null)
   const [custom, setCustom] = useState<AssetInput | null>(null)
-  const [platform, setPlatform] = useState(current?.platform ?? '')
+  const [platform, setPlatform] = useState(current?.platform ?? fixedPlatform ?? '')
   const [destination, setDestination] = useState(current?.destination ?? '')
   const [quantity, setQuantity] = useState(current?.quantity ?? '')
   const [gross, setGross] = useState(current?.kind === 'transfer' ? '' : current?.original?.gross ?? current?.gross ?? '')
@@ -90,7 +91,7 @@ export default function OperationForm({ current, initialAsset, data, platforms, 
     }
   }
 
-  return <dialog ref={dialog} aria-labelledby="operation-title" onCancel={event => {
+  return <dialog className="form-dialog" ref={dialog} aria-labelledby="operation-title" onCancel={event => {
     event.preventDefault()
     if (!pending.current) close()
   }}>
@@ -99,9 +100,9 @@ export default function OperationForm({ current, initialAsset, data, platforms, 
         <div><p className="eyebrow">JOURNAL</p><h2 id="operation-title">{current ? 'Modifier l’opération' : 'Enregistrer une opération'}</h2></div>
         <button type="button" className="icon-button" aria-label="Fermer" onClick={close} disabled={busy}>×</button>
       </header>
-      <fieldset disabled={busy}>
+      <fieldset className="dialog-body" disabled={busy}>
         <div className="segments" role="group" aria-label="Type d’opération">
-          {(Object.keys(operationNames) as OperationKind[]).map(key => <button className="secondary segment-button"
+          {(Object.keys(operationNames) as OperationKind[]).filter(key => !fixedPlatform || key !== 'transfer').map(key => <button className="secondary segment-button"
             type="button" aria-pressed={kind === key} key={key} onClick={() => { setKind(key); setError('') }}>
             {operationNames[key]}</button>)}
         </div>
@@ -117,14 +118,14 @@ export default function OperationForm({ current, initialAsset, data, platforms, 
             {candidates.map(item => <option key={quoteTarget(item)} value={quoteTarget(item)}>{item.name} · {item.reference.startsWith('MANUAL:') ? 'Ajout manuel' : item.reference}</option>)}
           </select>
         </label>}
-        {kind === 'buy' && <AssetPicker category={category} selected={chosen} onCategory={setCategory}
+        {kind === 'buy' && <AssetPicker fixedCategory={Boolean(fixedPlatform)} category={category} selected={chosen} onCategory={setCategory}
           onChoose={setChosen} onCustom={setCustom} marketKey={marketKey} />}
         {kind !== 'buy' && candidates.length === 0 && <p className="hint">Ajoute d’abord une position ou un achat dans ton portefeuille.</p>}
 
         <div className="step"><span>2</span><h3>Renseigne le mouvement</h3></div>
         <div className="form-grid">
           <label>{kind === 'transfer' ? 'Plateforme de départ' : 'Plateforme'}
-            <input value={platform} list="operation-platforms" maxLength={80} placeholder="Ex. Revolut" onChange={event => setPlatform(event.target.value)} />
+            <input value={platform} readOnly={Boolean(fixedPlatform)} list="operation-platforms" maxLength={80} placeholder="Ex. Revolut" onChange={event => setPlatform(event.target.value)} />
             <datalist id="operation-platforms">{platforms.map(item => <option key={item} value={item} />)}</datalist>
           </label>
           {kind === 'transfer' && <label>Plateforme de destination
@@ -153,10 +154,10 @@ export default function OperationForm({ current, initialAsset, data, platforms, 
           </label>}
         </div>
         <p className="hint">{kind === 'transfer' ? 'Les éventuels frais en unités sont déduits en plus de la quantité reçue.'
-          : 'Saisis le montant total pour toutes les unités, en CHF.'}</p>
+          : 'Saisis le montant total pour toutes les unités, dans la devise sélectionnée.'}</p>
       </fieldset>
-      {error && <p className="error" role="alert">{error}</p>}
-      <footer className="dialog-actions"><button type="button" className="secondary" onClick={close} disabled={busy}>Annuler</button>
+      <footer className="dialog-actions">
+        {error && <p className="error dialog-error" role="alert">{error}</p>}<button type="button" className="secondary" onClick={close} disabled={busy}>Annuler</button>
         <button type="submit" className="primary" disabled={busy || !asset}>Enregistrer l’opération</button></footer>
     </form>
   </dialog>

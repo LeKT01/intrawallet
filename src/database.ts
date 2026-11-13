@@ -1,3 +1,5 @@
+import { validateGroup, type InvestmentGroup } from './groups.ts'
+import type { PortfolioBackup } from './backup.ts'
 import { Dexie, type EntityTable } from 'dexie'
 import { assetKey, platformKey, type Position } from './portfolio.ts'
 import { dayKey } from './currency.ts'
@@ -11,6 +13,7 @@ const db = new Dexie(demoMode ? 'portefeuille-local-demo' : 'portefeuille-local'
   operations: EntityTable<Operation, 'id'>
   marks: EntityTable<Mark, 'id'>
   dailyPrices: EntityTable<DailySeries, 'target'>
+  groups: EntityTable<InvestmentGroup, 'id'>
   platforms: EntityTable<{ id: string; name: string }, 'id'>
 }
 
@@ -18,6 +21,7 @@ db.version(1).stores({ positions: 'id,createdAt' })
 db.version(2).stores({ positions: 'id,createdAt', operations: 'id,at', marks: 'id,[kind+target]' })
 db.version(3).stores({ dailyPrices: 'target' })
 db.version(4).stores({ platforms: 'id' })
+db.version(5).stores({ groups: 'id' })
 
 if (demoMode) db.on('populate', transaction => {
   const { positions, operations, marks } = makeDemo()
@@ -46,19 +50,20 @@ export function saveDailyPrices(series: DailySeries) {
 }
 
 export async function loadPortfolio(): Promise<PortfolioData> {
-  return db.transaction('r', [db.positions, db.operations, db.marks, db.platforms], async () => {
-    const [positions, operations, marks, platforms] = await Promise.all([
+  return db.transaction('r', [db.positions, db.operations, db.marks, db.platforms, db.groups], async () => {
+    const [positions, operations, marks, platforms, groups] = await Promise.all([
       db.positions.orderBy('createdAt').toArray(),
       db.operations.orderBy('at').toArray(),
       db.marks.toArray(),
       db.platforms.toArray(),
+      db.groups.toArray(),
     ])
-    return { positions, operations, marks, platforms: platforms.map(platform => platform.name) }
+    return { positions, operations, marks, groups, platforms: platforms.map(platform => platform.name) }
   })
 }
 
 const write = <T,>(callback: () => Promise<T>) =>
-  db.transaction('rw', [db.positions, db.operations, db.marks, db.platforms], callback)
+  db.transaction('rw', [db.positions, db.operations, db.marks, db.platforms, db.groups], callback)
 
 export function savePosition(position: Position, editing: boolean, quote?: Mark) {
   return write(async () => {
@@ -130,8 +135,8 @@ export function deleteOperation(id: string) {
 
 export function saveMarks(marks: Mark[]) {
   return write(async () => {
-    const { positions, operations } = await loadPortfolio()
-    const targets = new Set([...positions, ...operations].map(assetKey))
+    const { positions, operations, groups } = await loadPortfolio()
+    const targets = new Set([...positions, ...operations, ...(groups ?? []).flatMap(group => [...group.positions, ...group.operations])].map(assetKey))
     const existing = await db.marks.bulkGet(marks.map(mark => mark.id))
     const fresh = marks.filter((mark, index) => !existing[index] && targets.has(mark.target))
     await db.marks.bulkAdd(fresh)
@@ -146,7 +151,7 @@ export function savePlatform(name: string, previous?: string) {
   if (!clean || clean.length > 80) throw new Error('Indique un nom de plateforme valide.')
   return write(async () => {
     const data = await loadPortfolio()
-    const names = [...(data.platforms ?? []), ...data.positions.map(item => item.platform),
+    const names = [...(data.platforms ?? []), ...data.positions.map(item => item.platform), ...(data.groups ?? []).map(group => group.platform),
       ...data.operations.flatMap(item => [item.platform, item.destination ?? ''])]
     if (id !== old && names.some(item => platformKey(item) === id)) throw new Error('Cette plateforme existe déjà.')
     if (old) {
@@ -156,6 +161,11 @@ export function savePlatform(name: string, previous?: string) {
         .map(item => ({ ...item, platform: clean }))
       const operations = data.operations.filter(item => platformKey(item.platform) === old || platformKey(item.destination ?? '') === old)
         .map(item => ({ ...item, platform: rename(item.platform), destination: item.destination && rename(item.destination) }))
+      const groups = (data.groups ?? []).filter(group => platformKey(group.platform) === old).map(group => ({
+        ...group, platform: clean, positions: group.positions.map(item => ({ ...item, platform: clean })),
+        operations: group.operations.map(item => ({ ...item, platform: clean })),
+      }))
+      await db.groups.bulkPut(groups)
       await db.positions.bulkPut(positions)
       await db.operations.bulkPut(operations)
       if (old !== id) await db.platforms.delete(old)
@@ -164,11 +174,50 @@ export function savePlatform(name: string, previous?: string) {
   })
 }
 
-export function restorePortfolio(data: PortfolioData) {
+export function loadPortfolioBackup(): Promise<PortfolioBackup> {
+  return db.transaction('r', [db.positions, db.operations, db.marks, db.platforms, db.dailyPrices, db.groups], async () => {
+    const [data, dailyPrices] = await Promise.all([loadPortfolio(), loadDailyPrices()])
+    return { ...data, dailyPrices }
+  })
+}
+
+export function restorePortfolio(data: PortfolioBackup) {
   replay(data)
-  return write(async () => {
-    await Promise.all([db.positions.clear(), db.operations.clear(), db.marks.clear(), db.platforms.clear()])
+  data.groups?.forEach(validateGroup)
+  return db.transaction('rw', [db.positions, db.operations, db.marks, db.platforms, db.dailyPrices, db.groups], async () => {
+    await Promise.all([db.positions.clear(), db.operations.clear(), db.marks.clear(), db.platforms.clear(), db.groups.clear()])
     await Promise.all([db.positions.bulkAdd(data.positions), db.operations.bulkAdd(data.operations), db.marks.bulkAdd(data.marks),
       db.platforms.bulkPut((data.platforms ?? []).map(name => ({ id: platformKey(name), name })))])
+    if (data.groups?.length) await db.groups.bulkAdd(data.groups)
+    await db.dailyPrices.clear()
+    if (data.dailyPrices?.length) await db.dailyPrices.bulkAdd(data.dailyPrices)
+  })
+}
+
+export async function probeLocalStorage() {
+  const id = 'diagnostic/' + crypto.randomUUID()
+  await db.transaction('rw', db.platforms, async () => {
+    await db.platforms.add({ id, name: 'Diagnostic' })
+    if ((await db.platforms.get(id))?.name !== 'Diagnostic') throw new Error('Lecture de contrôle impossible.')
+    await db.platforms.delete(id)
+  })
+}
+
+export function saveInvestmentGroup(group: InvestmentGroup, previous?: InvestmentGroup, quote?: Mark) {
+  validateGroup(group)
+  return db.transaction('rw', db.groups, db.marks, async () => {
+    const stored = await db.groups.get(group.id)
+    if (JSON.stringify(stored) !== JSON.stringify(previous)) throw new Error('Ce groupe a changé. Rouvre-le avant de réessayer.')
+    await db.groups.put(group)
+    if (quote && !await db.marks.get(quote.id)) await db.marks.add(quote)
+  })
+}
+
+export async function deleteInvestmentGroup(group: InvestmentGroup) {
+  await db.transaction('rw', db.groups, async () => {
+    if (JSON.stringify(await db.groups.get(group.id)) !== JSON.stringify(group)) {
+      throw new Error('Ce groupe a changé. Rouvre-le avant de réessayer.')
+    }
+    await db.groups.delete(group.id)
   })
 }

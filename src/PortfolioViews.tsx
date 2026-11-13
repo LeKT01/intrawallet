@@ -59,7 +59,8 @@ export function AssetTable({ assets, display, quotes, onOpen, limit, order, comp
       <button type="button" onClick={() => onOpen(asset.key)}>
         <AssetBadge asset={asset} />
         <span className="mobile-position-name"><strong>{asset.name}</strong><small>{[assetSymbol(asset, asset.entries[0].listing), categories[asset.category]].filter(Boolean).join(' · ')}</small>
-          {!limit && <small className="mobile-quantity">{quantity(asset.quantity)} unité(s)</small>}</span>
+          {!limit && <small className="mobile-quantity">{quantity(asset.quantity)} unité(s)</small>}
+          {!compact && asset.entries[0].unitPrice !== null && <small>Cours · {display.format(asset.entries[0].unitPrice, { unit: true })}</small>}</span>
         <span className="mobile-position-value"><strong>{asset.priced ? display.format(asset.amount) : '—'}</strong>
           <small><span className="sr-only">Rendement latent </span><Change value={asset.returnRate}>{percentLabel(asset.returnRate)}</Change></small>
           {asset.entries.some(entry => entry.partiallyValued) && <small>{asset.priced ? 'Valeur partielle' : 'Cours manquant'}</small>}</span>
@@ -106,7 +107,7 @@ export function PortfolioView({ holdings, platforms, display, quotes, onOpen, on
   const assets = useMemo(() => consolidate(holdings.filter(holding =>
     (!category || holding.category === category) && (!platform || platformKey(holding.platform) === platform))), [holdings, category, platform])
   return <section className="panel table-panel portfolio-panel">
-    <PanelHeading title="Positions consolidées">
+    <PanelHeading title="Positions consolidées" description="Les lots et opérations de chaque actif sont disponibles dans sa fiche.">
       <button className="primary portfolio-add" onClick={onAdd}><Icon name="plus" /> Ajouter un investissement</button>
     </PanelHeading>
     <div className="portfolio-filters">
@@ -179,7 +180,8 @@ export function AssetDetail({ asset, data, series, quote, display, cryptoKey, on
       <div className="asset-detail-price"><small>{!quote && entry.usesManualValuation ? 'Prix unitaire estimé' : 'Dernier cours de marché'}</small>
         <strong>{native ?? (entry.unitPrice === null ? 'Indisponible' : display.format(entry.unitPrice, { unit: true }))}</strong>
         {quote && <p className={quoteIsStale(quote) ? 'stale-label' : 'muted'}>
-          {quoteIsStale(quote) && 'Cours ancien · '}{quoteTiming(quote)} · {quote.instrument ? quote.instrument + ' · ' : ''}{quote.source} · {timestamp.format(quote.sourceAt)}
+          {quoteIsStale(quote) && quote.source !== 'Tradegate · relevé' && 'Cours ancien · '}{quoteTiming(quote)} · {quote.instrument ? quote.instrument + ' · ' : ''}{quote.source}
+          {quote.source !== 'Tradegate · relevé' && ' · ' + timestamp.format(quote.sourceAt)}
           {quote.receivedAt && <><br />Reçu le {timestamp.format(quote.receivedAt)}</>}</p>}</div>
     </section>
     <section className="panel chart-panel"><AssetHistory {...chart} asset={entry} cryptoKey={cryptoKey} name={asset.name} display={display} /></section>

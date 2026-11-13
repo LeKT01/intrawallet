@@ -1,7 +1,6 @@
 import { useRef, useState, type ChangeEvent } from 'react'
-import { backupText, readBackup } from './backup'
-import { loadPortfolio, restorePortfolio } from './database'
-import type { PortfolioData } from './ledger'
+import { backupText, readBackup, type PortfolioBackup } from './backup'
+import { loadPortfolioBackup, restorePortfolio } from './database'
 import { useModal } from './PositionForm'
 import { demoLink, demoMode } from './demo'
 import type { QuoteKeys } from './quotes'
@@ -43,7 +42,7 @@ export default function DataSettings({ quoteKey, onKey, onRefresh, refreshing, r
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [keyDraft, setKeyDraft] = useState(quoteKey)
-  const [pending, setPending] = useState<PortfolioData | null>(null)
+  const [pending, setPending] = useState<PortfolioBackup | null>(null)
 
   async function run(action: () => Promise<void>) {
     if (busy.current) return
@@ -63,7 +62,7 @@ export default function DataSettings({ quoteKey, onKey, onRefresh, refreshing, r
 
   function exportData() {
     void run(async () => {
-      const data = await loadPortfolio()
+      const data = await loadPortfolioBackup()
       const url = URL.createObjectURL(new Blob([backupText(data)], { type: 'application/json' }))
       const link = document.createElement('a')
       link.href = url
@@ -85,7 +84,7 @@ export default function DataSettings({ quoteKey, onKey, onRefresh, refreshing, r
   }
 
   if (demoMode) return <section className="panel settings-panel">
-    <h2>Données de démonstration</h2>
+    <h2 id="backup" tabIndex={-1}>Données de démonstration</h2>
     <p className="hint">Les cours et taux de change sont simulés. Tes essais sont enregistrés dans ce portefeuille de démonstration.</p>
     <a className="secondary" href={demoLink(false)}>Revenir aux données de mon portefeuille</a>
   </section>
@@ -121,8 +120,8 @@ export default function DataSettings({ quoteKey, onKey, onRefresh, refreshing, r
       {lastChecked !== null && <p className="hint">Dernière vérification · {new Date(lastChecked).toLocaleString('fr-CH')}</p>}
       {refreshStatus && <p className="hint" role="status">{refreshStatus}</p>}
     </section>
-    <section className="panel settings-panel"><h2>Sauvegarde locale</h2>
-      <p className="hint">Le fichier contient les positions, les opérations et les cours enregistrés. Conserve-le dans un endroit sûr.</p>
+    <section className="panel settings-panel"><h2 id="backup" tabIndex={-1}>Sauvegarde locale</h2>
+      <p className="hint">Le fichier contient les positions, les opérations, les plateformes et les historiques de cours enregistrés. Conserve-le dans un endroit sûr.</p>
       <div className="settings-actions">
         <button className="primary" onClick={exportData} disabled={working}>Exporter la sauvegarde</button>
         <button className="secondary" onClick={() => fileInput.current?.click()} disabled={working}>Importer un fichier</button>
@@ -136,7 +135,7 @@ export default function DataSettings({ quoteKey, onKey, onRefresh, refreshing, r
       <a className="secondary" href={demoLink(true)}>Ouvrir la démo</a>
     </section>
     {pending && <ConfirmDialog title="Restaurer cette sauvegarde ?"
-      description={`Le portefeuille actuel sera remplacé par ${pending.positions.length} position(s) de départ, ${pending.operations.length} opération(s) et les plateformes du fichier.`}
+      description={`Le portefeuille actuel sera remplacé par ${pending.positions.length} position(s) de départ, ${pending.operations.length} opération(s) et les plateformes du fichier. Les groupes actuels seront remplacés par les ${pending.groups?.length ?? 0} groupe(s) de la sauvegarde.${pending.dailyPrices === undefined ? ' Ce fichier ancien ne contient pas d’historiques téléchargés. Le cache de cotations actuel sera vidé.' : ''}`}
       confirm="Restaurer le fichier" busy={working} onClose={() => setPending(null)} onConfirm={() => {
         void run(async () => {
           try {

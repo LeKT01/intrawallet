@@ -1,6 +1,6 @@
 import { Decimal } from 'decimal.js'
 import { catalogEntry, type CatalogAsset } from './catalog.ts'
-import { quoteTarget, type Mark } from './ledger.ts'
+import { hasUnknownQuoteTime, quoteTarget, type Mark } from './ledger.ts'
 import { dayKey, daysBefore, type FxRate } from './currency.ts'
 import { closeTimestamp, latestClosingDay, marketOpen } from './marketCalendar.ts'
 import { findSixClosing, parseSixClosings, sixEtfLine } from './sixEtf.ts'
@@ -115,10 +115,10 @@ export function saveSessionQuoteKey(provider: Provider, key: string) {
 }
 
 const fxRequests = new Map<string, { at: number; result: Promise<FxRate[]> }>()
-export function fetchFxRates(from: string, to?: string) {
+export function fetchFxRates(from: string, to?: string, fresh = false) {
   const key = from + '/' + (to ?? '')
   const previous = fxRequests.get(key)
-  if (previous && Date.now() - previous.at < 3600000) return previous.result
+  if (!fresh && previous && Date.now() - previous.at < 3600000) return previous.result
   const url = new URL('https://api.frankfurter.dev/v2/rates')
   url.search = new URLSearchParams({ base: 'CHF', quotes: 'EUR,USD', from, providers: 'ecb', ...(to ? { to } : {}) }).toString()
   const result = json(url, 'Frankfurter').then((data): FxRate[] => {
@@ -129,10 +129,10 @@ export function fetchFxRates(from: string, to?: string) {
       return [{ date: row.date, quote: row.quote, rate: rate.toFixed() }]
     })
   }).catch(error => {
-    fxRequests.delete(key)
+    if (!fresh) fxRequests.delete(key)
     throw error
   })
-  fxRequests.set(key, { at: Date.now(), result })
+  if (!fresh) fxRequests.set(key, { at: Date.now(), result })
   return result
 }
 
@@ -149,16 +149,26 @@ export async function rateToCHF(currency: string, day: string) {
   return { date: ref.date, rate: new Decimal(1).div(ref.rate) }
 }
 
-const quoteCache = new Map<string, { at: number; result: Promise<Mark[]> }>()
-function cachedRequest(key: string, interval: number, load: () => Promise<Mark[]>) {
+const quoteCache = new Map<string, { expiresAt: number | null; result: Promise<Mark[]> }>()
+function cachedRequest(key: string, interval: number, load: () => Promise<Mark[]>, force = false) {
   const cached = quoteCache.get(key)
-  if (cached && Date.now() - cached.at < interval) return cached.result
-  const result = load()
-  quoteCache.set(key, { at: Date.now(), result })
-  return result
+  if (cached && (cached.expiresAt === null || (!force && Date.now() < cached.expiresAt))) return cached.result
+  const entry = {
+    expiresAt: null as number | null,
+    result: Promise.resolve().then(load).then(marks => {
+      if (marks.length) entry.expiresAt = Date.now() + interval
+      else if (quoteCache.get(key) === entry) quoteCache.delete(key)
+      return marks
+    }, error => {
+      if (quoteCache.get(key) === entry) quoteCache.delete(key)
+      throw error
+    }),
+  }
+  quoteCache.set(key, entry)
+  return entry.result
 }
 
-async function cryptoQuotes(assets: QuoteAsset[], key: string) {
+async function cryptoQuotes(assets: QuoteAsset[], key: string, force: boolean) {
   const matched = assets.flatMap(asset => {
     const coinId = catalogEntry(asset.category, asset.reference)?.coinId
     return coinId ? [{ asset, coinId }] : []
@@ -175,10 +185,10 @@ async function cryptoQuotes(assets: QuoteAsset[], key: string) {
       const sourceAt = markTime(prices?.[coinId]?.last_updated_at)
       return price && validTime(sourceAt) ? [marketMark(asset, price, 'CoinGecko', sourceAt, at, price, 'CHF', 'reported')] : []
     })
-  })
+  }, force)
 }
 
-function finnhubQuote(asset: QuoteAsset, key: string) {
+function finnhubQuote(asset: QuoteAsset, key: string, force: boolean) {
   return cachedRequest('finnhub/' + key + '/' + quoteTarget(asset), 180000, async () => {
     const url = new URL('https://finnhub.io/api/v1/quote')
     url.search = new URLSearchParams({ symbol: listing(asset)!.symbol, token: key }).toString()
@@ -188,7 +198,7 @@ function finnhubQuote(asset: QuoteAsset, key: string) {
     if (!price || !validTime(sourceAt)) return []
     const { rate } = await rateToCHF('USD', dayKey(sourceAt))
     return [marketMark(asset, price.times(rate), 'Finnhub', sourceAt, Date.now(), price, 'USD', 'reported', listing(asset)!.symbol + '.US')]
-  })
+  }, force)
 }
 
 const budgetKey = 'portefeuille.eodhd-budget'
@@ -235,7 +245,7 @@ export async function searchMarket(category: 'stock' | 'etf', query: string, key
       const known = catalogEntry(category, listing)
         ?? (Exchange === 'US' ? ['XNAS', 'XNYS', 'ARCX', 'XASE', 'BATS'].map(mic => catalogEntry(category, mic + ':' + Code)).find(Boolean) : undefined)
       if ((known?.isin && isin && known.isin !== isin) || (known?.market && known.market.currency !== Currency)) return []
-      return [{ category, name: (known?.name ?? Name.trim()).slice(0, 100), reference: known?.reference ?? (category === 'etf' && isin ? isin : listing),
+      return [{ category, name: (known?.name ?? Name.trim()).slice(0, 100), reference: known?.reference ?? (category === 'etf' ? listing + ':' + Currency : listing),
         listing: known?.listing ?? listing, detail: venueNames[Exchange] + ' · ' + Code + ' · ' + Currency,
         isin: isin ?? known?.isin, market: { code: Code + '.' + Exchange, currency: Currency } }]
     })
@@ -251,10 +261,11 @@ async function instrument(asset: QuoteAsset, key: string) {
   if (asset.category === 'crypto') return null
   const isin = asset.isin ?? (isinPattern.test(asset.reference) ? asset.reference : '')
   const matches = await searchMarket(asset.category, isin || exchange?.symbol || asset.reference, key)
-  const exact = exchange
-    ? matches.find(item => item.market.code === exchange.symbol + '.' + exchange.venue && (!isin || item.isin === isin))
-    : matches.find(item => item.isin === isin)
-  return exact?.market ?? null
+  const candidates = matches.filter(item => exchange
+    ? item.market.code === exchange.symbol + '.' + exchange.venue && (!isin || item.isin === isin)
+    : Boolean(isin) && item.isin === isin)
+  const instruments = new Map(candidates.map(item => [item.market.code + '/' + item.market.currency, item.market]))
+  return instruments.size === 1 ? [...instruments.values()][0] : null
 }
 
 export async function fetchEodSeries(asset: QuoteAsset, meta: Instrument, key: string, at: number, previous?: Mark) {
@@ -342,19 +353,19 @@ let eodOffset = 0
 let finnhubOffset = 0
 export const cryptoInterval = (key: string) => key ? 300000 : 60000
 
-function nqseQuote(asset: QuoteAsset) {
+function nqseQuote(asset: QuoteAsset, force: boolean) {
   return cachedRequest('xetra/' + nqseIsin, 60000, async () => {
     const quote = parseNqseQuote(await json(new URL(nqseRoute, location.origin), 'Deutsche Börse · Xetra', 21000))
     const sourceAt = Date.parse(quote.timestampLastPrice)
     const { rate } = await rateToCHF('EUR', dayKey(sourceAt))
     const price = new Decimal(quote.lastPrice)
     return [marketMark(asset, price.times(rate), 'Deutsche Börse · Xetra', sourceAt, Date.now(), price, 'EUR', 'reported', 'NQSE.XETRA')]
-  })
+  }, force)
 }
 
-function vusaTradegateQuote(asset: QuoteAsset) {
+function vusaTradegateQuote(asset: QuoteAsset, force: boolean) {
   return cachedRequest('tradegate/vusa', 60000, async () => {
-    const quote = await json(new URL(tradegateRoute, location.origin), 'Tradegate', 38000)
+    const quote = await json(new URL(tradegateRoute, location.origin), 'Tradegate', 55000)
     const price = positive(quote?.price)
     const at = quote?.receivedAt
     const sourceAt = quote?.sourceAt ?? at
@@ -362,7 +373,7 @@ function vusaTradegateQuote(asset: QuoteAsset) {
     const { rate } = await rateToCHF('EUR', dayKey(sourceAt))
     const source = quote?.sourceAt === undefined ? 'Tradegate · relevé' : 'Tradegate · transactions'
     return [marketMark(asset, price.times(rate), source, sourceAt, at, price, 'EUR', 'reported', 'VUSA.TGAT')]
-  })
+  }, force)
 }
 
 export async function fetchQuotes(assets: QuoteAsset[], keys: QuoteKeys,
@@ -383,20 +394,28 @@ export async function fetchQuotes(assets: QuoteAsset[], keys: QuoteKeys,
   finnhubOffset += us.length
   eodOffset += eod.length
   const requests = [
-    ...(crypto.length ? [cryptoQuotes(crypto, keys.coingecko)] : []),
+    ...(crypto.length ? [cryptoQuotes(crypto, keys.coingecko, force)] : []),
     ...(six.length ? [sixQuotes(six, force)] : []),
-    ...tradegate.map(vusaTradegateQuote),
-    ...nqse.map(asset => nqseQuote(asset).catch(error => {
+    ...tradegate.map(asset => vusaTradegateQuote(asset, force)),
+    ...nqse.map(asset => nqseQuote(asset, force).catch(error => {
       if (keys.eodhd) return equityDaily(asset, keys.eodhd, force)
       throw error
     })),
-    ...us.map(asset => finnhubQuote(asset, keys.finnhub)),
+    ...us.map(asset => finnhubQuote(asset, keys.finnhub, force)),
     ...eod.map(asset => equityDaily(asset, keys.eodhd, force)),
   ]
   const result = await Promise.allSettled(requests)
-  const marks = result.flatMap(value => value.status === 'fulfilled' ? value.value : [])
+  const received = result.flatMap(value => value.status === 'fulfilled' ? value.value : [])
+  const marks = received.filter(mark => {
+    if (!hasUnknownQuoteTime(mark)) return true
+    const previous = stale.get(mark.target)
+    return !previous || hasUnknownQuoteTime(previous)
+  })
   const issues = [...new Set(result.flatMap(value => value.status === 'rejected'
     ? [value.reason instanceof Error ? value.reason.message : 'Le fournisseur de données est indisponible.'] : []))]
+  if (received.length !== marks.length) {
+    issues.push('Tradegate ne fournit pas d’heure de transaction pour VUSA. Le dernier cours daté est conservé.')
+  }
   return { marks, issues, checked: requests.length }
 }
 
@@ -434,6 +453,7 @@ export async function fetchDailyPrices(asset: QuoteAsset, key: string) {
 
 export function quoteIsStale(mark: Mark, at = Date.now()) {
   if (mark.source === 'Cours simulé') return false
+  if (hasUnknownQuoteTime(mark)) return true
   if (mark.timing === 'close') {
     const venue = mark.instrument?.split('.').at(-1)
     return dayKey(mark.sourceAt) < latestClosingDay(venue ?? '', at)
@@ -451,7 +471,58 @@ export function quoteTiming(mark: Mark) {
     return Date.now() - mark.sourceAt > 900000 ? 'Dernier cours crypto connu' : 'Cours indicatif · marché 24 h/24'
   }
   if (mark.source === 'Tradegate · transactions') return 'Dernière transaction publiée · Tradegate'
-  if (mark.source === 'Tradegate · relevé') return 'Dernier prix relevé · heure du relevé'
+  if (hasUnknownQuoteTime(mark)) return 'Dernier prix fourni · heure de transaction inconnue'
   if (mark.timing === 'reported') return 'Dernier cours reçu · délai variable'
   return mark.source.includes('fictif') ? 'Cours fictif' : 'Dernier cours disponible'
+}
+
+export const diagnosticProviders = ['CoinGecko', 'Finnhub', 'EODHD', 'SIX', 'Xetra', 'Tradegate'] as const
+export type DiagnosticProvider = typeof diagnosticProviders[number]
+export function providerIsConfigured(provider: DiagnosticProvider, keys: QuoteKeys) {
+  return provider === 'Finnhub' ? Boolean(keys.finnhub) : provider === 'EODHD' ? Boolean(keys.eodhd) : true
+}
+
+// Fixed public instruments keep the probe independent of personal holdings.
+export async function probeQuoteProvider(provider: DiagnosticProvider, keys: QuoteKeys): Promise<number | null> {
+  const day = dayKey(Date.now())
+  switch (provider) {
+    case 'CoinGecko': {
+      const url = new URL('https://api.coingecko.com/api/v3/simple/price')
+      url.search = new URLSearchParams({ ids: 'bitcoin', vs_currencies: 'chf', include_last_updated_at: 'true',
+        ...(keys.coingecko ? { x_cg_demo_api_key: keys.coingecko } : {}) }).toString()
+      const { bitcoin } = await json(url, provider)
+      const time = markTime(bitcoin?.last_updated_at)
+      return positive(bitcoin?.chf) && validTime(time) ? time : null
+    }
+    case 'Finnhub': {
+      const url = new URL('https://finnhub.io/api/v1/quote')
+      url.search = new URLSearchParams({ symbol: 'AAPL', token: keys.finnhub }).toString()
+      const data = await json(url, provider)
+      const time = markTime(data?.t)
+      return positive(data?.c) && validTime(time) ? time : null
+    }
+    case 'EODHD': {
+      const data = await eodJson('eod/AAPL.US', keys.eodhd, { from: daysBefore(day, 7), to: day, period: 'd', order: 'd' })
+      const row = Array.isArray(data) ? data.find(row => datePattern.test(row?.date) && positive(row?.close)) : undefined
+      const time = row ? closeTimestamp('US', row.date) : NaN
+      return validTime(time) ? time : null
+    }
+    case 'SIX': {
+      const lines = parseSixClosings(await json(new URL('/market/six/etf-closings', location.origin), provider, 40000))
+      const asset = catalogEntry('etf', 'XSWX:VUSA')
+      const line = asset && sixEtfLine(asset)
+      const quote = line && findSixClosing(lines, line)
+      const time = quote ? closeTimestamp('SW', quote.day) : NaN
+      return validTime(time) ? time : null
+    }
+    case 'Xetra': {
+      const data = parseNqseQuote(await json(new URL(nqseRoute, location.origin), provider, 21000))
+      return Date.parse(data.timestampLastPrice)
+    }
+    case 'Tradegate': {
+      const data = await json(new URL(tradegateRoute, location.origin), provider, 38000)
+      const time = data?.sourceAt ?? data?.receivedAt
+      return positive(data?.price) && validTime(time) ? time : null
+    }
+  }
 }

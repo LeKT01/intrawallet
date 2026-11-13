@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Decimal } from 'decimal.js'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { deleteOperation, deletePosition, loadPortfolio, saveMarks, saveOperation, savePosition } from './database'
+import { deleteInvestmentGroup, saveInvestmentGroup, deleteOperation, deletePosition, loadPortfolio, saveMarks, saveOperation, savePosition } from './database'
 import { consolidate, platformKey, type Position } from './portfolio'
-import { dailyPortfolioHistory, firstTrackingDate, isMarketMark, quoteTarget, replay, type Mark, type Operation, type PortfolioData } from './ledger'
+import { compareMarketMarks, dailyPortfolioHistory, firstTrackingDate, isMarketMark, quoteTarget, replay, type Mark, type Operation, type PortfolioData } from './ledger'
 import PositionForm from './PositionForm'
 import OperationForm from './OperationForm'
 import DataSettings, { ConfirmDialog } from './DataSettings'
@@ -11,17 +12,34 @@ import { currencies, type Currency } from './currency'
 import useCurrency from './useCurrency'
 import useDailyPrices from './useDailyPrices'
 import { demoLink, demoMode } from './demo'
+import { groupCapital, groupLedger, groupValue, type GroupAsset, type InvestmentGroup } from './groups'
 import Dashboard from './Dashboard'
 import { AssetDetail, PortfolioView, type Asset } from './PortfolioViews'
 import JournalView, { journalEntries, type JournalItem } from './JournalView'
 import { AnalyticsView, PlatformsView } from './AnalysisViews'
-import { Icon } from './ui'
+import { Icon, type IconName } from './ui'
+
+const DiagnosticView = lazy(() => import('./DiagnosticView'))
+const GroupDetail = lazy(() => import('./GroupViews').then(module => ({ default: module.GroupDetail })))
+const GroupEditor = lazy(() => import('./GroupViews').then(module => ({ default: module.GroupEditor })))
+const GroupList = lazy(() => import('./GroupViews').then(module => ({ default: module.GroupList })))
 
 const sections = { overview: 'Vue d’ensemble', positions: 'Portefeuille', journal: 'Transactions',
-  analytics: 'Analyses', platforms: 'Plateformes', data: 'Paramètres' } as const
+  analytics: 'Analyses', platforms: 'Plateformes', data: 'Paramètres', space: 'Espace', diagnostic: 'Diagnostic' } as const
 type Section = keyof typeof sections
-const mobilePrimary = { overview: 'Accueil', positions: 'Portefeuille', analytics: 'Analyses' } as const
-const mobileSecondary = ['journal', 'platforms', 'data'] as const
+const spaceSections: Section[] = ['space', 'journal', 'platforms', 'data', 'diagnostic']
+const spaceGroups: { title: string; links: { label: string; description: string; section: Section; anchor?: string }[] }[] = [
+  { title: 'Activité', links: [{ label: 'Transactions', description: 'Historique des achats, ventes et transferts', section: 'journal' }] },
+  { title: 'Gestion', links: [
+    { label: 'Plateformes', description: 'Comptes et établissements', section: 'platforms' },
+    { label: 'Sauvegarde locale', description: 'Exporter ou restaurer les données', section: 'data', anchor: 'backup' },
+  ] },
+  { title: 'Préférences', links: [
+    { label: 'Paramètres', description: 'Devises et cotations', section: 'data' },
+    { label: 'Apparence', description: 'Thème clair, sombre ou système', section: 'data', anchor: 'appearance' },
+  ] },
+  { title: 'Fiabilité', links: [{ label: 'Diagnostic', description: 'Vérifier le stockage, les cours et les calculs', section: 'diagnostic' }] },
+]
 const descriptions: Record<Section, string> = {
   overview: 'La valeur et les mouvements de tes investissements.',
   positions: 'Tes actions, ETF et cryptomonnaies, regroupés par actif.',
@@ -29,17 +47,21 @@ const descriptions: Record<Section, string> = {
   analytics: 'Explore le poids de tes positions et leurs gains ou pertes.',
   platforms: 'Consulte et organise tes investissements par établissement.',
   data: 'Gère l’affichage, les sources de marché et tes sauvegardes.',
+  space: 'Gère ton portefeuille et tes préférences.',
+  diagnostic: 'Vérifie les composants d’IntraWallet à la demande.',
 }
 const emptyData: PortfolioData = { positions: [], operations: [], marks: [] }
 const quoteInterval = 60000
 type Theme = 'light' | 'dark' | 'system'
-type Route = { section: Section; asset?: string }
+type Route = { section: Section; asset?: string; anchor?: string }
 
 function readRoute(): Route {
   const [path, key] = window.location.hash.slice(1).split('/')
   if (path === 'positions' && key) {
     try { return { section: 'positions', asset: decodeURIComponent(key) } } catch { /* Fall back to the list. */ }
   }
+  if (path === 'data' && (key === 'appearance' || key === 'backup')) return { section: path, anchor: key }
+  if (path === 'platforms' && key === 'new') return { section: path, anchor: key }
   return { section: Object.hasOwn(sections, path) ? path as Section : 'overview' }
 }
 
@@ -61,6 +83,11 @@ export default function App() {
   const { section } = route
   const [theme, setTheme] = useState(initialTheme)
   const [autoRefresh, setAutoRefresh] = useState(initialAutoRefresh)
+  const [consolidatedView, setConsolidatedView] = useState(false)
+  const [groupEditor, setGroupEditor] = useState<InvestmentGroup | 'new' | null>(null)
+  const [groupPosition, setGroupPosition] = useState<{ group: InvestmentGroup; position: Position | null } | null>(null)
+  const [groupTrade, setGroupTrade] = useState<{ group: InvestmentGroup; operation: Operation | null; asset?: GroupAsset } | null>(null)
+  const [groupDelete, setGroupDelete] = useState<InvestmentGroup | null>(null)
   const [editor, setEditor] = useState<Position | 'new' | null>(null)
   const [tradeEditor, setTradeEditor] = useState<Operation | 'new' | null>(null)
   const [tradeAsset, setTradeAsset] = useState<Asset['entries'][number]>()
@@ -73,7 +100,17 @@ export default function App() {
   const [refreshStatus, setRefreshStatus] = useState('')
   const [lastChecked, setLastChecked] = useState<number | null>(null)
   const heading = useRef<HTMLHeadingElement>(null)
-  const moreSheet = useRef<HTMLDialogElement>(null)
+  const actionSheet = useRef<HTMLDialogElement>(null)
+
+  function openAddActions(trigger: HTMLButtonElement) {
+    const dialog = actionSheet.current
+    if (!dialog || dialog.open) return
+    const bounds = trigger.getBoundingClientRect()
+    dialog.style.setProperty('--add-top', Math.ceil(bounds.bottom + 8) + 'px')
+    dialog.style.setProperty('--add-right', Math.max(12, Math.round(window.innerWidth - bounds.right)) + 'px')
+    trigger.focus({ preventScroll: true })
+    dialog.showModal()
+  }
   const quotePending = useRef(false)
   const lastAuto = useRef(0)
 
@@ -87,38 +124,51 @@ export default function App() {
     }
   })
   const data = loaded?.data ?? emptyData
+  const groups = useMemo(() => data.groups ?? [], [data.groups])
+  const groupAssets = useMemo(() => groups.flatMap(group => [...group.positions, ...group.operations]), [groups])
   const start = firstTrackingDate(data)
   const needsFx = useMemo(() => data.marks.some(mark => mark.currency === 'EUR' || mark.currency === 'USD')
     || data.positions.some(position => position.valuation?.manual && position.valuation.manual.currency !== 'CHF'), [data.marks, data.positions])
-  const { display, loading: fxLoading, choose: chooseCurrency, rateToCHF } = useCurrency(start, needsFx || editor !== null)
+  const { display, loading: fxLoading, choose: chooseCurrency, rateToCHF } = useCurrency(start, needsFx || editor !== null || groupPosition !== null || groups.some(group => group.currency !== 'CHF'))
   const holdings = useMemo(() => loaded
     ? (needsFx ? replay(loaded.data, [], rateToCHF, true).holdings : loaded.view.holdings) : [], [loaded, needsFx, rateToCHF])
+  const groupStats = useMemo(() => groups.map(group => groupValue(group, data.marks, rateToCHF)), [groups, data.marks, rateToCHF])
+  const allHoldings = useMemo(() => [...holdings, ...groupStats.flatMap(stats => stats.holdings)], [holdings, groupStats])
+  const declaredGroups = groupStats.flatMap((stats, index) => groups[index].mode === 'estimate'
+    ? [{ name: groups[index].name, platform: groups[index].platform, value: stats.value }] : [])
+  const declaredCapital = groups.reduce((sum, group) => {
+    if (sum === null || group.mode !== 'estimate') return sum
+    const rate = rateToCHF(group.currency)
+    return rate ? sum.plus(groupCapital(group).times(rate)) : null
+  }, new Decimal(0) as Decimal | null)
+  const emptyExactGroups = groups.filter((group, index) => group.mode === 'exact' && !groupStats[index].holdings.length).length
+  const consolidatedAssets = useMemo(() => consolidate(allHoldings), [allHoldings])
   const assets = useMemo(() => consolidate(holdings), [holdings])
-  const platforms = useMemo(() => [...new Map([...(data.platforms ?? []), ...[...data.positions, ...data.operations].flatMap(item => [
+  const platforms = useMemo(() => [...new Map([...(data.platforms ?? []), ...[...data.positions, ...data.operations, ...groups].flatMap(item => [
     item.platform, 'destination' in item ? item.destination : undefined,
   ])].filter((name): name is string => Boolean(name)).map(name => [platformKey(name), name])).values()]
-    .sort((a, b) => a.localeCompare(b, 'fr')), [data])
-  const activePlatforms = useMemo(() => [...new Map(holdings.map(item => [platformKey(item.platform), item.platform])).values()], [holdings])
+    .sort((a, b) => a.localeCompare(b, 'fr')), [data, groups])
+  const activePlatforms = useMemo(() => [...new Map([...allHoldings, ...groups].map(item => [platformKey(item.platform), item.platform])).values()], [allHoldings, groups])
   const marketByAsset = useMemo(() => {
     const result = new Map<string, Mark>()
     for (const mark of data.marks) {
       if (!isMarketMark(mark)) continue
       const previous = result.get(mark.target)
-      if (!previous || previous.sourceAt < mark.sourceAt || (previous.sourceAt === mark.sourceAt && previous.at <= mark.at)) result.set(mark.target, mark)
+      if (!previous || compareMarketMarks(mark, previous) >= 0) result.set(mark.target, mark)
     }
     return result
   }, [data.marks])
   const fx = display.reference()
   const symbols = useMemo(() => {
     const byAsset = new Map<string, (typeof data.positions)[number] | Operation>()
-    for (const item of [...data.positions, ...data.operations]) {
+    for (const item of [...data.positions, ...data.operations, ...groupAssets]) {
       const key = quoteTarget(item)
       const old = byAsset.get(key)
       if (!old || (!old.market && item.market) || (!old.listing && item.listing)) byAsset.set(key, item)
     }
     return [...byAsset.values()].map(({ category, reference, name, listing, isin, market }) => ({ category, reference, name, listing, isin, market }))
-  }, [loaded])
-  const liveTargets = new Set(holdings.map(quoteTarget))
+  }, [loaded, groupAssets])
+  const liveTargets = new Set(allHoldings.map(quoteTarget))
   const liveSymbols = symbols.filter(asset => liveTargets.has(quoteTarget(asset)))
   const dailyPrices = useDailyPrices(demoMode || !autoRefresh ? [] : symbols, quoteKey.coingecko)
   const historySources = useMemo(() => {
@@ -172,11 +222,11 @@ export default function App() {
       const result = await fetchQuotes(eligible, quoteKey, { force: userInitiated, opening: firstCheck.current, stale: marketByAsset })
       firstCheck.current = false
       if (!result.checked) return
-      if (result.marks.length) await saveMarks(result.marks)
+      const added = result.marks.length ? await saveMarks(result.marks) : 0
       const count = new Set(result.marks.map(mark => mark.target)).size
       if (count || result.issues.length || userInitiated) {
         setRefreshStatus([
-          count ? count + ' actif(s) avec un cours disponible.' : 'Aucun nouveau cours reçu. Les valeurs connues sont conservées.',
+          count && added ? count + ' actif(s) avec un cours disponible.' : 'Aucun nouveau cours reçu. Les valeurs connues sont conservées.',
           result.issues[0],
         ].filter(Boolean).join(' '))
       }
@@ -213,13 +263,27 @@ export default function App() {
 
   useEffect(() => {
     const sync = () => {
-      setRoute(readRoute())
+      actionSheet.current?.close()
+      setEditor(null); setTradeEditor(null); setToDelete(null)
+      const next = readRoute()
+      setRoute(next)
       window.scrollTo({ top: 0 })
-      requestAnimationFrame(() => heading.current?.focus())
+      if (!next.anchor) requestAnimationFrame(() => heading.current?.focus())
     }
     window.addEventListener('hashchange', sync)
     return () => window.removeEventListener('hashchange', sync)
   }, [])
+
+  const ready = Boolean(loaded && !loaded.failed)
+  useEffect(() => {
+    if (route.section !== 'data' || !route.anchor || !ready) return
+    const frame = requestAnimationFrame(() => {
+      const target = document.getElementById(route.anchor!)
+      target?.scrollIntoView({ block: 'start' })
+      target?.focus({ preventScroll: true })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [route, ready])
 
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
@@ -240,14 +304,18 @@ export default function App() {
     try { localStorage.setItem('portefeuille.theme', next) } catch { /* Use in-memory preference. */ }
   }
 
-  function navigate(destination: Section, asset?: string) {
-    moreSheet.current?.close()
-    const hash = '#' + destination + (asset ? '/' + encodeURIComponent(asset) : '')
+  function navigate(destination: Section, detail?: string) {
+    actionSheet.current?.close()
+    const hash = '#' + destination + (detail ? '/' + encodeURIComponent(detail) : '')
     if (location.hash !== hash) location.hash = hash
     setActionError('')
   }
 
-  const openAsset = (key: string) => navigate('positions', key)
+  const openAsset = (key: string) => {
+    const groupIndex = assets.some(asset => asset.key === key) ? -1
+      : groupStats.findIndex(stats => stats.holdings.some(holding => quoteTarget(holding) === key))
+    navigate('positions', groupIndex < 0 ? key : 'group/' + groups[groupIndex].id)
+  }
   const openTrade = (asset?: Asset['entries'][number]) => { setTradeAsset(asset); setTradeEditor('new') }
 
   async function confirmDelete() {
@@ -267,9 +335,12 @@ export default function App() {
   }
 
   const journal = useMemo(() => journalEntries(data), [data])
+  const selectedGroup = route.asset?.startsWith('group/') ? groups.find(group => 'group/' + group.id === route.asset) : undefined
+  const groupDisplay = { marks: data.marks, display, rate: rateToCHF }
+  const openGroup = (id: string) => navigate('positions', 'group/' + id)
+  const createGroup = () => setGroupEditor('new')
   const selectedAsset = route.asset ? assets.find(asset => asset.key === route.asset) : undefined
-  const title = selectedAsset ? 'Fiche de l’actif' : sections[section]
-  const ready = Boolean(loaded && !loaded.failed)
+  const title = selectedGroup ? 'Portefeuille groupé' : selectedAsset ? 'Fiche de l’actif' : sections[section]
   const journalProps = {
     platforms, display, sales: loaded?.view.sales ?? new Map(),
     onEdit: (item: JournalItem) => {
@@ -292,20 +363,30 @@ export default function App() {
       <div className="sidebar-footer"><Icon name="lock" /><div><strong>Stockage local</strong><small>Sur cet appareil</small></div></div>
     </aside>
     <nav className="mobile-nav" aria-label="Navigation mobile">
-      {(Object.entries(mobilePrimary) as [keyof typeof mobilePrimary, string][]).map(([item, label]) =>
-        <button type="button" key={item} aria-current={section === item ? 'page' : undefined} onClick={() => navigate(item)}>
-          <Icon name={item} /><span>{label}</span>
-        </button>)}
-      <button type="button" className={mobileSecondary.some(item => section === item) ? 'selected' : undefined}
-        aria-haspopup="dialog" aria-controls="more-sheet" onClick={() => moreSheet.current?.showModal()}><Icon name="more" /><span>Plus</span></button>
+      <button type="button" aria-current={section === 'overview' ? 'page' : undefined} onClick={() => navigate('overview')}><Icon name="overview" /><span>Accueil</span></button>
+      <button type="button" aria-current={section === 'positions' ? 'page' : undefined} onClick={() => navigate('positions')}><Icon name="positions" /><span>Portefeuille</span></button>
+      <button type="button" className="mobile-add" aria-label="Ouvrir les actions d’ajout" aria-haspopup="dialog"
+        aria-controls="action-sheet" disabled={!ready} onClick={event => openAddActions(event.currentTarget)}><Icon name="plus" /></button>
+      <button type="button" aria-current={section === 'analytics' ? 'page' : undefined} onClick={() => navigate('analytics')}><Icon name="analytics" /><span>Analyses</span></button>
+      <button type="button" aria-current={section === 'space' ? 'page' : undefined} className={spaceSections.includes(section) ? 'selected' : undefined}
+        onClick={() => navigate('space')}><Icon name="space" /><span>Espace</span></button>
     </nav>
-    <dialog id="more-sheet" className="mobile-sheet" ref={moreSheet} aria-labelledby="more-title"
-      onClick={event => { if (event.target === event.currentTarget) event.currentTarget.close() }}>
+    <dialog id="action-sheet" className="add-actions-dialog" ref={actionSheet} aria-labelledby="action-title"
+      onClick={event => {
+        if (event.target !== event.currentTarget) return
+        const { left, top, right, bottom } = event.currentTarget.getBoundingClientRect()
+        if (event.clientX < left || event.clientX > right || event.clientY < top || event.clientY > bottom) event.currentTarget.close()
+      }}>
       <div className="sheet-content">
-        <div className="section-heading"><h2 id="more-title">Plus</h2><button className="icon-button" aria-label="Fermer le menu"
-          onClick={() => moreSheet.current?.close()}><Icon name="close" /></button></div>
-        {mobileSecondary.map(item => <button type="button" key={item} className="sheet-link" aria-current={section === item ? 'page' : undefined}
-          onClick={() => navigate(item)}><Icon name={item} /><span>{sections[item]}</span><Icon name="next" /></button>)}
+        <div className="section-heading"><h2 id="action-title">Ajouter</h2><button className="icon-button" aria-label="Fermer les actions"
+          onClick={() => actionSheet.current?.close()}><Icon name="close" /></button></div>
+        {([
+          ['positions', 'Ajouter un investissement', () => setEditor('new')],
+          ['group', 'Créer un portefeuille groupé', createGroup],
+          ['journal', 'Enregistrer une transaction', () => openTrade()],
+          ['platforms', 'Ajouter une plateforme', () => navigate('platforms', 'new')],
+        ] as const).map(([icon, label, action]) => <button type="button" key={icon} className="sheet-link"
+          onClick={() => { actionSheet.current?.close(); action() }}><Icon name={icon} /><span>{label}</span><Icon name="next" /></button>)}
       </div>
     </dialog>
     <div className="workspace">
@@ -317,8 +398,8 @@ export default function App() {
         <div className="topbar-actions">
           <label className="currency-picker"><span className="sr-only">Devise d’affichage</span><select aria-label="Devise d’affichage" value={display.currency}
             onChange={event => chooseCurrency(event.target.value as Currency)}>{currencies.map(currency => <option key={currency}>{currency}</option>)}</select></label>
-          {(section !== 'positions' || selectedAsset) && <button className="primary header-add" disabled={!ready}
-            onClick={() => setEditor('new')}><Icon name="plus" /> Ajouter un investissement</button>}
+          <button className="primary header-add" aria-haspopup="dialog" aria-controls="action-sheet" disabled={!ready}
+            onClick={event => openAddActions(event.currentTarget)}><Icon name="plus" /> Ajouter un investissement</button>
         </div>
       </header>
 
@@ -336,13 +417,20 @@ export default function App() {
         <div role="status" className={message ? 'status-message toast' : 'sr-only'}>{message}</div>
         {actionError && <p className="error" role="alert">{actionError}</p>}
 
-        {!loaded ? <div className="panel blank loading-panel" role="status" aria-busy="true">
+        {section === 'diagnostic' ? <Suspense fallback={<p role="status">Chargement du diagnostic…</p>}><DiagnosticView quoteKeys={quoteKey} /></Suspense>
+          : section === 'space' ? <div className="space-grid">{spaceGroups.map(group => <section className="panel space-panel" key={group.title}>
+            <h2>{group.title}</h2>{group.links.map(link => <a className="space-link" key={link.label}
+              href={'#' + link.section + (link.anchor ? '/' + link.anchor : '')}>
+              <span className="platform-icon"><Icon name={(link.anchor === 'backup' ? 'lock' : link.section) as IconName} /></span>
+              <span><strong>{link.label}</strong><small>{link.description}</small></span><Icon name="next" />
+            </a>)}</section>)}</div>
+          : !loaded ? <div className="panel blank loading-panel" role="status" aria-busy="true">
           <span className="loading-line" aria-hidden="true" /><p>Ouverture du portefeuille…</p>
         </div>
           : loaded.failed ? <div className="panel blank"><h2>Stockage local indisponible</h2><p>Autorise le stockage du site dans ton navigateur, puis recharge la page.</p></div>
           : section === 'data' ? <>
             <section className="panel preference-panel">
-              <h2>Apparence</h2><div className="filter-bar">
+              <h2 id="appearance" tabIndex={-1}>Apparence</h2><div className="filter-bar">
                 <label>Thème<select value={theme} onChange={event => chooseTheme(event.target.value as Theme)}><option value="light">Clair</option><option value="dark">Sombre</option><option value="system">Système</option></select></label>
                 <label>Devise du portefeuille<select value={display.currency} onChange={event => chooseCurrency(event.target.value as Currency)}>
                   {currencies.map(currency => <option key={currency}>{currency}</option>)}</select></label>
@@ -362,26 +450,75 @@ export default function App() {
               }} />
           </>
           : section === 'journal' ? <JournalView {...journalProps} items={journal} onAdd={() => openTrade()} />
-          : section === 'platforms' ? <PlatformsView holdings={holdings} platforms={platforms} quotes={marketByAsset}
+          : section === 'platforms' ? <PlatformsView key={route.anchor ?? 'list'} startCreating={route.anchor === 'new'}
+            onCreateClosed={() => {
+              if (route.anchor !== 'new') return
+              window.history.replaceState(null, '', '#platforms')
+              setRoute({ section: 'platforms' })
+              requestAnimationFrame(() => heading.current?.focus())
+            }} holdings={allHoldings} declaredGroups={declaredGroups} platforms={platforms} quotes={marketByAsset}
             display={display} onOpen={openAsset} onSaved={() => setMessage('Plateforme enregistrée.')} />
-          : section === 'analytics' ? <AnalyticsView holdings={holdings} history={history} display={display} />
+          : section === 'analytics' ? <AnalyticsView holdings={allHoldings} history={history} display={display} individualHistory={groups.length > 0} />
+          : selectedGroup ? <Suspense fallback={<p role="status">Chargement du groupe…</p>}><GroupDetail key={selectedGroup.id} group={selectedGroup} {...groupDisplay}
+            historical={[...new Set([...selectedGroup.positions, ...selectedGroup.operations].map(quoteTarget))]
+              .flatMap(target => historySources.get(target)?.marks ?? [])}
+            onBack={() => navigate('positions')} onEdit={() => setGroupEditor(selectedGroup)} onRemove={() => setGroupDelete(selectedGroup)}
+            onSave={next => saveInvestmentGroup(next, selectedGroup)}
+            onPosition={id => setGroupPosition({ group: selectedGroup, position: selectedGroup.positions.find(item => item.id === id) ?? null })}
+            onTrade={(asset, id) => setGroupTrade({ group: selectedGroup, asset, operation: selectedGroup.operations.find(item => item.id === id) ?? null })} /></Suspense>
           : selectedAsset ? <AssetDetail key={selectedAsset.key} asset={selectedAsset} data={data}
             series={historySources.get(selectedAsset.key)} quote={marketByAsset.get(selectedAsset.key)}
             display={display} cryptoKey={quoteKey.coingecko} onBack={() => navigate('positions')}
             onTrade={() => openTrade(selectedAsset.entries[0])}
             journal={<JournalView {...journalProps} items={journal.filter(item => quoteTarget(item.value) === selectedAsset.key)} filters={false} />} />
-          : !journal.length ? <section className="panel empty start-card"><span className="empty-icon"><Icon name="positions" /></span>
+          : section === 'positions' ? <div className="detail-stack">
+            <Suspense fallback={null}><GroupList groups={groups} {...groupDisplay} onCreate={createGroup} onOpen={openGroup} /></Suspense>
+            {groups.length > 0 && <div className="segments" role="group" aria-label="Périmètre des positions">
+              <button type="button" className="secondary segment-button" aria-pressed={!consolidatedView} onClick={() => setConsolidatedView(false)}>Positions individuelles</button>
+              <button type="button" className="secondary segment-button" aria-pressed={consolidatedView} onClick={() => setConsolidatedView(true)}>Toutes les positions exactes</button>
+            </div>}
+            <PortfolioView holdings={consolidatedView ? allHoldings : holdings} platforms={platforms} display={display} quotes={marketByAsset} onOpen={openAsset} onAdd={() => setEditor('new')} />
+          </div>
+          : !journal.length && !groups.length ? <section className="panel empty start-card"><span className="empty-icon"><Icon name="positions" /></span>
             <h2>Ajoute ton premier investissement</h2><p>Rassemble les actifs que tu détiens déjà pour suivre leur valeur et tes performances.</p>
             <div className="empty-actions"><button className="primary" onClick={() => setEditor('new')}><Icon name="plus" /> Ajouter un investissement</button>
+              <button className="secondary" onClick={createGroup}>Créer un portefeuille groupé</button>
               {!demoMode && <a className="secondary" href={demoLink(true)}>Ouvrir la démo</a>}</div>
           </section>
-          : section === 'positions' ? <PortfolioView holdings={holdings} platforms={platforms} display={display} quotes={marketByAsset} onOpen={openAsset} onAdd={() => setEditor('new')} />
-          : <Dashboard assets={assets} holdings={holdings} platforms={activePlatforms} history={history}
+          : <><Dashboard assets={consolidatedAssets} holdings={allHoldings} platforms={activePlatforms} history={history} groupCount={groups.length} declaredCapital={declaredCapital}
+            declaredGroups={declaredGroups} emptyExactGroups={emptyExactGroups}
             intraday={loaded.view.intraday} display={display} quotes={marketByAsset} realized={loaded.view.realized} unknownSales={loaded.view.unknownSales}
             lastChecked={lastChecked} refreshing={refreshing} refreshStatus={refreshStatus} demo={demoMode}
-            onRefresh={() => void refreshQuotes(true)} onOpen={openAsset} onPortfolio={() => navigate('positions')} />}
+            onRefresh={() => void refreshQuotes(true)} onOpen={openAsset} onPortfolio={() => navigate('positions')} />
+            {groups.length > 0 && <Suspense fallback={null}><GroupList groups={groups} {...groupDisplay} onCreate={createGroup} onOpen={openGroup} /></Suspense>}</>}
       </main>
     </div>
+    {groupEditor !== null && <Suspense fallback={null}><GroupEditor current={groupEditor === 'new' ? undefined : groupEditor} platforms={platforms}
+      marketKey={demoMode ? undefined : quoteKey.eodhd} onClose={() => setGroupEditor(null)}
+      onSave={async group => {
+        await saveInvestmentGroup(group, groupEditor === 'new' ? undefined : groupEditor)
+        setMessage('Portefeuille groupé enregistré.')
+        openGroup(group.id)
+      }} /></Suspense>}
+    {groupPosition && <PositionForm current={groupPosition.position} fixedCategory="etf" fixedPlatform={groupPosition.group.platform}
+      positions={groupPosition.group.positions} platforms={platforms} marks={data.marks} display={display} currentRate={rateToCHF} quoteKey={quoteKey}
+      onConfigure={() => { setGroupPosition(null); navigate('data') }} onClose={() => setGroupPosition(null)}
+      onSave={async (position, quote) => {
+        const { group } = groupPosition
+        await saveInvestmentGroup({ ...group, positions: [...group.positions.filter(item => item.id !== position.id), position] }, group, quote)
+      }} />}
+    {groupTrade && <OperationForm current={groupTrade.operation} initialAsset={groupTrade.asset} fixedPlatform={groupTrade.group.platform}
+      data={groupLedger(groupTrade.group, data.marks)} platforms={platforms} marketKey={demoMode ? undefined : quoteKey.eodhd}
+      onClose={() => setGroupTrade(null)} onSave={async operation => {
+        const { group } = groupTrade
+        await saveInvestmentGroup({ ...group, operations: [...group.operations.filter(item => item.id !== operation.id), operation] }, group)
+      }} />}
+    {groupDelete && <ConfirmDialog title="Supprimer le portefeuille groupé ?" description="Ses positions, transactions et relevés seront supprimés."
+      confirm="Supprimer" busy={deleting} danger onClose={() => setGroupDelete(null)} onConfirm={() => {
+        setDeleting(true)
+        void deleteInvestmentGroup(groupDelete).then(() => { setGroupDelete(null); navigate('positions'); setMessage('Portefeuille groupé supprimé.') })
+          .catch(cause => setMessage(cause instanceof Error ? cause.message : 'Suppression impossible.')).finally(() => setDeleting(false))
+      }} />}
     {editor !== null && <PositionForm current={editor === 'new' ? null : editor} positions={data.positions}
       platforms={platforms} marks={data.marks} display={display} currentRate={rateToCHF} quoteKey={quoteKey}
       onConfigure={() => { setEditor(null); navigate('data') }} onClose={() => setEditor(null)}

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import AssetPicker, { type AssetInput } from './AssetPicker'
 import { acquisitionCost, estimatedCost, parseAmount, platformKey, unitPrice, type Category, type Cost, type Position } from './portfolio'
-import { isMarketMark, quoteTarget, type Mark } from './ledger'
+import { compareMarketMarks, hasUnknownQuoteTime, isMarketMark, quoteTarget, type Mark } from './ledger'
 import { fetchQuotes, hasAutomaticNqseQuote, hasAutomaticSixQuote, hasAutomaticTradegateQuote, instrumentCode, quoteAccess, quoteIsStale, quoteTiming, rateToCHF, referenceRate, type QuoteKeys } from './quotes'
 import { currencies, dayKey, type Currency, type CurrencyDisplay } from './currency'
 import { Decimal } from 'decimal.js'
@@ -25,8 +25,23 @@ export function useModal(onClose: () => void) {
   const closing = useRef<number | undefined>(undefined)
   useEffect(() => {
     const element = dialog.current
+    const viewport = window.visualViewport
+    const updateViewport = () => {
+      if (!viewport || viewport.scale !== 1) {
+        element?.style.removeProperty('--dialog-visible-height')
+        element?.style.removeProperty('--dialog-visible-top')
+        return
+      }
+      element?.style.setProperty('--dialog-visible-height', viewport.height + 'px')
+      element?.style.setProperty('--dialog-visible-top', viewport.offsetTop + 'px')
+    }
     element?.showModal()
+    updateViewport()
+    viewport?.addEventListener('resize', updateViewport)
+    viewport?.addEventListener('scroll', updateViewport)
     return () => {
+      viewport?.removeEventListener('resize', updateViewport)
+      viewport?.removeEventListener('scroll', updateViewport)
       window.clearTimeout(closing.current)
       element?.close()
     }
@@ -51,6 +66,8 @@ export function useModal(onClose: () => void) {
 
 interface Props {
   current: Position | null
+  fixedPlatform?: string
+  fixedCategory?: Category
   positions: Position[]
   platforms: string[]
   marks: Mark[]
@@ -62,12 +79,12 @@ interface Props {
   onSave: (position: Position, quote?: Mark) => Promise<unknown>
 }
 
-export default function PositionForm({ current, positions, platforms, marks, display, currentRate, quoteKey, onConfigure, onClose, onSave }: Props) {
+export default function PositionForm({ current, fixedPlatform, fixedCategory, positions, platforms, marks, display, currentRate, quoteKey, onConfigure, onClose, onSave }: Props) {
   const { dialog, close } = useModal(onClose)
-  const [category, setCategory] = useState<Category>(current?.category ?? 'etf')
+  const [category, setCategory] = useState<Category>(current?.category ?? fixedCategory ?? 'etf')
   const [selected, setSelected] = useState<AssetInput | null>(current)
   const [custom, setCustom] = useState<AssetInput | null>(null)
-  const [platform, setPlatform] = useState(current?.platform ?? '')
+  const [platform, setPlatform] = useState(current?.platform ?? fixedPlatform ?? '')
   const [units, setUnits] = useState(current?.quantity ?? '')
   const [manualInput, setManualInput] = useState(current?.valuation?.manual?.amount ?? '')
   const [manualCurrencyChoice, setManualCurrencyChoice] = useState(current?.valuation?.manual?.currency)
@@ -99,10 +116,10 @@ export default function PositionForm({ current, positions, platforms, marks, dis
   const instrument = asset ? instrumentCode(asset) : undefined
   const cached = target ? marks.filter(mark => isMarketMark(mark) && mark.target === target
     && (!instrument || mark.instrument === instrument || (mark.instrument === undefined && ((sameAsset && !identityChanged) || demoMode))))
-    .sort((a, b) => b.sourceAt - a.sourceAt || b.at - a.at)[0] : undefined
+    .sort((a, b) => compareMarketMarks(b, a))[0] : undefined
   const request = quoteState?.target === target ? quoteState : undefined
   const fresh = request?.mark
-  const quote = fresh && (!cached || fresh.sourceAt >= cached.sourceAt) ? fresh : cached
+  const quote = fresh && (!cached || compareMarketMarks(fresh, cached) >= 0) ? fresh : cached
   const access = asset && !demoMode ? quoteAccess(asset, quoteKey) : 'manual'
   const { eodhd, finnhub, coingecko } = quoteKey
 
@@ -248,7 +265,7 @@ export default function PositionForm({ current, positions, platforms, marks, dis
   }
 
   return (
-    <dialog ref={dialog} aria-labelledby="position-title" onCancel={event => {
+    <dialog className="form-dialog" ref={dialog} aria-labelledby="position-title" onCancel={event => {
       event.preventDefault()
       if (!savePending.current) close()
     }}>
@@ -259,9 +276,9 @@ export default function PositionForm({ current, positions, platforms, marks, dis
             <p className="hint">Pour des titres ou cryptos que tu détiens déjà.</p></div>
           <button type="button" className="icon-button" aria-label="Fermer" onClick={close} disabled={busy}>×</button>
         </header>
-        <fieldset disabled={busy} className="form-fields">
+        <fieldset disabled={busy} className="form-fields dialog-body">
           <div className="step"><span>1</span><h3>Choisis ton investissement</h3></div>
-          <AssetPicker category={category} selected={selected} onCategory={setCategory}
+          <AssetPicker fixedCategory={Boolean(fixedCategory)} category={category} selected={selected} onCategory={setCategory}
             onChoose={item => {
               const previousManual = item && current && quoteTarget(item) === quoteTarget(current) && instrumentCode(item) === instrumentCode(current)
                 ? current.valuation?.manual : undefined
@@ -287,7 +304,7 @@ export default function PositionForm({ current, positions, platforms, marks, dis
                   {quote?.price != null
                     ? <><strong className="quote-price">{quote.originalPrice && quote.currency && currencies.includes(quote.currency as Currency)
                       ? unitPrice(quote.originalPrice, quote.currency as Currency) : unitPrice(quote.price)}</strong>
-                      <small>{quoteIsStale(quote) ? 'Cours ancien · ' : ''}{quoteTiming(quote)} · {quote.instrument ? quote.instrument + ' · ' : ''}{quote.source} · {quoteTime.format(quote.sourceAt)}</small></>
+                      <small>{quoteIsStale(quote) ? 'Cours ancien · ' : ''}{quoteTiming(quote)} · {quote.instrument ? quote.instrument + ' · ' : ''}{quote.source} · {(hasUnknownQuoteTime(quote) ? 'Reçu le ' + quoteTime.format(quote.receivedAt ?? quote.at) : quoteTime.format(quote.sourceAt))}</small></>
                     : <strong className="quote-price">{access === 'available' && (!request || request.loading)
                       ? 'Recherche du cours…' : 'Cours indisponible'}</strong>}
                 </div>
@@ -307,7 +324,7 @@ export default function PositionForm({ current, positions, platforms, marks, dis
             <div className="step"><span>2</span><h3>Indique ce que tu détiens</h3></div>
             <div className="form-grid">
               <label>Plateforme
-                <input value={platform} list="plateformes" maxLength={80} placeholder="Ex. Revolut"
+                <input value={platform} readOnly={Boolean(fixedPlatform)} list="plateformes" maxLength={80} placeholder="Ex. Revolut"
                   onChange={event => setPlatform(event.target.value)} />
                 <datalist id="plateformes">{platforms.map(item => <option key={item} value={item} />)}</datalist>
               </label>
@@ -394,8 +411,8 @@ export default function PositionForm({ current, positions, platforms, marks, dis
             </p>}
           </>}
         </fieldset>
-        {error && <p className="error" role="alert">{error}</p>}
         <footer className="dialog-actions">
+          {error && <p className="error dialog-error" role="alert">{error}</p>}
           <button type="button" className="secondary" onClick={close} disabled={busy}>Annuler</button>
           <button className="primary" type="submit" disabled={busy || !asset}>{busy ? 'Enregistrement…' : 'Enregistrer la position'}</button>
         </footer>
