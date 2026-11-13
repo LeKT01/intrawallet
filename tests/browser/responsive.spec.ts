@@ -28,7 +28,7 @@ for (const [width, height] of viewports) {
       const footer = dialog.querySelector('footer')!.getBoundingClientRect()
       const header = dialog.querySelector('header')!.getBoundingClientRect()
       if (outer.left < -1 || outer.right > innerWidth + 1) errors.push('fenêtre hors écran')
-      if (header.bottom > footer.top || footer.bottom > innerHeight + 1) errors.push('pied ou en-tête masqué')
+      if (header.bottom > footer.top || footer.bottom > innerHeight + 1) errors.push(JSON.stringify({ problem: 'pied ou en-tête masqué', header: header.bottom, footer: [footer.top, footer.bottom], viewport: innerHeight, dialog: outer.bottom }))
       if (body.scrollWidth > body.clientWidth + 1) errors.push('défilement horizontal du contenu')
       for (const control of dialog.querySelectorAll('label > input:not([type=checkbox]), label > select, label > textarea')) {
         const field = control.getBoundingClientRect()

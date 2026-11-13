@@ -1,3 +1,4 @@
+import InstallHelp from './InstallHelp'
 import { Decimal } from 'decimal.js'
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
@@ -36,6 +37,7 @@ const spaceGroups: { title: string; links: { label: string; description: string;
   ] },
   { title: 'Préférences', links: [
     { label: 'Paramètres', description: 'Devises et cotations', section: 'data' },
+    { label: 'Installation', description: 'Installer IntraWallet sur iPhone ou Android', section: 'data', anchor: 'installation' },
     { label: 'Apparence', description: 'Thème clair, sombre ou système', section: 'data', anchor: 'appearance' },
   ] },
   { title: 'Fiabilité', links: [{ label: 'Diagnostic', description: 'Vérifier le stockage, les cours et les calculs', section: 'diagnostic' }] },
@@ -60,7 +62,7 @@ function readRoute(): Route {
   if (path === 'positions' && key) {
     try { return { section: 'positions', asset: decodeURIComponent(key) } } catch { /* Fall back to the list. */ }
   }
-  if (path === 'data' && (key === 'appearance' || key === 'backup')) return { section: path, anchor: key }
+  if (path === 'data' && (key === 'appearance' || key === 'backup' || key === 'installation')) return { section: path, anchor: key }
   if (path === 'platforms' && key === 'new') return { section: path, anchor: key }
   return { section: Object.hasOwn(sections, path) ? path as Section : 'overview' }
 }
@@ -96,6 +98,16 @@ export default function App() {
   const [actionError, setActionError] = useState('')
   const [message, setMessage] = useState('')
   const [quoteKey, setQuoteKey] = useState<QuoteKeys>(() => ({ finnhub: demoMode ? '' : readSessionQuoteKey('finnhub'), eodhd: demoMode ? '' : readSessionQuoteKey('eodhd'), coingecko: demoMode ? '' : readSessionQuoteKey('coingecko') }))
+  const [online, setOnline] = useState(() => navigator.onLine)
+  useEffect(() => {
+    const sync = () => setOnline(navigator.onLine)
+    window.addEventListener('online', sync)
+    window.addEventListener('offline', sync)
+    return () => {
+      window.removeEventListener('online', sync)
+      window.removeEventListener('offline', sync)
+    }
+  }, [])
   const [refreshing, setRefreshing] = useState(false)
   const [refreshStatus, setRefreshStatus] = useState('')
   const [lastChecked, setLastChecked] = useState<number | null>(null)
@@ -203,6 +215,10 @@ export default function App() {
 
   async function refreshQuotes(userInitiated: boolean) {
     if (demoMode || quotePending.current) return
+    if (!navigator.onLine) {
+      if (userInitiated) setRefreshStatus('Hors ligne. Les derniers cours enregistrés sont conservés.')
+      return
+    }
     const { liveSymbols, symbols, quoteKey, marketByAsset } = latest.current
     if (!symbols.length) {
       if (userInitiated) setRefreshStatus('Ajoute une position pour récupérer son cours.')
@@ -404,6 +420,7 @@ export default function App() {
       </header>
 
       <main className="workspace-content">
+        {!online && <p className="panel preference-panel" role="status">Hors ligne · données locales et derniers cours enregistrés.</p>}
         {demoMode && <aside className="demo-banner" aria-label="Mode démo">
           <div><strong>Mode démo</strong><p>Portefeuille fictif · les cours de cet espace sont simulés.</p></div>
           <a className="secondary" href={demoLink(false)}>Revenir à mon portefeuille</a>
@@ -429,6 +446,7 @@ export default function App() {
         </div>
           : loaded.failed ? <div className="panel blank"><h2>Stockage local indisponible</h2><p>Autorise le stockage du site dans ton navigateur, puis recharge la page.</p></div>
           : section === 'data' ? <>
+            <InstallHelp />
             <section className="panel preference-panel">
               <h2 id="appearance" tabIndex={-1}>Apparence</h2><div className="filter-bar">
                 <label>Thème<select value={theme} onChange={event => chooseTheme(event.target.value as Theme)}><option value="light">Clair</option><option value="dark">Sombre</option><option value="system">Système</option></select></label>

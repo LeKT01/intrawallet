@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">IntraWallet</string>
+    <string name="title_activity_main">IntraWallet</string>
+    <string name="package_name">com.intrawallet.app</string>
+    <string name="custom_url_scheme">com.intrawallet.app</string>
+</resources>

@@ -520,6 +520,7 @@ fieldset[aria-busy="true"] { cursor: progress; }
 .add-actions-dialog { width: min(calc(100% - 1.5rem), 24rem); max-width: none;
   position: fixed; inset: var(--add-top, 5rem) var(--add-right, 1rem) auto auto; margin: 0;
   max-height: max(8rem, calc(100dvh - var(--add-top, 5rem) - 12px)); }
+.add-actions-dialog[open] { animation: none; }
 .add-actions-dialog::backdrop { background: #1c14142e; backdrop-filter: none; }
 .sheet-content { display: grid; gap: .35rem; padding: var(--space); }
 .sheet-content .section-heading { align-items: center; padding-left: .45rem; }
@@ -693,8 +694,11 @@ fieldset[aria-busy="true"] { cursor: progress; }
   .dialog-body .form-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 620px) {
-  .form-dialog { inset: var(--dialog-visible-top, 0px) 0 auto; margin: 0; width: 100%; height: var(--dialog-visible-height, 100dvh); max-height: none; border: 0; border-radius: 0; }
-  .form-dialog > form { height: 100%; max-height: none; }
+  .form-dialog[open]:not([data-closing]) { animation: glass-fade 180ms ease-out both; }
+  .form-dialog { position: fixed; inset: var(--dialog-visible-top, 0px) 0 auto; margin: 0; width: 100%; height: min(100dvh, var(--dialog-visible-height, 100dvh)); max-height: none; border: 0; border-radius: 0; }
+  .form-dialog > form { position: absolute; inset: 0; display: flex; flex-direction: column; max-height: none; min-height: 0; }
+  .form-dialog :is(.dialog-header, .dialog-actions) { flex: 0 0 auto; }
+  .form-dialog .dialog-body { flex: 1 1 0; }
   .form-dialog .dialog-header { padding-top: max(.65rem, env(safe-area-inset-top)); }
   .form-dialog .dialog-actions { padding-bottom: max(.7rem, env(safe-area-inset-bottom)); }
   .form-dialog .dialog-actions > button { flex: 1 1 auto; }

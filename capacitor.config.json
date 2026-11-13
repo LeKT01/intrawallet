@@ -1,0 +1,6 @@
+{
+  "appId": "com.intrawallet.app",
+  "appName": "IntraWallet",
+  "webDir": "dist",
+  "server": { "hostname": "localhost", "androidScheme": "https" }
+}

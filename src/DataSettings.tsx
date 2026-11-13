@@ -1,3 +1,4 @@
+import { marketRelay, nativeApp } from './runtime'
 import { useRef, useState, type ChangeEvent } from 'react'
 import { backupText, readBackup, type PortfolioBackup } from './backup'
 import { loadPortfolioBackup, restorePortfolio } from './database'
@@ -63,10 +64,21 @@ export default function DataSettings({ quoteKey, onKey, onRefresh, refreshing, r
   function exportData() {
     void run(async () => {
       const data = await loadPortfolioBackup()
+      const filename = 'portefeuille-' + new Date().toISOString().slice(0, 10) + '.json'
+      if (nativeApp) {
+        const [{ Directory, Encoding, Filesystem }, { Share }] = await Promise.all([
+          import('@capacitor/filesystem'), import('@capacitor/share'),
+        ])
+        const path = 'exports/' + Date.now() + '-' + filename
+        const file = await Filesystem.writeFile({ path, directory: Directory.Cache, recursive: true, encoding: Encoding.UTF8, data: backupText(data) })
+        await Share.share({ title: 'Sauvegarde IntraWallet', files: [file.uri] })
+        setMessage('Sauvegarde prête à partager.')
+        return
+      }
       const url = URL.createObjectURL(new Blob([backupText(data)], { type: 'application/json' }))
       const link = document.createElement('a')
       link.href = url
-      link.download = 'portefeuille-' + new Date().toISOString().slice(0, 10) + '.json'
+      link.download = filename
       link.click()
       window.setTimeout(() => URL.revokeObjectURL(url), 1000)
       setMessage('Sauvegarde exportée.')
@@ -91,7 +103,7 @@ export default function DataSettings({ quoteKey, onKey, onRefresh, refreshing, r
 
   return <div className="settings-grid">
     <section className="panel settings-panel"><h2>Cotations automatiques</h2>
-      <p className="hint">Les ETF pris en charge sur SIX Swiss Exchange récupèrent leur clôture sans clé lorsque l’application tourne en local. EODHD étend la couverture aux autres places et à l’historique. CoinGecko fournit les cours des cryptos du catalogue.</p>
+      <p className="hint">{marketRelay() ? 'Relais actif pour les ETF SIX, Xetra et Tradegate pris en charge.' : 'Relais SIX, Xetra et Tradegate absent pour cette installation.'} EODHD étend la couverture aux autres places et à l’historique. CoinGecko fournit les cours des cryptos du catalogue.</p>
       <form className="market-settings" onSubmit={event => {
         event.preventDefault()
         onKey({ eodhd: keyDraft.eodhd.trim(), finnhub: keyDraft.finnhub.trim(), coingecko: keyDraft.coingecko.trim() })

@@ -1,0 +1,16 @@
+{
+  "id": "./",
+  "name": "IntraWallet",
+  "short_name": "IntraWallet",
+  "description": "Ton portefeuille d’investissements, stocké sur cet appareil.",
+  "lang": "fr-CH",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "theme_color": "#8c362c",
+  "background_color": "#f8f1eb",
+  "icons": [
+    { "src": "icons/intrawallet-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/intrawallet-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

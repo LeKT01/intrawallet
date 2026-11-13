@@ -3,3 +3,8 @@ dist/
 
 playwright-report/
 test-results/
+
+*.jks
+*.keystore
+.env.local
+.env.*.local

@@ -1,3 +1,4 @@
+import { localMarketRelay, marketRelay, marketUrl } from './runtime.ts'
 import { Decimal } from 'decimal.js'
 import { catalogEntry, type CatalogAsset } from './catalog.ts'
 import { hasUnknownQuoteTime, quoteTarget, type Mark } from './ledger.ts'
@@ -73,23 +74,19 @@ function listing(asset: QuoteAsset) {
   return symbol && symbolPattern.test(symbol) && Object.hasOwn(venueCodes, mic) ? { mic, symbol, venue: venueCodes[mic] } : null
 }
 
-function isLocalApp() {
-  return typeof location !== 'undefined' && ['127.0.0.1', 'localhost', 'terminal.local'].includes(location.hostname)
-}
-
 export function hasAutomaticSixQuote(asset: QuoteAsset) {
-  return isLocalApp() && sixEtfLine(asset) !== null
+  return Boolean(marketRelay()) && sixEtfLine(asset) !== null
 }
 
 export function hasAutomaticNqseQuote(asset: QuoteAsset) {
   const known = catalogEntry(asset.category, asset.reference)
-  return isLocalApp() && asset.category === 'etf' && (asset.isin ?? known?.isin ?? asset.reference) === nqseIsin
+  return Boolean(marketRelay()) && asset.category === 'etf' && (asset.isin ?? known?.isin ?? asset.reference) === nqseIsin
     && listing(asset)?.mic === 'XETR' && instrumentCode(asset) === 'NQSE.XETRA'
     && (asset.market?.currency ?? 'EUR') === 'EUR'
 }
 
 export function hasAutomaticTradegateQuote(asset: QuoteAsset) {
-  return isLocalApp() && asset.category === 'etf' && asset.reference === 'TGAT:VUSA'
+  return Boolean(marketRelay()) && asset.category === 'etf' && asset.reference === 'TGAT:VUSA'
     && (asset.isin ?? 'IE00B3XXRP09') === 'IE00B3XXRP09' && listing(asset)?.mic === 'TGAT'
     && instrumentCode(asset) === 'VUSA.TGAT' && (asset.market?.currency ?? 'EUR') === 'EUR'
 }
@@ -218,8 +215,7 @@ async function eodJson(path: string, key: string, params: Record<string, string>
   if (typeof navigator !== 'undefined' && navigator.locks) await navigator.locks.request(budgetKey, reserve)
   else reserve()
   // The standard local server forwards EODHD only. Static deployments call the provider directly.
-  const local = typeof location !== 'undefined' && ['127.0.0.1', 'localhost'].includes(location.hostname)
-  const base = local ? location.origin + '/market/eodhd/' : 'https://eodhd.com/api/'
+  const base = localMarketRelay() ? location.origin + '/market/eodhd/' : 'https://eodhd.com/api/'
   const url = new URL(base + path)
   url.search = new URLSearchParams({ ...params, api_token: key, fmt: 'json' }).toString()
   return json(url, 'EODHD')
@@ -326,7 +322,7 @@ let sixSnapshot: { at: number; result: Promise<ReturnType<typeof parseSixClosing
 async function sixQuotes(assets: QuoteAsset[], force: boolean) {
   const at = Date.now()
   if (!sixSnapshot || (sixSnapshot.failed ? force || at - sixSnapshot.at >= 60000 : at - sixSnapshot.at >= 30 * 60000)) {
-    const url = new URL('/market/six/etf-closings', location.origin)
+    const url = marketUrl('/market/six/etf-closings')
     const result = json(url, 'Le relais local SIX', 40000).then(parseSixClosings)
     sixSnapshot = { at, result }
     void result.catch(() => {
@@ -355,7 +351,7 @@ export const cryptoInterval = (key: string) => key ? 300000 : 60000
 
 function nqseQuote(asset: QuoteAsset, force: boolean) {
   return cachedRequest('xetra/' + nqseIsin, 60000, async () => {
-    const quote = parseNqseQuote(await json(new URL(nqseRoute, location.origin), 'Deutsche Börse · Xetra', 21000))
+    const quote = parseNqseQuote(await json(marketUrl(nqseRoute), 'Deutsche Börse · Xetra', 21000))
     const sourceAt = Date.parse(quote.timestampLastPrice)
     const { rate } = await rateToCHF('EUR', dayKey(sourceAt))
     const price = new Decimal(quote.lastPrice)
@@ -365,7 +361,7 @@ function nqseQuote(asset: QuoteAsset, force: boolean) {
 
 function vusaTradegateQuote(asset: QuoteAsset, force: boolean) {
   return cachedRequest('tradegate/vusa', 60000, async () => {
-    const quote = await json(new URL(tradegateRoute, location.origin), 'Tradegate', 55000)
+    const quote = await json(marketUrl(tradegateRoute), 'Tradegate', 55000)
     const price = positive(quote?.price)
     const at = quote?.receivedAt
     const sourceAt = quote?.sourceAt ?? at
@@ -479,7 +475,7 @@ export function quoteTiming(mark: Mark) {
 export const diagnosticProviders = ['CoinGecko', 'Finnhub', 'EODHD', 'SIX', 'Xetra', 'Tradegate'] as const
 export type DiagnosticProvider = typeof diagnosticProviders[number]
 export function providerIsConfigured(provider: DiagnosticProvider, keys: QuoteKeys) {
-  return provider === 'Finnhub' ? Boolean(keys.finnhub) : provider === 'EODHD' ? Boolean(keys.eodhd) : true
+  return provider === 'Finnhub' ? Boolean(keys.finnhub) : provider === 'EODHD' ? Boolean(keys.eodhd) : provider === 'CoinGecko' || Boolean(marketRelay())
 }
 
 // Fixed public instruments keep the probe independent of personal holdings.
@@ -508,7 +504,7 @@ export async function probeQuoteProvider(provider: DiagnosticProvider, keys: Quo
       return validTime(time) ? time : null
     }
     case 'SIX': {
-      const lines = parseSixClosings(await json(new URL('/market/six/etf-closings', location.origin), provider, 40000))
+      const lines = parseSixClosings(await json(marketUrl('/market/six/etf-closings'), provider, 40000))
       const asset = catalogEntry('etf', 'XSWX:VUSA')
       const line = asset && sixEtfLine(asset)
       const quote = line && findSixClosing(lines, line)
@@ -516,11 +512,11 @@ export async function probeQuoteProvider(provider: DiagnosticProvider, keys: Quo
       return validTime(time) ? time : null
     }
     case 'Xetra': {
-      const data = parseNqseQuote(await json(new URL(nqseRoute, location.origin), provider, 21000))
+      const data = parseNqseQuote(await json(marketUrl(nqseRoute), provider, 21000))
       return Date.parse(data.timestampLastPrice)
     }
     case 'Tradegate': {
-      const data = await json(new URL(tradegateRoute, location.origin), provider, 38000)
+      const data = await json(marketUrl(tradegateRoute), provider, 38000)
       const time = data?.sourceAt ?? data?.receivedAt
       return positive(data?.price) && validTime(time) ? time : null
     }
