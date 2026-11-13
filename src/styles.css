@@ -694,6 +694,7 @@ fieldset[aria-busy="true"] { cursor: progress; }
   .dialog-body .form-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 620px) {
+  .form-dialog[open]:not([data-closing]) { animation: glass-fade 180ms ease-out both; }
   .form-dialog { position: fixed; inset: var(--dialog-visible-top, 0px) 0 auto; margin: 0; width: 100%; height: min(100dvh, var(--dialog-visible-height, 100dvh)); max-height: none; border: 0; border-radius: 0; }
   .form-dialog > form { position: absolute; inset: 0; display: flex; flex-direction: column; max-height: none; min-height: 0; }
   .form-dialog :is(.dialog-header, .dialog-actions) { flex: 0 0 auto; }
