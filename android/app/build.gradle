@@ -1,6 +1,7 @@
 apply plugin: 'com.android.application'
 
-def version = new groovy.json.JsonSlurper().parse(rootProject.file('../package.json')).version
+def appVersionName = new groovy.json.JsonSlurper().parse(rootProject.file('../package.json')).version
+def appVersionCode = (System.getenv('ANDROID_VERSION_CODE') ?: '30001').toInteger()
 def signingPath = System.getenv('ANDROID_KEYSTORE_PATH')
 
 android {
@@ -10,8 +11,8 @@ android {
         applicationId "com.intrawallet.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode (System.getenv('ANDROID_VERSION_CODE') ?: '30001').toInteger()
-        versionName version
+        versionCode = appVersionCode
+        versionName = appVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
