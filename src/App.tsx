@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { deleteOperation, deletePosition, loadPortfolio, saveMarks, saveOperation, savePosition } from './database'
 import { consolidate, platformKey, type Position } from './portfolio'
-import { dailyPortfolioHistory, firstTrackingDate, isMarketMark, quoteTarget, replay, type Mark, type Operation, type PortfolioData } from './ledger'
+import { compareMarketMarks, dailyPortfolioHistory, firstTrackingDate, isMarketMark, quoteTarget, replay, type Mark, type Operation, type PortfolioData } from './ledger'
 import PositionForm from './PositionForm'
 import OperationForm from './OperationForm'
 import DataSettings, { ConfirmDialog } from './DataSettings'
@@ -121,7 +121,7 @@ export default function App() {
     for (const mark of data.marks) {
       if (!isMarketMark(mark)) continue
       const previous = result.get(mark.target)
-      if (!previous || previous.sourceAt < mark.sourceAt || (previous.sourceAt === mark.sourceAt && previous.at <= mark.at)) result.set(mark.target, mark)
+      if (!previous || compareMarketMarks(mark, previous) >= 0) result.set(mark.target, mark)
     }
     return result
   }, [data.marks])

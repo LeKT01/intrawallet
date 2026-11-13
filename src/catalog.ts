@@ -12,10 +12,10 @@ export interface CatalogAsset {
   market?: { code: string; currency: string }
 }
 
-function etf(name: string, reference: string, detail: string, aliases: string, listing?: string, currency?: string): CatalogAsset {
+function etf(name: string, reference: string, detail: string, aliases: string, listing?: string, currency?: string, isin = reference): CatalogAsset {
   const venue = listing?.startsWith('XSWX:') ? 'SW' : listing?.startsWith('XETR:') ? 'XETRA' : undefined
   const market = listing && venue && currency ? { code: listing.slice(5) + '.' + venue, currency } : undefined
-  return { category: 'etf', name, reference, isin: reference, aliases, detail, listing, market }
+  return { category: 'etf', name, reference, isin, aliases, detail, listing, market }
 }
 
 // Identifiers come from issuer factsheets or the Swiss justETF directory.
@@ -40,8 +40,8 @@ export const catalog: CatalogAsset[] = [
   etf('Xtrackers S&P 500 Swap UCITS ETF 1C', 'LU0490618542', 'Capitalisant · Réplication synthétique', 'XSPX', 'XSWX:XSPX', 'CHF'),
   etf('UBS Core S&P 500 UCITS ETF', 'IE00B7K93397', 'Distribuant', 'SP5USY', 'XSWX:SP5USY', 'USD'),
   etf('State Street SPDR S&P 500 UCITS ETF', 'IE000XZSV718', 'Capitalisant', 'SPYL', 'XSWX:SPYL', 'USD'),
-  etf('Vanguard FTSE All-World UCITS ETF', 'IE00BK5BQT80', 'Capitalisant', 'VWCE VWRP VWRA', 'XETR:VWCE'),
-  etf('Vanguard FTSE All-World UCITS ETF', 'IE00BK5BQT80', 'Capitalisant · cotation suisse', 'VWRA', 'XSWX:VWRA', 'CHF'),
+  etf('Vanguard FTSE All-World UCITS ETF', 'IE00BK5BQT80', 'Capitalisant', 'VWCE VWRP', 'XETR:VWCE'),
+  etf('Vanguard FTSE All-World UCITS ETF', 'XSWX:VWRA', 'Capitalisant · cotation suisse', 'VWRA', 'XSWX:VWRA', 'CHF', 'IE00BK5BQT80'),
   etf('Vanguard FTSE All-World UCITS ETF', 'IE00B3RBWM25', 'Distribuant', 'VWRL VWRD', 'XSWX:VWRL', 'CHF'),
   etf('iShares Core MSCI World UCITS ETF', 'IE00B4L5Y983', 'Capitalisant', 'SWDA IWDA EUNL', 'XSWX:SWDA', 'USD'),
   etf('iShares Core MSCI Emerging Markets IMI UCITS ETF', 'IE00BKM4GZ66', 'Capitalisant', 'EIMI IS3N EMIM', 'XSWX:EIMI', 'USD'),
@@ -87,7 +87,7 @@ export function searchCatalog(category: Category, query: string) {
   return catalog.filter(asset => {
     if (asset.category !== category) return false
     if (indexName && !normalize(asset.name).replaceAll(' ', '').includes(indexName)) return false
-    const searchable = normalize([asset.name, asset.reference, asset.aliases, asset.detail, asset.listing].join(' '))
+    const searchable = normalize([asset.name, asset.reference, asset.isin, asset.aliases, asset.detail, asset.listing].join(' '))
     return words.every(word => searchable.includes(word))
       || searchable.replaceAll(' ', '').includes(words.join(''))
   })

@@ -1,6 +1,6 @@
 import { Decimal } from 'decimal.js'
 import { catalogEntry, type CatalogAsset } from './catalog.ts'
-import { quoteTarget, type Mark } from './ledger.ts'
+import { hasUnknownQuoteTime, quoteTarget, type Mark } from './ledger.ts'
 import { dayKey, daysBefore, type FxRate } from './currency.ts'
 import { closeTimestamp, latestClosingDay, marketOpen } from './marketCalendar.ts'
 import { findSixClosing, parseSixClosings, sixEtfLine } from './sixEtf.ts'
@@ -365,7 +365,7 @@ function nqseQuote(asset: QuoteAsset, force: boolean) {
 
 function vusaTradegateQuote(asset: QuoteAsset, force: boolean) {
   return cachedRequest('tradegate/vusa', 60000, async () => {
-    const quote = await json(new URL(tradegateRoute, location.origin), 'Tradegate', 38000)
+    const quote = await json(new URL(tradegateRoute, location.origin), 'Tradegate', 55000)
     const price = positive(quote?.price)
     const at = quote?.receivedAt
     const sourceAt = quote?.sourceAt ?? at
@@ -405,9 +405,17 @@ export async function fetchQuotes(assets: QuoteAsset[], keys: QuoteKeys,
     ...eod.map(asset => equityDaily(asset, keys.eodhd, force)),
   ]
   const result = await Promise.allSettled(requests)
-  const marks = result.flatMap(value => value.status === 'fulfilled' ? value.value : [])
+  const received = result.flatMap(value => value.status === 'fulfilled' ? value.value : [])
+  const marks = received.filter(mark => {
+    if (!hasUnknownQuoteTime(mark)) return true
+    const previous = stale.get(mark.target)
+    return !previous || hasUnknownQuoteTime(previous)
+  })
   const issues = [...new Set(result.flatMap(value => value.status === 'rejected'
     ? [value.reason instanceof Error ? value.reason.message : 'Le fournisseur de données est indisponible.'] : []))]
+  if (received.length !== marks.length) {
+    issues.push('Tradegate ne fournit pas d’heure de transaction pour VUSA. Le dernier cours daté est conservé.')
+  }
   return { marks, issues, checked: requests.length }
 }
 
@@ -445,7 +453,7 @@ export async function fetchDailyPrices(asset: QuoteAsset, key: string) {
 
 export function quoteIsStale(mark: Mark, at = Date.now()) {
   if (mark.source === 'Cours simulé') return false
-  if (mark.source === 'Tradegate · relevé') return true
+  if (hasUnknownQuoteTime(mark)) return true
   if (mark.timing === 'close') {
     const venue = mark.instrument?.split('.').at(-1)
     return dayKey(mark.sourceAt) < latestClosingDay(venue ?? '', at)
@@ -463,7 +471,7 @@ export function quoteTiming(mark: Mark) {
     return Date.now() - mark.sourceAt > 900000 ? 'Dernier cours crypto connu' : 'Cours indicatif · marché 24 h/24'
   }
   if (mark.source === 'Tradegate · transactions') return 'Dernière transaction publiée · Tradegate'
-  if (mark.source === 'Tradegate · relevé') return 'Dernier prix fourni · heure de transaction inconnue'
+  if (hasUnknownQuoteTime(mark)) return 'Dernier prix fourni · heure de transaction inconnue'
   if (mark.timing === 'reported') return 'Dernier cours reçu · délai variable'
   return mark.source.includes('fictif') ? 'Cours fictif' : 'Dernier cours disponible'
 }

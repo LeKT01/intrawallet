@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import AssetPicker, { type AssetInput } from './AssetPicker'
 import { acquisitionCost, estimatedCost, parseAmount, platformKey, unitPrice, type Category, type Cost, type Position } from './portfolio'
-import { isMarketMark, quoteTarget, type Mark } from './ledger'
+import { compareMarketMarks, hasUnknownQuoteTime, isMarketMark, quoteTarget, type Mark } from './ledger'
 import { fetchQuotes, hasAutomaticNqseQuote, hasAutomaticSixQuote, hasAutomaticTradegateQuote, instrumentCode, quoteAccess, quoteIsStale, quoteTiming, rateToCHF, referenceRate, type QuoteKeys } from './quotes'
 import { currencies, dayKey, type Currency, type CurrencyDisplay } from './currency'
 import { Decimal } from 'decimal.js'
@@ -99,10 +99,10 @@ export default function PositionForm({ current, positions, platforms, marks, dis
   const instrument = asset ? instrumentCode(asset) : undefined
   const cached = target ? marks.filter(mark => isMarketMark(mark) && mark.target === target
     && (!instrument || mark.instrument === instrument || (mark.instrument === undefined && ((sameAsset && !identityChanged) || demoMode))))
-    .sort((a, b) => b.sourceAt - a.sourceAt || b.at - a.at)[0] : undefined
+    .sort((a, b) => compareMarketMarks(b, a))[0] : undefined
   const request = quoteState?.target === target ? quoteState : undefined
   const fresh = request?.mark
-  const quote = fresh && (!cached || fresh.sourceAt >= cached.sourceAt) ? fresh : cached
+  const quote = fresh && (!cached || compareMarketMarks(fresh, cached) >= 0) ? fresh : cached
   const access = asset && !demoMode ? quoteAccess(asset, quoteKey) : 'manual'
   const { eodhd, finnhub, coingecko } = quoteKey
 
@@ -287,7 +287,7 @@ export default function PositionForm({ current, positions, platforms, marks, dis
                   {quote?.price != null
                     ? <><strong className="quote-price">{quote.originalPrice && quote.currency && currencies.includes(quote.currency as Currency)
                       ? unitPrice(quote.originalPrice, quote.currency as Currency) : unitPrice(quote.price)}</strong>
-                      <small>{quoteIsStale(quote) ? 'Cours ancien · ' : ''}{quoteTiming(quote)} · {quote.instrument ? quote.instrument + ' · ' : ''}{quote.source} · {quoteTime.format(quote.sourceAt)}</small></>
+                      <small>{quoteIsStale(quote) ? 'Cours ancien · ' : ''}{quoteTiming(quote)} · {quote.instrument ? quote.instrument + ' · ' : ''}{quote.source} · {(hasUnknownQuoteTime(quote) ? 'Reçu le ' + quoteTime.format(quote.receivedAt ?? quote.at) : quoteTime.format(quote.sourceAt))}</small></>
                     : <strong className="quote-price">{access === 'available' && (!request || request.loading)
                       ? 'Recherche du cours…' : 'Cours indisponible'}</strong>}
                 </div>

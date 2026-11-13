@@ -6,6 +6,7 @@ const host = 'https://www.tradegatebsx.com'
 const isin = 'IE00B3XXRP09'
 const feed = host + '/refresh.php?isin=' + isin
 const trades = host + '/orderbuch_umsaetze.php?isin=' + isin
+const orderBook = host + '/orderbuch.php?isin=' + isin
 const exchangeTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Berlin', timeZoneName: 'shortOffset' })
 
 function parsePrice(value: unknown) {
@@ -49,14 +50,30 @@ async function fetchBody(url: string, accept: string) {
   }
 }
 
+export function parseOrderBook(html: string) {
+  const rows = Array.from(html.matchAll(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi), ([row]) =>
+    Array.from(row.matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi),
+      ([, value]) => value.replace(/<[^>]*>/g, '').replace(/&nbsp;/gi, ' ').trim()))
+  const verified = rows.some(cells => cells.slice(0, 4).join('/') === 'A1JX53/VUSA/' + isin + '/EUR')
+    && /ETF\s*\(transparent\)/i.test(html)
+  if (!verified) throw new Error('La page Tradegate ne confirme pas la ligne VUSA en EUR.')
+  const price = parsePrice(rows.find(cells => cells[0] === 'Last')?.[1])
+  if (price === null) throw new Error('Aucun prix VUSA exploitable sur Tradegate.')
+  return price
+}
+
 async function fetchPrice(): Promise<{ price: number; sourceAt?: number }> {
   try {
     return parseLatestTrade(await fetchBody(trades, 'text/html'))
   } catch {
-    const data = JSON.parse(await fetchBody(feed, 'application/json'))
-    const price = parsePrice(data?.last)
-    if (price === null) throw new Error('Aucun prix VUSA exploitable sur Tradegate.')
-    return { price }
+    try {
+      const data = JSON.parse(await fetchBody(feed, 'application/json'))
+      const price = parsePrice(data?.last)
+      if (price !== null) return { price }
+    } catch {
+      // The public order book remains available when the refresh feed fails.
+    }
+    return { price: parseOrderBook(await fetchBody(orderBook, 'text/html')) }
   }
 }
 

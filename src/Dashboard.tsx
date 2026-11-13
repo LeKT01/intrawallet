@@ -3,7 +3,7 @@ import type { Decimal } from 'decimal.js'
 import type { CurrencyDisplay } from './currency'
 import HistoryChart, { portfolioPeriod } from './HistoryChart'
 import { periods } from './DailyChart'
-import type { HistoryPoint, Holding, Mark } from './ledger'
+import { hasUnknownQuoteTime, type HistoryPoint, type Holding, type Mark } from './ledger'
 import { platformKey, summarize, type Category } from './portfolio'
 import { Allocation, AssetTable, type Asset } from './PortfolioViews'
 import { Change, Icon, Metric, PanelHeading, percentLabel, timestamp } from './ui'
@@ -31,7 +31,7 @@ export default function Dashboard({ assets, holdings, display, quotes, history, 
   const stale = assets.filter(asset => { const mark = quotes.get(asset.key); return mark && quoteIsStale(mark) }).length
   const latest = assets.reduce<Mark | undefined>((previous, asset) => {
     const mark = quotes.get(asset.key)
-    return mark && (!previous || mark.sourceAt > previous.sourceAt) ? mark : previous
+    return mark && !hasUnknownQuoteTime(mark) && (!previous || mark.sourceAt > previous.sourceAt) ? mark : previous
   }, undefined)
   const ranked = assets.filter(asset => asset.returnRate !== null).sort((a, b) => b.returnRate!.cmp(a.returnRate!))
   const categoryRows = allocationCategories.map(([key, label]) => ({
