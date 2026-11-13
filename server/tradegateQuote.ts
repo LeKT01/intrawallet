@@ -51,13 +51,13 @@ async function fetchBody(url: string, accept: string) {
 
 async function fetchPrice(): Promise<{ price: number; sourceAt?: number }> {
   try {
+    return parseLatestTrade(await fetchBody(trades, 'text/html'))
+  } catch {
     const data = JSON.parse(await fetchBody(feed, 'application/json'))
     const price = parsePrice(data?.last)
-    if (price !== null) return { price }
-  } catch {
-    // The official trade history also works when the quote feed is unavailable.
+    if (price === null) throw new Error('Aucun prix VUSA exploitable sur Tradegate.')
+    return { price }
   }
-  return parseLatestTrade(await fetchBody(trades, 'text/html'))
 }
 
 export function tradegateQuote(): Plugin {

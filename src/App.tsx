@@ -189,11 +189,11 @@ export default function App() {
       const result = await fetchQuotes(eligible, quoteKey, { force: userInitiated, opening: firstCheck.current, stale: marketByAsset })
       firstCheck.current = false
       if (!result.checked) return
-      if (result.marks.length) await saveMarks(result.marks)
+      const added = result.marks.length ? await saveMarks(result.marks) : 0
       const count = new Set(result.marks.map(mark => mark.target)).size
       if (count || result.issues.length || userInitiated) {
         setRefreshStatus([
-          count ? count + ' actif(s) avec un cours disponible.' : 'Aucun nouveau cours reçu. Les valeurs connues sont conservées.',
+          count && added ? count + ' actif(s) avec un cours disponible.' : 'Aucun nouveau cours reçu. Les valeurs connues sont conservées.',
           result.issues[0],
         ].filter(Boolean).join(' '))
       }

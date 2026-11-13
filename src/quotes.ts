@@ -149,16 +149,26 @@ export async function rateToCHF(currency: string, day: string) {
   return { date: ref.date, rate: new Decimal(1).div(ref.rate) }
 }
 
-const quoteCache = new Map<string, { at: number; result: Promise<Mark[]> }>()
-function cachedRequest(key: string, interval: number, load: () => Promise<Mark[]>) {
+const quoteCache = new Map<string, { expiresAt: number | null; result: Promise<Mark[]> }>()
+function cachedRequest(key: string, interval: number, load: () => Promise<Mark[]>, force = false) {
   const cached = quoteCache.get(key)
-  if (cached && Date.now() - cached.at < interval) return cached.result
-  const result = load()
-  quoteCache.set(key, { at: Date.now(), result })
-  return result
+  if (cached && (cached.expiresAt === null || (!force && Date.now() < cached.expiresAt))) return cached.result
+  const entry = {
+    expiresAt: null as number | null,
+    result: Promise.resolve().then(load).then(marks => {
+      if (marks.length) entry.expiresAt = Date.now() + interval
+      else if (quoteCache.get(key) === entry) quoteCache.delete(key)
+      return marks
+    }, error => {
+      if (quoteCache.get(key) === entry) quoteCache.delete(key)
+      throw error
+    }),
+  }
+  quoteCache.set(key, entry)
+  return entry.result
 }
 
-async function cryptoQuotes(assets: QuoteAsset[], key: string) {
+async function cryptoQuotes(assets: QuoteAsset[], key: string, force: boolean) {
   const matched = assets.flatMap(asset => {
     const coinId = catalogEntry(asset.category, asset.reference)?.coinId
     return coinId ? [{ asset, coinId }] : []
@@ -175,10 +185,10 @@ async function cryptoQuotes(assets: QuoteAsset[], key: string) {
       const sourceAt = markTime(prices?.[coinId]?.last_updated_at)
       return price && validTime(sourceAt) ? [marketMark(asset, price, 'CoinGecko', sourceAt, at, price, 'CHF', 'reported')] : []
     })
-  })
+  }, force)
 }
 
-function finnhubQuote(asset: QuoteAsset, key: string) {
+function finnhubQuote(asset: QuoteAsset, key: string, force: boolean) {
   return cachedRequest('finnhub/' + key + '/' + quoteTarget(asset), 180000, async () => {
     const url = new URL('https://finnhub.io/api/v1/quote')
     url.search = new URLSearchParams({ symbol: listing(asset)!.symbol, token: key }).toString()
@@ -188,7 +198,7 @@ function finnhubQuote(asset: QuoteAsset, key: string) {
     if (!price || !validTime(sourceAt)) return []
     const { rate } = await rateToCHF('USD', dayKey(sourceAt))
     return [marketMark(asset, price.times(rate), 'Finnhub', sourceAt, Date.now(), price, 'USD', 'reported', listing(asset)!.symbol + '.US')]
-  })
+  }, force)
 }
 
 const budgetKey = 'portefeuille.eodhd-budget'
@@ -343,17 +353,17 @@ let eodOffset = 0
 let finnhubOffset = 0
 export const cryptoInterval = (key: string) => key ? 300000 : 60000
 
-function nqseQuote(asset: QuoteAsset) {
+function nqseQuote(asset: QuoteAsset, force: boolean) {
   return cachedRequest('xetra/' + nqseIsin, 60000, async () => {
     const quote = parseNqseQuote(await json(new URL(nqseRoute, location.origin), 'Deutsche Börse · Xetra', 21000))
     const sourceAt = Date.parse(quote.timestampLastPrice)
     const { rate } = await rateToCHF('EUR', dayKey(sourceAt))
     const price = new Decimal(quote.lastPrice)
     return [marketMark(asset, price.times(rate), 'Deutsche Börse · Xetra', sourceAt, Date.now(), price, 'EUR', 'reported', 'NQSE.XETRA')]
-  })
+  }, force)
 }
 
-function vusaTradegateQuote(asset: QuoteAsset) {
+function vusaTradegateQuote(asset: QuoteAsset, force: boolean) {
   return cachedRequest('tradegate/vusa', 60000, async () => {
     const quote = await json(new URL(tradegateRoute, location.origin), 'Tradegate', 38000)
     const price = positive(quote?.price)
@@ -363,7 +373,7 @@ function vusaTradegateQuote(asset: QuoteAsset) {
     const { rate } = await rateToCHF('EUR', dayKey(sourceAt))
     const source = quote?.sourceAt === undefined ? 'Tradegate · relevé' : 'Tradegate · transactions'
     return [marketMark(asset, price.times(rate), source, sourceAt, at, price, 'EUR', 'reported', 'VUSA.TGAT')]
-  })
+  }, force)
 }
 
 export async function fetchQuotes(assets: QuoteAsset[], keys: QuoteKeys,
@@ -384,14 +394,14 @@ export async function fetchQuotes(assets: QuoteAsset[], keys: QuoteKeys,
   finnhubOffset += us.length
   eodOffset += eod.length
   const requests = [
-    ...(crypto.length ? [cryptoQuotes(crypto, keys.coingecko)] : []),
+    ...(crypto.length ? [cryptoQuotes(crypto, keys.coingecko, force)] : []),
     ...(six.length ? [sixQuotes(six, force)] : []),
-    ...tradegate.map(vusaTradegateQuote),
-    ...nqse.map(asset => nqseQuote(asset).catch(error => {
+    ...tradegate.map(asset => vusaTradegateQuote(asset, force)),
+    ...nqse.map(asset => nqseQuote(asset, force).catch(error => {
       if (keys.eodhd) return equityDaily(asset, keys.eodhd, force)
       throw error
     })),
-    ...us.map(asset => finnhubQuote(asset, keys.finnhub)),
+    ...us.map(asset => finnhubQuote(asset, keys.finnhub, force)),
     ...eod.map(asset => equityDaily(asset, keys.eodhd, force)),
   ]
   const result = await Promise.allSettled(requests)
@@ -435,6 +445,7 @@ export async function fetchDailyPrices(asset: QuoteAsset, key: string) {
 
 export function quoteIsStale(mark: Mark, at = Date.now()) {
   if (mark.source === 'Cours simulé') return false
+  if (mark.source === 'Tradegate · relevé') return true
   if (mark.timing === 'close') {
     const venue = mark.instrument?.split('.').at(-1)
     return dayKey(mark.sourceAt) < latestClosingDay(venue ?? '', at)
@@ -452,7 +463,7 @@ export function quoteTiming(mark: Mark) {
     return Date.now() - mark.sourceAt > 900000 ? 'Dernier cours crypto connu' : 'Cours indicatif · marché 24 h/24'
   }
   if (mark.source === 'Tradegate · transactions') return 'Dernière transaction publiée · Tradegate'
-  if (mark.source === 'Tradegate · relevé') return 'Dernier prix relevé · heure du relevé'
+  if (mark.source === 'Tradegate · relevé') return 'Dernier prix fourni · heure de transaction inconnue'
   if (mark.timing === 'reported') return 'Dernier cours reçu · délai variable'
   return mark.source.includes('fictif') ? 'Cours fictif' : 'Dernier cours disponible'
 }

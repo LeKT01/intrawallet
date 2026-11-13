@@ -178,10 +178,8 @@ export function restorePortfolio(data: PortfolioBackup) {
     await Promise.all([db.positions.clear(), db.operations.clear(), db.marks.clear(), db.platforms.clear()])
     await Promise.all([db.positions.bulkAdd(data.positions), db.operations.bulkAdd(data.operations), db.marks.bulkAdd(data.marks),
       db.platforms.bulkPut((data.platforms ?? []).map(name => ({ id: platformKey(name), name })))])
-    if (data.dailyPrices) {
-      await db.dailyPrices.clear()
-      await db.dailyPrices.bulkAdd(data.dailyPrices)
-    }
+    await db.dailyPrices.clear()
+    if (data.dailyPrices?.length) await db.dailyPrices.bulkAdd(data.dailyPrices)
   })
 }
 

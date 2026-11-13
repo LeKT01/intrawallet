@@ -179,7 +179,8 @@ export function AssetDetail({ asset, data, series, quote, display, cryptoKey, on
       <div className="asset-detail-price"><small>{!quote && entry.usesManualValuation ? 'Prix unitaire estimé' : 'Dernier cours de marché'}</small>
         <strong>{native ?? (entry.unitPrice === null ? 'Indisponible' : display.format(entry.unitPrice, { unit: true }))}</strong>
         {quote && <p className={quoteIsStale(quote) ? 'stale-label' : 'muted'}>
-          {quoteIsStale(quote) && 'Cours ancien · '}{quoteTiming(quote)} · {quote.instrument ? quote.instrument + ' · ' : ''}{quote.source} · {timestamp.format(quote.sourceAt)}
+          {quoteIsStale(quote) && quote.source !== 'Tradegate · relevé' && 'Cours ancien · '}{quoteTiming(quote)} · {quote.instrument ? quote.instrument + ' · ' : ''}{quote.source}
+          {quote.source !== 'Tradegate · relevé' && ' · ' + timestamp.format(quote.sourceAt)}
           {quote.receivedAt && <><br />Reçu le {timestamp.format(quote.receivedAt)}</>}</p>}</div>
     </section>
     <section className="panel chart-panel"><AssetHistory {...chart} asset={entry} cryptoKey={cryptoKey} name={asset.name} display={display} /></section>

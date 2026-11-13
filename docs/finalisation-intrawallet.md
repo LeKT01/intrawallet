@@ -12,7 +12,7 @@ La branche part de la V3, commit `856e511`. Le lot porte sur les parcours du quo
 | Stockage et sauvegarde | `database.ts`, `backup.ts`, `DataSettings.tsx` | L’export inclut désormais les séries téléchargées. La restauration s’effectue en une transaction. Le schéma IndexedDB reste en version 4. |
 | Qualité | `tests/`, `playwright.config.ts` | Les tests de navigateur utilisent des profils neufs. Les captures de référence sont générées en démo à une date fixe. |
 
-Une ancienne sauvegarde sans séries restaure les données qu’elle contient et conserve le cache local de cotations existant. Une nouvelle sauvegarde inclut ce cache et le restaure avec le reste des données. Les clés API sont exclues. Les identifiants des positions existantes restent valides. Les positions historiques saisies avec un ISIN ambigu peuvent nécessiter de confirmer leur place avant de reprendre les cotations automatiques.
+Une ancienne sauvegarde sans séries restaure les données qu’elle contient et vide le cache local de cotations après confirmation. Une nouvelle sauvegarde inclut ce cache et le restaure avec le reste des données. Les clés API sont exclues. Les identifiants des positions existantes restent valides. Les positions historiques saisies avec un ISIN ambigu peuvent nécessiter de confirmer leur place avant de reprendre les cotations automatiques.
 
 ## Références produit
 
