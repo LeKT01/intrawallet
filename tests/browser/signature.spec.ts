@@ -9,6 +9,8 @@ async function layoutErrors(page: Page) {
     const errors: string[] = []
     const workspace = document.querySelector('.workspace')!
     if (document.documentElement.scrollWidth > innerWidth + 1) errors.push('document trop large')
+    if (innerWidth <= 900 && document.documentElement.scrollHeight > innerHeight + 1)
+      errors.push('double défilement du document : ' + document.documentElement.scrollHeight + ' px pour ' + innerHeight + ' px')
     if (workspace.scrollWidth > workspace.clientWidth + 1) errors.push('zone de travail trop large')
     for (const panel of document.querySelectorAll('.dashboard-grid > *, .asset-card, .theme-preview')) {
       const rect = panel.getBoundingClientRect()

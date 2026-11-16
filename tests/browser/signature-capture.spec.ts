@@ -119,9 +119,13 @@ for (const theme of ['light', 'dark'] as const) for (const width of [390, 1440])
     await page.locator('.group-list').getByRole('button', { name: /Gestion déléguée/ }).click()
     await expect(page.locator('.group-summary')).toBeVisible()
     await capture(page, info, 'groupe-' + theme + '-' + width, true)
+    await page.locator('.group-composition').evaluate(node => node.scrollIntoView({ block: 'start' }))
+    await capture(page, info, 'composition-groupe-' + theme + '-' + width, true)
     await page.getByRole('button', { name: 'Modifier', exact: true }).click()
     await expect(page.getByRole('dialog', { name: 'Modifier le portefeuille groupé' })).toBeVisible()
     await capture(page, info, 'formulaire-groupe-' + theme + '-' + width, true)
+    await page.locator('.group-editor-section[aria-labelledby="group-composition"]').evaluate(node => node.scrollIntoView({ block: 'start' }))
+    await capture(page, info, 'allocations-formulaire-' + theme + '-' + width, true)
     await page.keyboard.press('Escape')
     await page.goto('/?demo=1#positions')
     await page.getByRole('button', { name: 'Cartes', exact: true }).click()
@@ -161,4 +165,52 @@ test('référence officielle Vision UI @capture', async ({ page }, info) => {
     return canvas.toDataURL('image/jpeg', .7).split(',')[1]
   }, bytes.toString('base64'))
   console.log('IW_PREVIEW:reference-vision-ui:' + image + ':END_PREVIEW')
+})
+
+test('séquence des animations réelles du dashboard @capture', async ({ page }, info) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'no-preference' })
+  await page.clock.setFixedTime(reviewTime)
+  await page.addInitScript(() => {
+    const original = Element.prototype.animate
+    Element.prototype.animate = function (keyframes, options) {
+      const animation = original.call(this, keyframes, options)
+      if (animation.id === 'iw-page-reveal') animation.pause()
+      return animation
+    }
+  })
+  await page.goto('/?demo=1')
+  await expect(page.locator('.chart-line').first()).toBeVisible()
+  await page.evaluate(() => {
+    const animations = document.getAnimations()
+    animations.forEach(animation => animation.pause())
+    ;(window as unknown as { reviewAnimations: Animation[] }).reviewAnimations = animations
+  })
+  const frames: string[] = []
+  const moments = [0, 140, 350, 650]
+  for (const time of moments) {
+    await page.evaluate(time => {
+      ;(window as unknown as { reviewAnimations: Animation[] }).reviewAnimations.forEach(animation => { animation.currentTime = time })
+    }, time)
+    const frame = await page.screenshot({ type: 'jpeg', quality: 55, path: info.outputPath('animation-' + time + 'ms.jpg') })
+    frames.push('data:image/jpeg;base64,' + frame.toString('base64'))
+  }
+  const sheet = await page.context().newPage()
+  await sheet.setContent('<canvas></canvas>')
+  const data = await sheet.evaluate(async ({ frames, moments }) => {
+    const canvas = document.querySelector('canvas')!
+    canvas.width = 1200; canvas.height = 810
+    const ctx = canvas.getContext('2d')!
+    ctx.fillStyle = '#e9e2da'; ctx.fillRect(0, 0, canvas.width, canvas.height)
+    for (let i = 0; i < frames.length; i++) {
+      const image = new Image(); image.src = frames[i]; await image.decode()
+      const x = (i % 2) * 600, y = Math.floor(i / 2) * 405
+      ctx.fillStyle = '#302420'; ctx.font = '16px sans-serif'
+      ctx.fillText(moments[i] + ' ms · animations du produit, timeline figée', x + 10, y + 21)
+      ctx.drawImage(image, x, y + 30, 600, 375)
+    }
+    return canvas.toDataURL('image/jpeg', .7).split(',')[1]
+  }, { frames, moments })
+  console.log('IW_PREVIEW:animation-dashboard:' + data + ':END_PREVIEW')
+  await sheet.close()
 })
