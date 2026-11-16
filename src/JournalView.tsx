@@ -21,6 +21,11 @@ export default function JournalView({ items, platforms, display, sales, onEdit, 
   const [platform, setPlatform] = useState('')
   const [asset, setAsset] = useState('')
   const [page, setPage] = useState(0)
+  const operationCounts = useMemo(() => {
+    const counts = { buy: 0, sell: 0, transfer: 0 }
+    for (const item of items) if (item.type === 'operation') counts[item.value.kind]++
+    return counts
+  }, [items])
   const instruments = useMemo(() => [...new Map(items.map(item => [quoteTarget(item.value), item.value.name])).entries()]
     .sort((a, b) => a[1].localeCompare(b[1], 'fr')), [items])
   const filtered = items.filter(({ type: entryType, value }) => {
@@ -36,7 +41,19 @@ export default function JournalView({ items, platforms, display, sales, onEdit, 
     <PanelHeading title={filters ? 'Journal des investissements' : 'Historique des transactions'} description={filters ? 'Acquisitions, achats, ventes et transferts.' : undefined}>
       {onAdd && <button className="primary" onClick={onAdd}><Icon name="plus" /> Ajouter une transaction</button>}
     </PanelHeading>
-    {filters && <div className="filter-bar">
+    {filters && <div className="journal-filters">
+      <div className="journal-overview" role="group" aria-label="Filtrer rapidement les transactions">
+        {([
+          ['', 'Toutes', items.length],
+          ['buy', 'Achats', operationCounts.buy],
+          ['sell', 'Ventes', operationCounts.sell],
+          ['transfer', 'Transferts', operationCounts.transfer],
+        ] as const).map(([kind, label, count]) =>
+          <button type="button" key={label} className="secondary" aria-pressed={type === kind} onClick={() => { setType(kind); setPage(0) }}>
+            <span>{label}</span><strong>{count}</strong>
+          </button>)}
+      </div>
+      <div className="filter-bar">
       <label>Recherche<input type="search" placeholder="Actif ou plateforme" value={query} onChange={event => { setQuery(event.target.value); setPage(0) }} /></label>
       <label>Type<select value={type} onChange={event => { setType(event.target.value); setPage(0) }}>
         <option value="">Tous</option><option value="position">Acquisition initiale</option>
@@ -48,9 +65,10 @@ export default function JournalView({ items, platforms, display, sales, onEdit, 
       <label>Plateforme<select value={platform} onChange={event => { setPlatform(event.target.value); setPage(0) }}>
         <option value="">Toutes</option>{platforms.map(name => <option key={name} value={platformKey(name)}>{name}</option>)}
       </select></label>
+      </div>
     </div>}
     {!filtered.length && <p className="inline-empty">Aucune transaction pour cette sélection.</p>}
-    <ul className="journal-list">
+    <ul className="journal-list" aria-label="Transactions">
       {filtered.slice(index * pageSize, (index + 1) * pageSize).map(item => {
         const value = item.value
         const operation = item.type === 'operation' ? item.value : null

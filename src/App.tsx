@@ -1,3 +1,4 @@
+import Appearance, { useAppearance } from './Appearance'
 import { nativeApp } from './runtime'
 import useAndroidUpdate from './useAndroidUpdate'
 import InstallHelp from './InstallHelp'
@@ -32,8 +33,8 @@ const sections = { overview: 'Vue d’ensemble', positions: 'Portefeuille', jour
 type Section = keyof typeof sections
 const spaceSections: Section[] = ['space', 'journal', 'platforms', 'data', 'diagnostic']
 const spaceGroups: { title: string; links: { label: string; description: string; section: Section; anchor?: string }[] }[] = [
-  { title: 'Activité', links: [{ label: 'Transactions', description: 'Historique des achats, ventes et transferts', section: 'journal' }] },
-  { title: 'Gestion', links: [
+  { title: 'Portefeuille', links: [
+    { label: 'Transactions', description: 'Historique des achats, ventes et transferts', section: 'journal' },
     { label: 'Plateformes', description: 'Comptes et établissements', section: 'platforms' },
     { label: 'Sauvegarde locale', description: 'Exporter ou restaurer les données', section: 'data', anchor: 'backup' },
   ] },
@@ -41,8 +42,8 @@ const spaceGroups: { title: string; links: { label: string; description: string;
     { label: 'Paramètres', description: 'Devises et cotations', section: 'data' },
     { label: 'Installation', description: 'Installer IntraWallet sur iPhone ou Android', section: 'data', anchor: 'installation' },
     { label: 'Apparence', description: 'Thème clair, sombre ou système', section: 'data', anchor: 'appearance' },
+    { label: 'Diagnostic', description: 'Vérifier le stockage, les cours et les calculs', section: 'diagnostic' },
   ] },
-  { title: 'Fiabilité', links: [{ label: 'Diagnostic', description: 'Vérifier le stockage, les cours et les calculs', section: 'diagnostic' }] },
 ]
 const descriptions: Record<Section, string> = {
   overview: 'La valeur et les mouvements de tes investissements.',
@@ -56,7 +57,6 @@ const descriptions: Record<Section, string> = {
 }
 const emptyData: PortfolioData = { positions: [], operations: [], marks: [] }
 const quoteInterval = 60000
-type Theme = 'light' | 'dark' | 'system'
 type Route = { section: Section; asset?: string; anchor?: string }
 
 function readRoute(): Route {
@@ -69,14 +69,6 @@ function readRoute(): Route {
   return { section: Object.hasOwn(sections, path) ? path as Section : 'overview' }
 }
 
-function initialTheme(): Theme {
-  try {
-    const stored = localStorage.getItem('portefeuille.theme')
-    if (stored === 'light' || stored === 'dark') return stored
-  } catch { /* Use system preference. */ }
-  return 'system'
-}
-
 function initialAutoRefresh() {
   try { return localStorage.getItem('portefeuille.auto-refresh') !== 'off' }
   catch { return true }
@@ -85,7 +77,7 @@ function initialAutoRefresh() {
 export default function App() {
   const [route, setRoute] = useState(readRoute)
   const { section } = route
-  const [theme, setTheme] = useState(initialTheme)
+  const appearance = useAppearance()
   const [autoRefresh, setAutoRefresh] = useState(initialAutoRefresh)
   const [consolidatedView, setConsolidatedView] = useState(false)
   const [groupEditor, setGroupEditor] = useState<InvestmentGroup | 'new' | null>(null)
@@ -305,23 +297,10 @@ export default function App() {
   }, [route, ready])
 
   useEffect(() => {
-    const media = window.matchMedia('(prefers-color-scheme: dark)')
-    const apply = () => { document.documentElement.dataset.theme = theme === 'system' ? (media.matches ? 'dark' : 'light') : theme }
-    apply()
-    media.addEventListener('change', apply)
-    return () => media.removeEventListener('change', apply)
-  }, [theme])
-
-  useEffect(() => {
     if (!message) return
     const timer = window.setTimeout(() => setMessage(''), 4500)
     return () => window.clearTimeout(timer)
   }, [message])
-
-  function chooseTheme(next: Theme) {
-    setTheme(next)
-    try { localStorage.setItem('portefeuille.theme', next) } catch { /* Use in-memory preference. */ }
-  }
 
   function navigate(destination: Section, detail?: string) {
     actionSheet.current?.close()
@@ -372,14 +351,14 @@ export default function App() {
   return <div className="app-layout">
     <aside className="sidebar">
       <button className="brand" onClick={() => navigate('overview')} aria-label="IntraWallet, accueil">
-        <img className="brand-mark" src={import.meta.env.BASE_URL + 'app-icons/intrawallet-wallet-192.png'} alt="" /><span>IntraWallet<small>PORTEFEUILLE LOCAL</small></span>
+        <img className="brand-mark" src={import.meta.env.BASE_URL + 'app-icons/intrawallet-wallet-192.png'} alt="" />
       </button>
       <nav aria-label="Navigation principale">
         {(Object.keys(sections) as Section[]).map(item => <button type="button" key={item} className={section === item ? 'selected' : ''}
           aria-current={section === item ? 'page' : undefined} aria-label={sections[item]} onClick={() => navigate(item)}><Icon name={item} />
-          <span>{sections[item]}</span></button>)}
+          <span className="rail-tooltip" aria-hidden="true">{sections[item]}</span></button>)}
       </nav>
-      <div className="sidebar-footer"><Icon name="lock" /><div><strong>Stockage local</strong><small>Sur cet appareil</small></div></div>
+      <button type="button" className="sidebar-footer" aria-label="Sauvegarde locale" onClick={() => navigate('data', 'backup')}><Icon name="lock" /><span className="rail-tooltip" aria-hidden="true">Sauvegarde locale</span></button>
     </aside>
     <nav className="mobile-nav" aria-label="Navigation mobile">
       <button type="button" aria-current={section === 'overview' ? 'page' : undefined} onClick={() => navigate('overview')}><Icon name="overview" /><span>Accueil</span></button>
@@ -413,7 +392,7 @@ export default function App() {
         <button className="brand mobile-brand" onClick={() => navigate('overview')} aria-label="IntraWallet, accueil">
           <img className="brand-mark" src={import.meta.env.BASE_URL + 'app-icons/intrawallet-wallet-192.png'} alt="" /><span>IntraWallet</span>
         </button>
-        <span className="topbar-location"><Icon name={section} /><span>Espace privé</span><Icon name="next" />{sections[section]}</span>
+        <span className="topbar-location"><strong>IntraWallet</strong><span>Portefeuille local</span></span>
         <div className="topbar-actions">
           <label className="currency-picker"><span className="sr-only">Devise d’affichage</span><select aria-label="Devise d’affichage" value={display.currency}
             onChange={event => chooseCurrency(event.target.value as Currency)}>{currencies.map(currency => <option key={currency}>{currency}</option>)}</select></label>
@@ -453,14 +432,11 @@ export default function App() {
         </div>
           : loaded.failed ? <div className="panel blank"><h2>Stockage local indisponible</h2><p>Autorise le stockage du site dans ton navigateur, puis recharge la page.</p></div>
           : section === 'data' ? <>
-            <InstallHelp androidUpdate={androidUpdate} online={online} />
+            <Appearance appearance={appearance} />
             <section className="panel preference-panel">
-              <h2 id="appearance" tabIndex={-1}>Apparence</h2><div className="filter-bar">
-                <label>Thème<select value={theme} onChange={event => chooseTheme(event.target.value as Theme)}><option value="light">Clair</option><option value="dark">Sombre</option><option value="system">Système</option></select></label>
+              <h2>Devise et cotations</h2><div className="filter-bar">
                 <label>Devise du portefeuille<select value={display.currency} onChange={event => chooseCurrency(event.target.value as Currency)}>
                   {currencies.map(currency => <option key={currency}>{currency}</option>)}</select></label>
-              </div>
-              <h2>Cotations</h2><div className="filter-bar">
                 <label>Actualisation des cours<select value={autoRefresh ? 'auto' : 'manual'} disabled={demoMode} onChange={event => {
                   const enabled = event.target.value === 'auto'
                   setAutoRefresh(enabled)
@@ -469,6 +445,7 @@ export default function App() {
               </div>
               <button className="text-button" onClick={() => navigate('platforms')}>Gérer mes plateformes <Icon name="next" /></button>
             </section>
+            <InstallHelp androidUpdate={androidUpdate} online={online} />
             <DataSettings quoteKey={quoteKey} onKey={updateQuoteKey} onRefresh={() => void refreshQuotes(true)} refreshing={refreshing}
               refreshStatus={refreshStatus} lastChecked={lastChecked} onRestored={() => {
                 setRefreshStatus(''); setMessage('Portefeuille restauré.'); lastAuto.current = 0; firstCheck.current = true

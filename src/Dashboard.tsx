@@ -11,8 +11,6 @@ import { quoteIsStale } from './quotes'
 
 const allocationCategories: [Category, string][] = [['stock', 'Actions'], ['etf', 'ETF'], ['crypto', 'Cryptos']]
 
-const marketTime = new Intl.DateTimeFormat('fr-CH', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Zurich' })
-
 export default function Dashboard({ assets, holdings, display, quotes, history, intraday, platforms, realized, unknownSales,
   lastChecked, refreshing, refreshStatus, demo, declaredCapital, declaredGroups, emptyExactGroups, groupCount, onRefresh, onOpen, onPortfolio }: {
   declaredCapital: Decimal | null
@@ -55,54 +53,56 @@ export default function Dashboard({ assets, holdings, display, quotes, history, 
   if (allocation === 'category' && declaredGroups.length) rows.push({ label: 'Groupes · valeurs déclarées', amount: declaredTotal })
 
   return <div className="dashboard-grid">
-    <section className="panel valuation-panel" aria-labelledby="valuation-title">
-      <div className="valuation-art" aria-hidden="true"><span /><span /><span><Icon name="wallet" /></span></div>
-      <div className="valuation-content">
-        <h2 className="valuation-label" id="valuation-title">{unknown ? 'Valeur connue du portefeuille' : 'Valeur totale du portefeuille'}</h2>
-        <p className="valuation-amount" key={valuationAmount}>{valuationAmount}</p>
-        <p className="hero-performance">
-          <span>{gain === null ? 'Gain latent indéterminé' : display.format(gain, { signed: true }) + (gain.lt(0) ? ' de perte latente' : ' de gain latent')}</span>
-          {returnRate !== null && <strong className={returnRate.gt(0) ? 'hero-up' : returnRate.lt(0) ? 'hero-down' : undefined}>{percentLabel(returnRate)}</strong>}
-        </p>
-        {declaredGroups.some(group => group.value !== null) && <p className="hero-performance">Dont {display.format(declaredTotal)} de valeurs déclarées</p>}
-        <div className="market-status">
-          {!demo && <button type="button" className="secondary" onClick={onRefresh} disabled={refreshing}><Icon name="refresh" />
-            {refreshing ? 'Actualisation…' : 'Actualiser les cours'}</button>}
-          {demo ? <small>Cotations simulées</small> : lastChecked !== null && <small>Vérifiés à {marketTime.format(lastChecked)}{stale > 0 ? ' · ' + stale + (stale === 1 ? ' cours ancien' : ' cours anciens') : ''}</small>}
-          {(!demo && latest || unknown > 0 || manual > 0 || stale > 0 || refreshStatus) && <details className="market-details">
-            <summary>Détails des cours</summary>
-            <ul>
-              {lastChecked !== null && <li>Dernière vérification · {timestamp.format(lastChecked)}</li>}
-              {latest && !demo && <li>Dernier cours · {timestamp.format(latest.sourceAt)} · {latest.source}</li>}
-              {unknown > 0 && <li>{unknown} actif(s) sans valorisation complète</li>}
-              {manual > 0 && <li>{manual} actif(s) avec une valeur manuelle</li>}
-              {stale > 0 && <li>{stale} cours ancien(s)</li>}
-              {refreshStatus && <li>{refreshStatus}</li>}
-            </ul>
-          </details>}
+    <div className="dashboard-primary">
+      <section className="panel valuation-panel" aria-labelledby="valuation-title">
+        <div className="valuation-identity">
+          <h2 className="valuation-label" id="valuation-title">{unknown ? 'Valeur connue du portefeuille' : 'Valeur totale du portefeuille'}</h2>
+          <p className="valuation-amount">{valuationAmount}</p>
+          <div className="valuation-result">
+            {gain === null ? <span>Gain latent indéterminé</span> : <>
+              <Change value={gain}>{display.format(gain, { signed: true })}</Change>
+              {returnRate !== null && <Change value={returnRate}>{percentLabel(returnRate)}</Change>}
+              <span>{gain.lt(0) ? 'Perte latente' : 'Gain latent'}</span>
+            </>}
+          </div>
+          {declaredGroups.some(group => group.value !== null) && <p className="hint">Dont {display.format(declaredTotal)} de valeurs déclarées</p>}
         </div>
-        <span className="sr-only" role="status">{refreshStatus}</span>
-      </div>
-    </section>
+        {!demo && <button type="button" className="secondary dashboard-refresh" onClick={onRefresh} disabled={refreshing}>
+          <Icon name="refresh" />{refreshing ? 'Actualisation…' : 'Actualiser les cours'}
+        </button>}
+      </section>
 
-    <div className="metric-grid dashboard-metrics" aria-label="Indicateurs du portefeuille">
-      <Metric label="Capital investi" icon="wallet" note={total.costCount < holdings.length ? 'Coûts connus des positions ouvertes'
-        : total.estimated ? 'Estimation incluse' : 'Coût des positions ouvertes'}>{total.costCount ? display.format(total.cost) : '—'}</Metric>
-      {declaredGroups.length > 0 && <Metric label="Capital net des groupes estimatifs" note={declaredCapital === null ? 'Taux de change manquant' : undefined}>
-        {declaredCapital === null ? '—' : display.format(declaredCapital)}
-      </Metric>}
-      <Metric label="Actifs détenus" icon="positions" note={platforms.length + (platforms.length === 1 ? ' plateforme' : ' plateformes')}>{consolidate(holdings).length}</Metric>
-      <Metric label={groupCount ? "Résultat des positions individuelles" : "Résultat sur la période"} icon="clock" note={(period ?? '') + (periodChange === null ? ' · Relevés insuffisants' : ' · Hors flux')}>
-        <Change value={periodChange}>{periodChange === null ? '—' : display.format(periodChange, { day: last?.date, signed: true })}</Change>
-      </Metric>
+      <HistoryChart history={history} selection={selection} display={display} range={range} chooseRange={setRange} individualOnly={groupCount > 0} />
+
+      <div className="metric-grid dashboard-metrics" aria-label="Indicateurs du portefeuille">
+        <Metric label="Capital investi" icon="wallet" note={total.costCount < holdings.length ? 'Coûts connus des positions ouvertes'
+          : total.estimated ? 'Estimation incluse' : 'Coût des positions ouvertes'}>{total.costCount ? display.format(total.cost) : '—'}</Metric>
+        <Metric label="Actifs détenus" icon="positions" note={platforms.length + (platforms.length === 1 ? ' plateforme' : ' plateformes')}>{assets.length}</Metric>
+        {declaredGroups.length > 0 && <Metric label="Capital net des groupes estimatifs" note={declaredCapital === null ? 'Taux de change manquant' : undefined}>
+          {declaredCapital === null ? '—' : display.format(declaredCapital)}
+        </Metric>}
+      </div>
     </div>
 
-    <HistoryChart history={history} selection={selection} display={display} range={range} chooseRange={setRange} individualOnly={groupCount > 0} />
+    <div className="dashboard-secondary">
+      <section className="panel period-card" aria-labelledby="dashboard-period">
+        <div className="period-card-header"><h2 id="dashboard-period">Résultat sur la période</h2><Icon name="clock" /></div>
+        <strong>{periodChange === null ? '—' : display.format(periodChange, { day: last?.date, signed: true })}</strong>
+        <p>{[period, periodChange === null ? 'Relevés insuffisants' : 'Hors flux'].filter(Boolean).join(' · ')}</p>
+        {groupCount > 0 && <p>Positions individuelles</p>}
+      </section>
 
-    <section className="panel table-panel dashboard-positions"><PanelHeading title="Positions principales">
-      <button className="secondary" aria-label="Voir tout le portefeuille" onClick={onPortfolio}>Tout voir <Icon name="next" /></button></PanelHeading>
-      <AssetTable assets={assets} display={display} quotes={quotes} onOpen={onOpen} limit={6} compact />
-    </section>
+      <section className="panel quote-status" aria-labelledby="dashboard-quotes">
+        <h2 id="dashboard-quotes">État des cotations</h2>
+        <dl>
+          <div><dt>Dernière actualisation</dt><dd>{demo ? 'Simulée' : lastChecked === null ? 'En attente' : timestamp.format(lastChecked)}</dd></div>
+          <div><dt>Valorisations incomplètes</dt><dd>{unknown}</dd></div>
+          <div><dt>Cours anciens ou non horodatés</dt><dd>{stale}</dd></div>
+          {manual > 0 && <div><dt>Actifs valorisés manuellement</dt><dd>{manual}</dd></div>}
+        </dl>
+        {latest && !demo && <p className="hint">Dernier cours daté · {timestamp.format(latest.sourceAt)} · {latest.source}</p>}
+        <p className="hint" role="status">{refreshStatus}</p>
+      </section>
 
     <section className="panel allocation-panel">
       <PanelHeading title="Répartition" description={unknown ? 'Sur les valeurs connues.' : undefined}>
@@ -113,6 +113,13 @@ export default function Dashboard({ assets, holdings, display, quotes, history, 
         </label>
       </PanelHeading>
       <Allocation rows={rows} display={display} ring />
+    </section>
+
+    </div>
+
+    <section className="panel table-panel dashboard-positions"><PanelHeading title="Positions principales">
+      <button className="secondary" aria-label="Voir tout le portefeuille" onClick={onPortfolio}>Tout voir <Icon name="next" /></button></PanelHeading>
+      <AssetTable assets={assets} display={display} quotes={quotes} onOpen={onOpen} limit={6} compact />
     </section>
 
     <details className="panel dashboard-insights"><summary>Résultats et classement</summary>

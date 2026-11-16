@@ -1,3 +1,4 @@
+import { readAppearancePreference, saveAppearancePreference } from './Appearance'
 import { useId, useMemo, useState } from 'react'
 import type { Decimal } from 'decimal.js'
 import AssetHistory from './AssetHistory'
@@ -106,6 +107,7 @@ export function AssetTable({ assets, display, quotes, onOpen, limit, order, comp
 export function PortfolioView({ holdings, platforms, display, quotes, onOpen, onAdd }: {
   holdings: Holding[]; platforms: string[]; display: CurrencyDisplay; quotes: Map<string, Mark>; onOpen: (key: string) => void; onAdd: () => void
 }) {
+  const [layout, setLayout] = useState(() => readAppearancePreference('portfolio.layout', ['table', 'cards'] as const, 'table'))
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<Category | ''>('')
   const [platform, setPlatform] = useState('')
@@ -114,6 +116,7 @@ export function PortfolioView({ holdings, platforms, display, quotes, onOpen, on
   const filtersId = useId()
   const assets = useMemo(() => consolidate(holdings.filter(holding =>
     (!category || holding.category === category) && (!platform || platformKey(holding.platform) === platform))), [holdings, category, platform])
+  const matching = assets.filter(asset => matchesAsset(asset, query))
   return <section className="panel table-panel portfolio-panel">
     <PanelHeading title="Positions consolidées" description="Les lots et opérations de chaque actif sont disponibles dans sa fiche.">
       <button className="primary portfolio-add" onClick={onAdd}><Icon name="plus" /> Ajouter un investissement</button>
@@ -142,7 +145,31 @@ export function PortfolioView({ holdings, platforms, display, quotes, onOpen, on
         </div>
       </div>
     </div>
-    <AssetTable assets={assets.filter(asset => matchesAsset(asset, query))} display={display} quotes={quotes} onOpen={onOpen} order={sort} />
+    <div className="portfolio-view-bar">
+      <span className="muted">{matching.length} actif{matching.length !== 1 ? 's' : ''}</span>
+      <div className="segments" role="group" aria-label="Vue du portefeuille">
+        {(['cards', 'table'] as const).map(view => <button className="secondary segment-button" key={view} type="button"
+          aria-pressed={layout === view} onClick={() => {
+            setLayout(view)
+            saveAppearancePreference('portfolio.layout', view)
+          }}>{view === 'cards' ? 'Cartes' : 'Tableau'}</button>)}
+      </div>
+    </div>
+    {layout === 'table' || !matching.length
+      ? <AssetTable assets={matching} display={display} quotes={quotes} onOpen={onOpen} order={sort} />
+      : <ul className="asset-card-grid">{sortAssets(matching, sort).map(asset => <li key={asset.key}>
+        <button type="button" className="asset-card" onClick={() => onOpen(asset.key)}>
+          <span className="asset-card-heading"><AssetBadge asset={asset} /><span>
+            <strong>{asset.name}</strong><small>{[assetSymbol(asset, asset.entries[0].listing), categories[asset.category]].filter(Boolean).join(' · ')}</small>
+          </span><Icon name="next" /></span>
+          <span className="asset-card-value">
+            <strong>{asset.priced ? display.format(asset.amount) : '—'}</strong>
+            <Change value={asset.returnRate}><span className="sr-only">Rendement latent </span>{percentLabel(asset.returnRate)}</Change>
+          </span>
+          <small>{asset.platformCount === 1 ? asset.entries[0].platform : asset.platformCount + ' plateformes'}
+            {asset.entries.some(entry => entry.partiallyValued) && ' · Valorisation partielle'}</small>
+        </button>
+      </li>)}</ul>}
   </section>
 }
 
@@ -195,7 +222,6 @@ export function AssetDetail({ asset, data, series, quote: market, display, crypt
           {quote.source !== 'Tradegate · relevé' && ' · ' + timestamp.format(quote.sourceAt)}
           {quote.receivedAt && <><br />Reçu le {timestamp.format(quote.receivedAt)}</>}</p>}</div>
     </section>
-    <section className="panel chart-panel"><AssetHistory {...chart} asset={entry} cryptoKey={cryptoKey} name={asset.name} display={display} /></section>
     <section className="panel">
       <PanelHeading title="Ma position" description={asset.estimated ? 'Le coût inclut une estimation.' : 'Le coût moyen tient compte des frais enregistrés.'} />
       <div className="metric-grid embedded">
@@ -207,6 +233,7 @@ export function AssetDetail({ asset, data, series, quote: market, display, crypt
         <Metric label="Gain latent" note={percentLabel(asset.returnRate)}><Change value={asset.gain}>{asset.gain === null ? '—' : display.format(asset.gain, { signed: true })}</Change></Metric>
       </div>
     </section>
+    <section className="panel chart-panel"><AssetHistory {...chart} asset={entry} cryptoKey={cryptoKey} name={asset.name} display={display} /></section>
     <section className="panel table-panel">
       <PanelHeading title="Par plateforme" />
       <div className="platform-holdings">{asset.entries.map(position => {

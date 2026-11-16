@@ -60,8 +60,9 @@ export function AnalyticsView({ holdings, history, display, individualHistory }:
           <option value="">Toutes</option>{platforms.map(item => <option key={item.label} value={platformKey(item.label)}>{item.label}</option>)}</select></label>
       </div>
       <div className="metric-grid embedded">
-        <Metric label="Concentration des 3 premiers actifs">{total.amount.gt(0) ? percentLabel(top.div(total.amount)) : '—'}</Metric>
         <Metric label="Valeur de la sélection">{total.priced ? display.format(total.amount) : '—'}</Metric>
+        <Metric label="Actifs dans la sélection">{assets.length}</Metric>
+        <Metric label="Concentration des 3 premiers actifs">{total.amount.gt(0) ? percentLabel(top.div(total.amount)) : '—'}</Metric>
         <Metric label="Gain latent de la sélection"><Change value={total.gain}>{total.gain === null ? '—' : display.format(total.gain, { signed: true })}</Change></Metric>
       </div>
     </section>
@@ -123,7 +124,7 @@ export function PlatformsView({ holdings, declaredGroups, platforms, quotes, dis
     } finally { setBusy(false) }
   }
 
-  return <div className="detail-stack">
+  return <div className="platform-workspace">
     <section className="panel table-panel"><PanelHeading title="Mes plateformes" description="Banques, courtiers et plateformes d’échange.">
       <button className="primary" onClick={() => edit('')}><Icon name="plus" /> Créer une plateforme</button>
     </PanelHeading>
@@ -134,7 +135,7 @@ export function PlatformsView({ holdings, declaredGroups, platforms, quotes, dis
       {error && <p className="error" role="alert">{error}</p>}
     </form>}
     {!groups.length && <p className="inline-empty">Crée une plateforme ou saisis son nom lors d’un premier investissement.</p>}</section>
-    {groups.map(({ label, assets, entries, totals, declared, known, declaredValue }) => <details className="panel platform-panel" key={label}>
+    <div className="platform-cards">{groups.map(({ label, assets, entries, totals, declared, known, declaredValue }) => <details className="panel platform-panel" key={label}>
       <summary><span className="platform-icon"><Icon name="platforms" /></span><span><strong>{label}</strong><small>{assets.length} {assets.length === 1 ? 'actif' : 'actifs'}{assets.length > 0 && ' · ' + assets.slice(0, 3)
           .map(asset => assetSymbol(asset, asset.entries[0].listing) || asset.name).join(' · ')}</small></span>
         <span><strong>{totals.priced || known.length ? display.format(totals.amount.plus(declaredValue)) : '—'}</strong><small>{declared.length || totals.gain === null ? 'Gain latent indéterminé' : display.format(totals.gain, { signed: true })}</small></span><Icon name="next" /></summary>
@@ -144,6 +145,6 @@ export function PlatformsView({ holdings, declaredGroups, platforms, quotes, dis
         <Allocation rows={grouped(entries, item => categories[item.category]).map(group => ({ label: group.label, amount: summarize(group.entries).amount }))} display={display} />
         <AssetTable assets={assets} display={display} quotes={quotes} onOpen={onOpen} />
       </div>
-    </details>)}
+    </details>)}</div>
   </div>
 }

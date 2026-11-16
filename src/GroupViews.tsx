@@ -202,10 +202,10 @@ export function GroupDetail({ group, marks, rate, display, historical, onBack, o
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Enregistrement impossible.') }
     finally { pending.current = false; setBusy(false) }
   }
-  return <div className="detail-stack">
-    <section className="panel group-list">
-      <button className="secondary" onClick={onBack}><Icon name="back" /> Portefeuille</button>
-      <PanelHeading title={group.name} description={group.platform + ' · ' + groupTypes[group.type] + ' · ' + group.currency}>
+  return <div className="group-detail-layout">
+    <div className="group-detail-actions"><button className="secondary" onClick={onBack}><Icon name="back" /> Portefeuille</button></div>
+    <section className="panel group-list group-summary">
+      <PanelHeading title={group.name} description={group.platform + ' · ' + groupTypes[group.type] + ' · ' + group.currency + ' · ' + (exact ? 'Positions exactes' : 'Allocation estimative')}>
         <button className="secondary" onClick={onEdit}>Modifier</button>
       </PanelHeading>
       {group.description && <p>{group.description}</p>}
@@ -220,7 +220,11 @@ export function GroupDetail({ group, marks, rate, display, historical, onBack, o
         </Metric>}
       </div>
     </section>
-    <section className="panel group-list"><PanelHeading title="Composition" description="Les montants cibles sont calculés sur le capital net confié." />
+    <section className="panel group-list group-evolution"><PanelHeading title={exact ? 'Évolution des positions du groupe' : 'Historique des valeurs déclarées'} />
+      <DailyChart points={graph} label={'Valeur du groupe en ' + graphCurrency}
+        format={point => money(point, 2, graphCurrency)} empty="Aucun relevé valorisable pour le moment." />
+    </section>
+    <section className="panel group-list group-composition"><PanelHeading title="Composition" description="Les montants cibles sont calculés sur le capital net confié." />
       {group.mode === 'exact' && <div className="group-actions">
         <button className="secondary" onClick={() => onPosition()}>Ajouter une position exacte</button>
         <button className="secondary" onClick={() => onTrade()}>Enregistrer un achat ou une vente</button>
@@ -249,11 +253,7 @@ export function GroupDetail({ group, marks, rate, display, historical, onBack, o
       })}</ul>
       <p className="hint">Capital cible non alloué · {money(remaining, 2, group.currency)}</p>
     </section>
-    <section className="panel group-list"><PanelHeading title={exact ? 'Évolution des positions du groupe' : 'Historique des valeurs déclarées'} />
-      <DailyChart points={graph} label={'Valeur du groupe en ' + graphCurrency}
-        format={point => money(point, 2, graphCurrency)} empty="Aucun relevé valorisable pour le moment." />
-    </section>
-    <section className="panel group-list"><PanelHeading title="Mouvements et relevés" />
+    <section className="panel group-list group-activity"><PanelHeading title="Mouvements et relevés" />
       <form onSubmit={record} className="group-form">
         <div className="form-grid">
           <label>Événement<select value={kind} onChange={event => setKind(event.target.value as typeof kind)}>
@@ -273,6 +273,6 @@ export function GroupDetail({ group, marks, rate, display, historical, onBack, o
         {[...group.allocations].reverse().map(snapshot => <div key={snapshot.at}><strong>{dateLabel.format(snapshot.at)}</strong>
           <ul>{snapshot.entries.map(row => <li key={quoteTarget(row.asset)}>{row.asset.listing ?? row.asset.name} · {row.percent} %</li>)}</ul></div>)}</details>}
     </section>
-    <div><button className="secondary danger-text" onClick={onRemove}>Supprimer le groupe</button></div>
+    <div className="group-detail-actions"><button className="secondary danger-text" onClick={onRemove}>Supprimer le groupe</button></div>
   </div>
 }

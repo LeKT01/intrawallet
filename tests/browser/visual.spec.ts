@@ -11,6 +11,9 @@ for (const theme of ['light', 'dark'] as const) {
         await page.goto('/?demo=1#' + route)
         await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
         await expect(page.locator(selector)).toBeVisible()
+        if (route === 'positions') {
+          await expect(page.getByRole('heading', { name: 'Portefeuilles groupés' })).toBeVisible()
+        }
         await expect(page).toHaveScreenshot(`${route}-${theme}-${width}.png`, {
           animations: 'disabled', fullPage: true, maxDiffPixelRatio: 0.005,
         })
