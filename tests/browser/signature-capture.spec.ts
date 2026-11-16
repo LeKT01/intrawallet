@@ -150,11 +150,16 @@ for (const variant of ['champagne', 'oled'] as const) {
     await capture(page, info, 'dashboard-' + variant, true)
   })
 }
-test('référence officielle Vision UI @capture', async ({ page }, info) => {
-  const response = await page.request.get('https://i.ibb.co/YjWPdyT/vision-ui-free-react.png', { timeout: 15_000 }).catch(() => null)
+for (const [name, url] of [
+  ['vision-ui', 'https://i.ibb.co/YjWPdyT/vision-ui-free-react.png'],
+  ['horizon-ui', 'https://i.ibb.co/fdyTwz1/introduction-image-2.png'],
+  ['purity-ui', 'https://i.ibb.co/7NXMZQS/Cover-Purity-Chakra-FREE-Thumbnail.png'],
+] as const) {
+test('référence officielle ' + name + ' @capture', async ({ page }, info) => {
+  const response = await page.request.get(url, { timeout: 15_000 }).catch(() => null)
   test.skip(!response?.ok(), 'Capture officielle inaccessible depuis ce runner.')
   const bytes = await response!.body()
-  await info.attach('reference-officielle-vision-ui', { body: bytes, contentType: 'image/png' })
+  await info.attach('reference-officielle-' + name, { body: bytes, contentType: 'image/png' })
   await page.setContent('<canvas></canvas>')
   const image = await page.evaluate(async data => {
     const img = new Image(); img.src = 'data:image/png;base64,' + data
@@ -164,9 +169,10 @@ test('référence officielle Vision UI @capture', async ({ page }, info) => {
     canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height)
     return canvas.toDataURL('image/jpeg', .7).split(',')[1]
   }, bytes.toString('base64'))
-  console.log('IW_PREVIEW:reference-vision-ui:' + image + ':END_PREVIEW')
+  console.log('IW_PREVIEW:reference-' + name + ':' + image + ':END_PREVIEW')
 })
 
+}
 test('séquence des animations réelles du dashboard @capture', async ({ page }, info) => {
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'no-preference' })
