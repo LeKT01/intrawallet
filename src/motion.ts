@@ -11,11 +11,9 @@ export function usePageReveal(route: string, ready: boolean) {
     if (!container || !ready || preference.matches || !container.animate) return
     const title = container.querySelector('.page-title')
     const dashboard = container.querySelector('.dashboard-grid')
-    const primary = dashboard?.querySelector('.dashboard-primary')
-    const compact = primary && getComputedStyle(primary).display === 'contents'
-    const dashboardOrder = compact
-      ? ['.valuation-panel', '.period-card', '.history-panel', '.dashboard-metrics', '.quote-status', '.dashboard-lower > section', '.dashboard-activity']
-      : ['.dashboard-primary', '.period-card', '.quote-status', '.dashboard-activity', '.dashboard-metrics', '.dashboard-lower > section']
+    const dashboardOrder = matchMedia('(max-width: 900px)').matches
+      ? ['.valuation-panel', '.dashboard-metrics', '.history-panel', '.dashboard-positions', '.allocation-panel', '.quote-status', '.dashboard-activity']
+      : ['.valuation-panel', '.allocation-panel', '.history-panel', '.dashboard-positions', '.dashboard-metrics', '.quote-status', '.dashboard-activity']
     const modules = dashboard
       ? dashboardOrder.flatMap(selector => [...dashboard.querySelectorAll(selector)])
       : [...container.children].filter(node => node.matches('.panel, .detail-stack, .space-grid, .platform-workspace, .group-detail-layout'))

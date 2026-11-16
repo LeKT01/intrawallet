@@ -12,7 +12,7 @@ test('la navigation conserve le rail et révèle les zones dans un ordre déterm
     }
   })
   await page.goto('/?demo=1#overview')
-  await expect(page.locator('.dashboard-primary')).toBeVisible()
+  await expect(page.locator('.valuation-panel')).toBeVisible()
   const sequence = await page.locator('main').evaluate(main => main.getAnimations({ subtree: true })
     .filter(animation => animation.id === 'iw-page-reveal')
     .map(animation => {
@@ -20,8 +20,8 @@ test('la navigation conserve le rail et révèle les zones dans un ordre déterm
       return { target: (effect.target as HTMLElement).className, ...effect.getTiming() }
     }))
   expect(sequence[0].target).toContain('page-title')
-  expect(sequence[1].target).toContain('dashboard-primary')
-  expect(sequence[2].target).toContain('period-card')
+  expect(sequence[1].target).toContain('valuation-panel')
+  expect(sequence[2].target).toContain('allocation-panel')
   expect(sequence[0].delay).toBeLessThan(sequence[1].delay)
   expect(sequence[1].delay).toBeLessThan(sequence[2].delay)
 
@@ -55,7 +55,7 @@ test('le mouvement réduit affiche le dashboard et ouvre les actions sans mouvem
   await page.setViewportSize({ width: 390, height: 844 })
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/?demo=1')
-  await expect(page.locator('.dashboard-primary .history-panel')).toBeVisible()
+  await expect(page.locator('.dashboard-grid .history-panel')).toBeVisible()
   expect(await page.locator('main').evaluate(node => node.getAnimations({ subtree: true }).length)).toBe(0)
   await page.getByRole('button', { name: 'Ouvrir les actions d’ajout' }).click()
   const sheet = page.getByRole('dialog', { name: 'Ajouter' })

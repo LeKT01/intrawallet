@@ -37,14 +37,14 @@ test('les vues Cartes et Tableau partagent les filtres et le choix est mémoris�
   await expect(page.locator('.asset-card')).toHaveCount(0)
 })
 
-test('le graphique précède les indicateurs sur mobile et garde ses commandes', async ({ page }) => {
+test('les indicateurs précèdent le graphique sur mobile et garde ses commandes', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/?demo=1#overview')
   await expect(page.locator('.history-panel')).toBeVisible()
   const [chart, metrics] = await Promise.all([
     page.locator('.history-panel').boundingBox(), page.locator('.dashboard-metrics').boundingBox(),
   ])
-  expect(chart!.y + chart!.height).toBeLessThan(metrics!.y)
+  expect(metrics!.y + metrics!.height).toBeLessThan(chart!.y)
   const result = page.getByRole('button', { name: 'Résultat cumulé', exact: true })
   await result.click()
   await expect(result).toHaveAttribute('aria-pressed', 'true')
@@ -64,5 +64,26 @@ for (const variant of ['coral', 'champagne', 'graphite', 'oled']) {
       const results = await new AxeBuilder({ page }).include(section).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()
       expect(results.violations).toEqual([])
     }
+  })
+}
+
+for (const width of [390, 440, 1440]) {
+  test(`la carte corail garde trois cartes et une courbe séparée à ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: width === 440 ? 956 : 844 })
+    await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' })
+    await page.goto('/?demo=1')
+    const hero = page.locator('.valuation-panel')
+    const art = hero.locator('.valuation-art')
+    const amount = hero.locator('.valuation-amount')
+    const history = page.locator('.dashboard-grid > .history-panel')
+    await expect(hero).toBeVisible()
+    await expect(art.locator(':scope > span')).toHaveCount(3)
+    await expect(art.locator('svg')).toBeVisible()
+    await expect(history).toBeVisible()
+    const bounds = (await history.boundingBox())!
+    const [value, artBounds, heroBounds] = await Promise.all([amount.boundingBox(), art.boundingBox(), hero.boundingBox()])
+    expect(value!.x + value!.width).toBeLessThan(artBounds!.x)
+    expect(heroBounds!.y + heroBounds!.height).toBeLessThan(bounds.y)
+    expect(await hero.evaluate(node => getComputedStyle(node).backgroundImage)).toContain('linear-gradient')
   })
 }

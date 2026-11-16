@@ -41,8 +41,9 @@ export default function HistoryChart({ history, selection, display, range, choos
     return [point.date, change]
   }))
 
-  return <section className="panel history-panel" aria-labelledby={id}>
+  return <section className="panel history-panel" data-reveal aria-labelledby={id}>
     <h2 id={id}>{individualOnly ? 'Évolution des positions individuelles' : 'Évolution du portefeuille'}</h2>
+    {individualOnly && <p className="hint history-scope">Les portefeuilles groupés sont exclus de ce graphique.</p>}
     <div className="history-toolbar">
       <PeriodButtons range={range} choose={chooseRange} />
       <div className="segments history-toggle motion-segments sliding-nav" ref={indicator} role="group" aria-label="Indicateur">

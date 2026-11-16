@@ -90,8 +90,9 @@
   --section-gap: 1rem;
   --card-pad: clamp(.95rem, 2vw, 1.4rem);
   --row-pad: .65rem;
-  --period-bg: var(--accent);
-  --period-ink: var(--primary-ink);
+  --hero: radial-gradient(ellipse at 104% -12%, #e5977e 0%, transparent 56%), linear-gradient(115deg, #782c28, #9d4439 61%, #bb6854);
+  --hero-ink: #fffaf6;
+  --hero-soft: #fff2eb;
 }
 :root[data-density="compact"] {
   --section-gap: .65rem;
@@ -121,4 +122,8 @@
   --muted: #b9b7c2;
   --sidebar: #101013;
   --shadow: none;
+}
+
+:root[data-theme="dark"] {
+  --hero: radial-gradient(ellipse at 105% -12%, #c87761 0%, transparent 55%), linear-gradient(116deg, #682a28, #8a3c35 61%, #a85748);
 }
