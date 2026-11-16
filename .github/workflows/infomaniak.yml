@@ -17,9 +17,9 @@ jobs:
     runs-on: ubuntu-24.04
     environment:
       name: infomaniak
-      url: https://intrawallet.nova-studios.site
+      url: https://intrawallet.nova-studios.ch
     env:
-      APP_URL: https://intrawallet.nova-studios.site
+      APP_URL: https://intrawallet.nova-studios.ch
       INFOMANIAK_WEB_ROOT: ${{ vars.INFOMANIAK_WEB_ROOT }}
     steps:
       - name: Vérifier les réglages FTP

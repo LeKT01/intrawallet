@@ -5,7 +5,7 @@ header('Cache-Control: no-store');
 header('X-Content-Type-Options: nosniff');
 header('Vary: Origin');
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-$origins = ['https://intrawallet.nova-studios.site', 'https://localhost'];
+$origins = ['https://intrawallet.nova-studios.ch', 'https://localhost'];
 if ($origin !== '') {
     if (!in_array($origin, $origins, true)) stop(403);
     header('Access-Control-Allow-Origin: ' . $origin);
