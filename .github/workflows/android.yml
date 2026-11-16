@@ -48,8 +48,18 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          [[ "$GITHUB_REF_NAME" == "v$(node -p 'require("./package.json").version')" ]]
-          [[ -n "$KEYSTORE_BASE64" && -n "$ANDROID_KEYSTORE_PASSWORD" && -n "$ANDROID_KEY_ALIAS" && -n "$ANDROID_KEY_PASSWORD" ]]
+          expected_tag="v$(node -p 'require("./package.json").version')"
+          if [[ "$GITHUB_REF_NAME" != "$expected_tag" ]]; then
+            echo "::error::Le tag $GITHUB_REF_NAME ne correspond pas à la version du commit ($expected_tag)."
+            exit 1
+          fi
+          for secret in KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [[ -z "${!secret}" ]]; then
+              [[ "$secret" != KEYSTORE_BASE64 ]] || secret=ANDROID_KEYSTORE_BASE64
+              echo "::error::Le secret GitHub Actions $secret est manquant ou vide."
+              exit 1
+            fi
+          done
           export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/intrawallet-signing.jks"
           trap 'rm -f "$ANDROID_KEYSTORE_PATH"' EXIT
           umask 077
