@@ -58,7 +58,7 @@ export const catalog: CatalogAsset[] = [
     ['Tether', 'USDT', 'tether'], ['Bittensor', 'TAO', 'bittensor'], ['Render', 'RENDER', 'render-token'],
   ] as const).map(([name, reference, coinId]) => ({ category: 'crypto' as const, name, reference, coinId })),
   ...([
-    ['Apple', 'XNAS:AAPL'], ['Microsoft', 'XNAS:MSFT'], ['NVIDIA', 'XNAS:NVDA'],
+    ['Eli Lilly (Lilly)', 'XNYS:LLY'], ['Apple', 'XNAS:AAPL'], ['Microsoft', 'XNAS:MSFT'], ['NVIDIA', 'XNAS:NVDA'],
     ['Alphabet classe A', 'XNAS:GOOGL'], ['Amazon', 'XNAS:AMZN'], ['Tesla', 'XNAS:TSLA'],
     ['Nestlé', 'XSWX:NESN'], ['Novartis', 'XSWX:NOVN'], ['Roche (bon de jouissance)', 'XSWX:ROG'],
     ['UBS Group', 'XSWX:UBSG'],

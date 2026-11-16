@@ -103,7 +103,7 @@ export default function DataSettings({ quoteKey, onKey, onRefresh, refreshing, r
 
   return <div className="settings-grid">
     <section className="panel settings-panel"><h2>Cotations automatiques</h2>
-      <p className="hint">{marketRelay() ? 'Relais actif pour les ETF SIX, Xetra et Tradegate pris en charge.' : 'Relais SIX, Xetra et Tradegate absent pour cette installation.'} EODHD étend la couverture aux autres places et à l’historique. CoinGecko fournit les cours des cryptos du catalogue.</p>
+      <p className="hint">{marketRelay() ? 'Relais configuré pour EODHD, SIX, Xetra et Tradegate.' : 'Relais absent. Les sources SIX, Xetra et Tradegate nécessitent un relais HTTPS. EODHD est tenté en accès direct.'} EODHD étend la couverture aux autres places et à l’historique. CoinGecko fournit les cours crypto. Quand le relais est configuré, CoinMarketCap peut prendre le relais pour BTC, ETH, SOL, TAO et RENDER.</p>
       <form className="market-settings" onSubmit={event => {
         event.preventDefault()
         onKey({ eodhd: keyDraft.eodhd.trim(), finnhub: keyDraft.finnhub.trim(), coingecko: keyDraft.coingecko.trim() })

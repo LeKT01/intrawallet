@@ -43,3 +43,23 @@ test('une crypto hors catalogue conserve son identité pour les cours et l’his
   assert.equal((await fetchQuotes([persisted], keys)).marks[0].target, 'crypto/coingecko:sui')
   assert.equal((await fetchIntradayPrices(persisted, '')).length, 1)
 })
+
+test('CoinMarketCap complète les cours manquants sans remplacer un cours CoinGecko récent', async t => {
+  Object.defineProperty(globalThis, 'location', { value: new URL('http://localhost:4173'), configurable: true })
+  t.after(() => { delete globalThis.location })
+  const last_updated = new Date().toISOString()
+  t.mock.method(globalThis, 'fetch', async url => {
+    if (url.hostname === 'api.coingecko.com') {
+      return Response.json({ bittensor: { chf: 200, last_updated_at: Math.floor(Date.now() / 1000) } })
+    }
+    assert.equal(url.pathname, '/market/coinmarketcap/quotes')
+    assert.equal(url.searchParams.get('id'), '5690')
+    return Response.json({ data: [{ id: 5690, quotes: [{ symbol: 'CHF', price: 2, last_updated }] }] })
+  })
+  const { marks, issues } = await fetchQuotes([
+    { category: 'crypto', reference: 'TAO', name: 'Bittensor' },
+    { category: 'crypto', reference: 'RENDER', name: 'Render' },
+  ], { ...keys, coingecko: 'fallback-test' })
+  assert.deepEqual(issues, [])
+  assert.deepEqual(marks.map(mark => [mark.target, mark.source]), [['crypto/TAO', 'CoinGecko'], ['crypto/RENDER', 'CoinMarketCap']])
+})

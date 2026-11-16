@@ -1,4 +1,5 @@
-import { localMarketRelay, marketRelay, marketUrl } from './runtime.ts'
+import { coinMarketCapIds } from './marketProviders.ts'
+import { marketRelay, marketUrl } from './runtime.ts'
 import { Decimal } from 'decimal.js'
 import { catalogEntry, coinGeckoAsset, coinGeckoId, type CatalogAsset } from './catalog.ts'
 import { hasUnknownQuoteTime, quoteTarget, type Mark } from './ledger.ts'
@@ -31,12 +32,14 @@ const isinPattern = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/
 const supportedCurrency = /^(CHF|EUR|USD)$/
 export const historyDays = 365
 
-async function json(url: URL, provider: string, timeout = 9000) {
+async function json(url: URL, provider: string, timeout = 9000, headers?: HeadersInit) {
   let response: Response
   try {
-    response = await fetch(url, { signal: AbortSignal.timeout(timeout), cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' })
+    response = await fetch(url, { signal: AbortSignal.timeout(timeout), cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', headers })
   } catch {
-    throw new Error(provider + ' est inaccessible depuis ce navigateur.')
+    throw new Error(provider === 'EODHD' && !marketRelay()
+      ? 'Accès direct EODHD impossible (réseau ou navigateur). Cette installation peut utiliser un relais HTTPS configuré.'
+      : provider + ' est inaccessible (réseau ou délai dépassé).')
   }
   if (response.status === 429) throw new Error(provider + ' a limité les requêtes. Réessaie plus tard.')
   if (response.status === 502 && response.headers.get('X-SIX-Error') === 'proxy-auth') {
@@ -188,13 +191,49 @@ async function cryptoQuotes(assets: QuoteAsset[], key: string, force: boolean) {
   return cachedRequest('crypto/' + key + '/' + ids, 60000, async () => {
     const url = new URL('https://api.coingecko.com/api/v3/simple/price')
     url.search = new URLSearchParams({ ids, vs_currencies: 'chf', include_last_updated_at: 'true', ...(key ? { x_cg_demo_api_key: key } : {}) }).toString()
-    const prices = await json(url, 'CoinGecko')
+    let prices: Record<string, { chf?: unknown; last_updated_at?: unknown }> | undefined
+    let primaryError: unknown
+    try { prices = await json(url, 'CoinGecko') } catch (error) { primaryError = error }
     const at = Date.now()
-    return matched.flatMap(({ asset, coinId }) => {
+    const marks: Mark[] = []
+    const older: Mark[] = []
+    const missing = matched.filter(({ asset, coinId }) => {
       const price = positive(prices?.[coinId]?.chf)
       const sourceAt = markTime(prices?.[coinId]?.last_updated_at)
-      return price && validTime(sourceAt) ? [marketMark(asset, price, 'CoinGecko', sourceAt, at, price, 'CHF', 'reported')] : []
+      if (!price || !validTime(sourceAt)) return true
+      const mark = marketMark(asset, price, 'CoinGecko', sourceAt, at, price, 'CHF', 'reported')
+      if (at - sourceAt > 900000) {
+        older.push(mark)
+        return true
+      }
+      marks.push(mark)
+      return false
     })
+    const fallback = missing.flatMap(({ asset, coinId }) => {
+      const id = coinMarketCapIds.get(coinId)
+      return id ? [{ asset, id }] : []
+    })
+    if (fallback.length && marketRelay()) {
+      const fallbackUrl = marketUrl('/market/coinmarketcap/quotes')
+      fallbackUrl.searchParams.set('id', [...new Set(fallback.map(item => item.id))].sort((a, b) => a - b).join(','))
+      try {
+        const data = await json(fallbackUrl, 'CoinMarketCap', 10000)
+        if (Array.isArray(data?.data)) for (const { asset, id } of fallback) {
+          const row = data.data.find((entry: { id?: number }) => entry?.id === id)
+          const quote = Array.isArray(row?.quotes) ? row.quotes.find((entry: { symbol?: string }) => entry?.symbol === 'CHF') : undefined
+          const price = positive(quote?.price)
+          const sourceAt = Date.parse(quote?.last_updated)
+          if (price && validTime(sourceAt) && at - sourceAt <= 900000) {
+            marks.push(marketMark(asset, price, 'CoinMarketCap', sourceAt, Date.now(), price, 'CHF', 'reported'))
+          }
+        }
+      } catch (error) {
+        if (!marks.length && !older.length) throw primaryError ?? error
+      }
+    }
+    if (!marks.length && primaryError) throw primaryError
+    const updated = new Set(marks.map(mark => mark.target))
+    return [...marks, ...older.filter(mark => !updated.has(mark.target))]
   }, force)
 }
 
@@ -227,11 +266,10 @@ async function eodJson(path: string, key: string, params: Record<string, string>
   }
   if (typeof navigator !== 'undefined' && navigator.locks) await navigator.locks.request(budgetKey, reserve)
   else reserve()
-  // The standard local server forwards EODHD only. Static deployments call the provider directly.
-  const base = localMarketRelay() ? location.origin + '/market/eodhd/' : 'https://eodhd.com/api/'
-  const url = new URL(base + path)
-  url.search = new URLSearchParams({ ...params, api_token: key, fmt: 'json' }).toString()
-  return json(url, 'EODHD')
+  const relay = marketRelay()
+  const url = relay ? marketUrl('/market/eodhd/' + path) : new URL(path, 'https://eodhd.com/api/')
+  url.search = new URLSearchParams(relay ? params : { ...params, api_token: key, fmt: 'json' }).toString()
+  return json(url, 'EODHD', 10000, relay ? { 'X-EODHD-Token': key } : undefined)
 }
 
 type Instrument = NonNullable<CatalogAsset['market']>
@@ -467,7 +505,7 @@ export function quoteIsStale(mark: Mark, at = Date.now()) {
     const venue = mark.instrument?.split('.').at(-1)
     return dayKey(mark.sourceAt) < latestClosingDay(venue ?? '', at)
   }
-  if (mark.source.startsWith('CoinGecko')) return at - mark.sourceAt > 900000
+  if ((mark.source.startsWith('CoinGecko') || mark.source === 'CoinMarketCap')) return at - mark.sourceAt > 900000
   if (mark.source.startsWith('Finnhub')) {
     return marketOpen('US', at) ? at - mark.sourceAt > 1800000 : dayKey(mark.sourceAt) < latestClosingDay('US', at)
   }
