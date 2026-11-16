@@ -1,3 +1,4 @@
+import { useSlidingIndicator } from './motion'
 import { useId, useState } from 'react'
 import type { HistoryPoint } from './ledger'
 import { daysBefore, type CurrencyDisplay } from './currency'
@@ -20,6 +21,7 @@ export default function HistoryChart({ history, selection, display, range, choos
 }) {
   const id = useId()
   const [metric, setMetric] = useState<'value' | 'result'>('value')
+  const indicator = useSlidingIndicator<HTMLDivElement>(metric)
   const recent = history.at(-1)
   const { points, first, last } = selection
   const result = recent?.result ?? null
@@ -40,15 +42,15 @@ export default function HistoryChart({ history, selection, display, range, choos
   }))
 
   return <section className="panel history-panel" aria-labelledby={id}>
-    <div className="section-heading">
-      <h2 id={id}>{individualOnly ? 'Évolution des positions individuelles' : 'Évolution du portefeuille'}</h2>
+    <h2 id={id}>{individualOnly ? 'Évolution des positions individuelles' : 'Évolution du portefeuille'}</h2>
+    <div className="history-toolbar">
       <PeriodButtons range={range} choose={chooseRange} />
+      <div className="segments history-toggle motion-segments sliding-nav" ref={indicator} role="group" aria-label="Indicateur">
+        <button type="button" className="secondary segment-button" aria-pressed={metric === 'value'} onClick={() => setMetric('value')}>Valeur</button>
+        <button type="button" className="secondary segment-button" aria-pressed={metric === 'result'} onClick={() => setMetric('result')}>Résultat cumulé</button>
+      </div>
     </div>
     {(!first || !last || first === last) && <p className="hint history-coverage">Deux relevés comparables sont nécessaires pour mesurer le résultat sur la période.</p>}
-    <div className="segments history-toggle"  role="group" aria-label="Indicateur">
-      <button type="button" className="secondary segment-button" aria-pressed={metric === 'value'} onClick={() => setMetric('value')}>Valeur</button>
-      <button type="button" className="secondary segment-button" aria-pressed={metric === 'result'} onClick={() => setMetric('result')}>Résultat cumulé</button>
-    </div>
     <DailyChart key={range + '/' + metric} points={graph} label={(metric === 'value' ? 'Courbe de valeur en ' : 'Courbe du résultat cumulé en ') + display.currency}
       format={value => (metric === 'result' && value.gt(0) ? '+' : '') + money(value, 2, display.currency)}
       empty={range === 1 ? 'Aucun relevé complet dans les dernières 24 heures.' : metric === 'value' ? 'La courbe apparaîtra avec une valorisation complète et un taux disponible.'

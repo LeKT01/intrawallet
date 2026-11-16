@@ -3,16 +3,19 @@ import { Decimal } from 'decimal.js'
 import type { CurrencyDisplay } from './currency'
 import HistoryChart, { portfolioPeriod } from './HistoryChart'
 import { periods } from './DailyChart'
-import { hasUnknownQuoteTime, type HistoryPoint, type Holding, type Mark } from './ledger'
+import { hasUnknownQuoteTime, operationNames, type HistoryPoint, type Holding, type Mark } from './ledger'
 import { consolidate, platformKey, summarize, type Category } from './portfolio'
 import { Allocation, AssetTable, type Asset } from './PortfolioViews'
 import { Change, Icon, Metric, PanelHeading, percentLabel, timestamp } from './ui'
 import { quoteIsStale } from './quotes'
+import type { JournalItem } from './JournalView'
+import { useValueReveal } from './motion'
 
 const allocationCategories: [Category, string][] = [['stock', 'Actions'], ['etf', 'ETF'], ['crypto', 'Cryptos']]
 
 export default function Dashboard({ assets, holdings, display, quotes, history, intraday, platforms, realized, unknownSales,
-  lastChecked, refreshing, refreshStatus, demo, declaredCapital, declaredGroups, emptyExactGroups, groupCount, onRefresh, onOpen, onPortfolio }: {
+  lastChecked, refreshing, refreshStatus, demo, declaredCapital, declaredGroups, emptyExactGroups, groupCount, recent, onJournal, onRefresh, onOpen, onPortfolio }: {
+  recent: JournalItem[]; onJournal: () => void
   declaredCapital: Decimal | null
   declaredGroups: { name: string; platform: string; value: Decimal | null }[]; emptyExactGroups: number; groupCount: number
   assets: Asset[]; holdings: Holding[]; display: CurrencyDisplay; quotes: Map<string, Mark>; history: HistoryPoint[]; intraday: HistoryPoint[]
@@ -25,6 +28,7 @@ export default function Dashboard({ assets, holdings, display, quotes, history, 
   const declaredTotal = declaredGroups.reduce((sum, group) => sum.plus(group.value ?? 0), new Decimal(0))
   const valuationAmount = total.priced || declaredGroups.some(group => group.value !== null) || (!holdings.length && !groupCount)
     ? display.format(total.amount.plus(declaredTotal)) : '—'
+  const amountRef = useValueReveal(valuationAmount)
   const gain = declaredGroups.length || emptyExactGroups ? null : total.gain
   const returnRate = gain === null ? null : total.returnRate
   const period = periods.find(item => item.days === range)?.label
@@ -53,11 +57,11 @@ export default function Dashboard({ assets, holdings, display, quotes, history, 
   if (allocation === 'category' && declaredGroups.length) rows.push({ label: 'Groupes · valeurs déclarées', amount: declaredTotal })
 
   return <div className="dashboard-grid">
-    <div className="dashboard-primary">
-      <section className="panel valuation-panel" aria-labelledby="valuation-title">
+    <div className="dashboard-primary panel" data-reveal>
+      <section className="valuation-panel" aria-labelledby="valuation-title">
         <div className="valuation-identity">
           <h2 className="valuation-label" id="valuation-title">{unknown ? 'Valeur connue du portefeuille' : 'Valeur totale du portefeuille'}</h2>
-          <p className="valuation-amount">{valuationAmount}</p>
+          <p className="valuation-amount" ref={amountRef}>{valuationAmount}</p>
           <div className="valuation-result">
             {gain === null ? <span>Gain latent indéterminé</span> : <>
               <Change value={gain}>{display.format(gain, { signed: true })}</Change>
@@ -67,60 +71,71 @@ export default function Dashboard({ assets, holdings, display, quotes, history, 
           </div>
           {declaredGroups.some(group => group.value !== null) && <p className="hint">Dont {display.format(declaredTotal)} de valeurs déclarées</p>}
         </div>
-        {!demo && <button type="button" className="secondary dashboard-refresh" onClick={onRefresh} disabled={refreshing}>
+        {!demo && <button type="button" className="secondary dashboard-refresh" aria-busy={refreshing} onClick={onRefresh} disabled={refreshing}>
           <Icon name="refresh" />{refreshing ? 'Actualisation…' : 'Actualiser les cours'}
         </button>}
       </section>
 
       <HistoryChart history={history} selection={selection} display={display} range={range} chooseRange={setRange} individualOnly={groupCount > 0} />
-
-      <div className="metric-grid dashboard-metrics" aria-label="Indicateurs du portefeuille">
-        <Metric label="Capital investi" icon="wallet" note={total.costCount < holdings.length ? 'Coûts connus des positions ouvertes'
-          : total.estimated ? 'Estimation incluse' : 'Coût des positions ouvertes'}>{total.costCount ? display.format(total.cost) : '—'}</Metric>
-        <Metric label="Actifs détenus" icon="positions" note={platforms.length + (platforms.length === 1 ? ' plateforme' : ' plateformes')}>{assets.length}</Metric>
-        {declaredGroups.length > 0 && <Metric label="Capital net des groupes estimatifs" note={declaredCapital === null ? 'Taux de change manquant' : undefined}>
-          {declaredCapital === null ? '—' : display.format(declaredCapital)}
-        </Metric>}
-      </div>
     </div>
 
     <div className="dashboard-secondary">
-      <section className="panel period-card" aria-labelledby="dashboard-period">
+      <section className="panel period-card" data-reveal aria-labelledby="dashboard-period">
         <div className="period-card-header"><h2 id="dashboard-period">Résultat sur la période</h2><Icon name="clock" /></div>
         <strong>{periodChange === null ? '—' : display.format(periodChange, { day: last?.date, signed: true })}</strong>
         <p>{[period, periodChange === null ? 'Relevés insuffisants' : 'Hors flux'].filter(Boolean).join(' · ')}</p>
         {groupCount > 0 && <p>Positions individuelles</p>}
       </section>
 
-      <section className="panel quote-status" aria-labelledby="dashboard-quotes">
-        <h2 id="dashboard-quotes">État des cotations</h2>
+      <details className="panel quote-status floating-glass" data-reveal>
+        <summary><span>État des cotations</span><small>{demo ? 'Démo' : lastChecked === null ? 'En attente' : timestamp.format(lastChecked)}</small></summary>
         <dl>
-          <div><dt>Dernière actualisation</dt><dd>{demo ? 'Simulée' : lastChecked === null ? 'En attente' : timestamp.format(lastChecked)}</dd></div>
           <div><dt>Valorisations incomplètes</dt><dd>{unknown}</dd></div>
           <div><dt>Cours anciens ou non horodatés</dt><dd>{stale}</dd></div>
           {manual > 0 && <div><dt>Actifs valorisés manuellement</dt><dd>{manual}</dd></div>}
         </dl>
         {latest && !demo && <p className="hint">Dernier cours daté · {timestamp.format(latest.sourceAt)} · {latest.source}</p>}
-        <p className="hint" role="status">{refreshStatus}</p>
-      </section>
-
-    <section className="panel allocation-panel">
-      <PanelHeading title="Répartition" description={unknown ? 'Sur les valeurs connues.' : undefined}>
-        <label className="allocation-select"><span className="sr-only">Répartition par</span>
-          <select value={allocation} onChange={event => setAllocation(event.target.value as typeof allocation)}>
-            <option value="category">Par catégorie</option><option value="platform">Par plateforme</option><option value="asset">Par actif</option>
-          </select>
-        </label>
-      </PanelHeading>
-      <Allocation rows={rows} display={display} ring />
-    </section>
-
+      </details>
+      <p className="sr-only" role="status">{refreshStatus}</p>
+      {recent.length > 0 && <section className="panel dashboard-activity" data-reveal>
+        <PanelHeading title="Activité récente"><button type="button" className="text-button" onClick={onJournal} aria-label="Voir les transactions"><Icon name="next" /></button></PanelHeading>
+        <ul>{recent.map(item => {
+          const label = item.type === 'operation' ? operationNames[item.value.kind] : 'Acquisition initiale'
+          return <li key={item.type + '/' + item.value.id}>
+            <Icon name={item.type === 'operation' ? item.value.kind : 'wallet'} />
+            <div><strong>{item.value.name}</strong><small>{label} · {timestamp.format(item.at)}</small></div>
+          </li>
+        })}</ul>
+      </section>}
     </div>
 
-    <section className="panel table-panel dashboard-positions"><PanelHeading title="Positions principales">
-      <button className="secondary" aria-label="Voir tout le portefeuille" onClick={onPortfolio}>Tout voir <Icon name="next" /></button></PanelHeading>
-      <AssetTable assets={assets} display={display} quotes={quotes} onOpen={onOpen} limit={6} compact />
-    </section>
+    <div className="metric-grid dashboard-metrics" aria-label="Indicateurs du portefeuille" data-reveal>
+      <Metric label="Capital investi" icon="wallet" note={total.costCount < holdings.length ? 'Coûts connus des positions ouvertes'
+        : total.estimated ? 'Estimation incluse' : 'Coût des positions ouvertes'}>{total.costCount ? display.format(total.cost) : '—'}</Metric>
+      <Metric label="Actifs détenus" icon="positions">{assets.length}</Metric>
+      <Metric label="Plateformes" icon="platforms">{platforms.length}</Metric>
+      {declaredGroups.length > 0 && <Metric label="Capital net des groupes estimatifs" note={declaredCapital === null ? 'Taux de change manquant' : undefined}>
+        {declaredCapital === null ? '—' : display.format(declaredCapital)}
+      </Metric>}
+    </div>
+
+    <div className="dashboard-lower">
+      <section className="panel table-panel dashboard-positions" data-reveal><PanelHeading title="Positions principales">
+        <button className="secondary" aria-label="Voir tout le portefeuille" onClick={onPortfolio}>Tout voir <Icon name="next" /></button></PanelHeading>
+        <AssetTable assets={assets} display={display} quotes={quotes} onOpen={onOpen} limit={6} compact />
+      </section>
+
+      <section className="panel allocation-panel" data-reveal>
+        <PanelHeading title="Répartition" description={unknown ? 'Sur les valeurs connues.' : undefined}>
+          <label className="allocation-select"><span className="sr-only">Répartition par</span>
+            <select value={allocation} onChange={event => setAllocation(event.target.value as typeof allocation)}>
+              <option value="category">Par catégorie</option><option value="platform">Par plateforme</option><option value="asset">Par actif</option>
+            </select>
+          </label>
+        </PanelHeading>
+        <Allocation rows={rows} display={display} ring />
+      </section>
+    </div>
 
     <details className="panel dashboard-insights"><summary>Résultats et classement</summary>
       <div className="metric-grid embedded">

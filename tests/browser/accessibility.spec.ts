@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test'
 for (const theme of ['light', 'dark'] as const) {
   test(`accessibilité du menu, de l’espace et du diagnostic en mode ${theme}`, async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
-    await page.emulateMedia({ colorScheme: theme })
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' })
     await page.goto('/?demo=1#space')
     await expect(page.locator('.space-grid')).toBeVisible()
     const audit = () => new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze()

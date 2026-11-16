@@ -1,3 +1,5 @@
+import { flushSync } from 'react-dom'
+import { closeAnimatedDialog, usePageReveal, useSlidingIndicator } from './motion'
 import Appearance, { useAppearance } from './Appearance'
 import { nativeApp } from './runtime'
 import useAndroidUpdate from './useAndroidUpdate'
@@ -108,6 +110,8 @@ export default function App() {
   const [lastChecked, setLastChecked] = useState<number | null>(null)
   const heading = useRef<HTMLHeadingElement>(null)
   const actionSheet = useRef<HTMLDialogElement>(null)
+  const railIndicator = useSlidingIndicator(section)
+  const bottomIndicator = useSlidingIndicator(section)
 
   function openAddActions(trigger: HTMLButtonElement) {
     const dialog = actionSheet.current
@@ -273,19 +277,35 @@ export default function App() {
   }, [trackedAssets, activeTargets, quoteKey.eodhd, quoteKey.finnhub, quoteKey.coingecko, autoRefresh])
 
   useEffect(() => {
+    let transition: ViewTransition | undefined
+    let request = 0
     const sync = () => {
-      actionSheet.current?.close()
-      setEditor(null); setTradeEditor(null); setToDelete(null)
+      transition?.skipTransition()
+      const version = ++request
       const next = readRoute()
-      setRoute(next)
-      window.scrollTo({ top: 0 })
-      if (!next.anchor) requestAnimationFrame(() => heading.current?.focus())
+      const apply = () => {
+        if (version !== request) return
+        actionSheet.current?.close()
+        setEditor(null); setTradeEditor(null); setToDelete(null)
+        setRoute(next)
+        window.scrollTo({ top: 0 })
+        if (!next.anchor) requestAnimationFrame(() => heading.current?.focus())
+      }
+      if (document.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        transition = document.startViewTransition(() => flushSync(apply))
+        void transition.ready.catch(() => undefined)
+      } else apply()
     }
     window.addEventListener('hashchange', sync)
-    return () => window.removeEventListener('hashchange', sync)
+    return () => {
+      request++
+      transition?.skipTransition()
+      window.removeEventListener('hashchange', sync)
+    }
   }, [])
 
   const ready = Boolean(loaded && !loaded.failed)
+  const page = usePageReveal(route.section + '/' + (route.asset ?? ''), ready)
   useEffect(() => {
     if (route.section !== 'data' || !route.anchor || !ready) return
     const frame = requestAnimationFrame(() => {
@@ -353,14 +373,14 @@ export default function App() {
       <button className="brand" onClick={() => navigate('overview')} aria-label="IntraWallet, accueil">
         <img className="brand-mark" src={import.meta.env.BASE_URL + 'app-icons/intrawallet-wallet-192.png'} alt="" />
       </button>
-      <nav aria-label="Navigation principale">
+      <nav aria-label="Navigation principale" className="sliding-nav" ref={railIndicator}>
         {(Object.keys(sections) as Section[]).map(item => <button type="button" key={item} className={section === item ? 'selected' : ''}
           aria-current={section === item ? 'page' : undefined} aria-label={sections[item]} onClick={() => navigate(item)}><Icon name={item} />
           <span className="rail-tooltip" aria-hidden="true">{sections[item]}</span></button>)}
       </nav>
       <button type="button" className="sidebar-footer" aria-label="Sauvegarde locale" onClick={() => navigate('data', 'backup')}><Icon name="lock" /><span className="rail-tooltip" aria-hidden="true">Sauvegarde locale</span></button>
     </aside>
-    <nav className="mobile-nav" aria-label="Navigation mobile">
+    <nav className="mobile-nav sliding-nav" aria-label="Navigation mobile" ref={bottomIndicator}>
       <button type="button" aria-current={section === 'overview' ? 'page' : undefined} onClick={() => navigate('overview')}><Icon name="overview" /><span>Accueil</span></button>
       <button type="button" aria-current={section === 'positions' ? 'page' : undefined} onClick={() => navigate('positions')}><Icon name="positions" /><span>Portefeuille</span></button>
       <button type="button" className="mobile-add" aria-label="Ouvrir les actions d’ajout" aria-haspopup="dialog"
@@ -370,14 +390,15 @@ export default function App() {
         onClick={() => navigate('space')}><Icon name="space" /><span>Espace</span></button>
     </nav>
     <dialog id="action-sheet" className="add-actions-dialog" ref={actionSheet} aria-labelledby="action-title"
+      onCancel={event => { event.preventDefault(); void closeAnimatedDialog(event.currentTarget) }}
       onClick={event => {
         if (event.target !== event.currentTarget) return
         const { left, top, right, bottom } = event.currentTarget.getBoundingClientRect()
-        if (event.clientX < left || event.clientX > right || event.clientY < top || event.clientY > bottom) event.currentTarget.close()
+        if (event.clientX < left || event.clientX > right || event.clientY < top || event.clientY > bottom) void closeAnimatedDialog(event.currentTarget)
       }}>
       <div className="sheet-content">
         <div className="section-heading"><h2 id="action-title">Ajouter</h2><button className="icon-button" aria-label="Fermer les actions"
-          onClick={() => actionSheet.current?.close()}><Icon name="close" /></button></div>
+          onClick={() => { if (actionSheet.current) void closeAnimatedDialog(actionSheet.current) }}><Icon name="close" /></button></div>
         {([
           ['positions', 'Ajouter un investissement', () => setEditor('new')],
           ['group', 'Créer un portefeuille groupé', createGroup],
@@ -401,7 +422,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="workspace-content">
+      <main className="workspace-content" ref={page}>
         {androidUpdate.update && <section className="panel preference-panel" aria-label="Mise à jour Android">
           <p role="status">IntraWallet {androidUpdate.update.version} est disponible.</p>
           <a className="secondary" href={androidUpdate.update.url}>Ouvrir la release GitHub</a>
@@ -413,7 +434,7 @@ export default function App() {
         </aside>}
         <div className="page-title"><div>
           <h1 ref={heading} tabIndex={-1}>{title}</h1>
-          <p>{selectedAsset ? 'Cours de marché, positions détenues et transactions.' : descriptions[section]}</p></div></div>
+          {section !== 'overview' && <p>{selectedAsset ? 'Cours de marché, positions détenues et transactions.' : descriptions[section]}</p>}</div></div>
         {display.currency !== 'CHF' && <p className="hint fx-note" role="status">{fxLoading && !fx ? 'Chargement des taux de change…'
           : fx ? `Taux ${demoMode ? 'simulé' : 'de référence BCE'} CHF → ${display.currency} du ${fx.date}`
             : 'Taux de change indisponible. Tu peux revenir au CHF.'}</p>}
@@ -488,6 +509,7 @@ export default function App() {
               {!demoMode && <a className="secondary" href={demoLink(true)}>Ouvrir la démo</a>}</div>
           </section>
           : <><Dashboard assets={consolidatedAssets} holdings={allHoldings} platforms={activePlatforms} history={history} groupCount={groups.length} declaredCapital={declaredCapital}
+            recent={journal.slice(0, 5)} onJournal={() => navigate('journal')}
             declaredGroups={declaredGroups} emptyExactGroups={emptyExactGroups}
             intraday={loaded.view.intraday} display={display} quotes={marketByAsset} realized={loaded.view.realized} unknownSales={loaded.view.unknownSales}
             lastChecked={lastChecked} refreshing={refreshing} refreshStatus={refreshStatus} demo={demoMode}

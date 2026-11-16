@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useLayoutEffect, useState } from 'react'
 
 const modes = ['light', 'dark', 'system'] as const
 const densities = ['comfortable', 'compact'] as const
 const lightVariants = ['coral', 'champagne'] as const
 const darkVariants = ['graphite', 'oled'] as const
-const themeLabels = { coral: 'Corail Classique', champagne: 'Champagne', graphite: 'Graphite', oled: 'Noir OLED' }
+const themeLabels = { coral: 'Signature', champagne: 'Champagne', graphite: 'Graphite', oled: 'Noir OLED' }
 const prefix = 'portefeuille.'
 
 export function readAppearancePreference<T extends string>(key: string, options: readonly T[], fallback: T) {
@@ -25,19 +25,27 @@ export function useAppearance() {
   const [dark, setDark] = useState(() => readAppearancePreference('theme.dark', darkVariants, 'graphite'))
   const [density, setDensity] = useState(() => readAppearancePreference('density', densities, 'comfortable'))
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const root = document.documentElement
+    let timer: number | undefined
     function apply() {
-      const resolved = mode === 'system' ? (media.matches ? 'dark' : 'light') : mode
-      Object.assign(document.documentElement.dataset, {
-        theme: resolved,
-        variant: resolved === 'dark' ? dark : light,
-        density,
-      })
+      const theme = mode === 'system' ? (media.matches ? 'dark' : 'light') : mode
+      const variant = theme === 'dark' ? dark : light
+      if (root.dataset.theme !== theme || root.dataset.variant !== variant) {
+        root.dataset.themeTransition = ''
+        window.clearTimeout(timer)
+        timer = window.setTimeout(() => { delete root.dataset.themeTransition }, 240)
+      }
+      Object.assign(root.dataset, { theme, variant, density })
     }
     apply()
     media.addEventListener('change', apply)
-    return () => media.removeEventListener('change', apply)
+    return () => {
+      media.removeEventListener('change', apply)
+      window.clearTimeout(timer)
+      delete root.dataset.themeTransition
+    }
   }, [mode, light, dark, density])
 
   return { mode, setMode, light, setLight, dark, setDark, density, setDensity }
@@ -83,9 +91,11 @@ function ThemeOptions<T extends keyof typeof themeLabels>({ label, variants, sel
     {variants.map(variant => <label className="theme-option" key={variant}>
       <input type="radio" name={label} checked={selected === variant} onChange={() => onSelect(variant)} />
       <span className="theme-preview" data-variant={variant} aria-hidden="true">
-        <span className="preview-rail" />
-        <span className="preview-card"><i /><i /><i /></span>
-        <span className="preview-accent" />
+        <span className="preview-rail"><i /><i /><i /></span>
+        <span className="preview-card"><small>Patrimoine</small>
+          <svg viewBox="0 0 90 22" preserveAspectRatio="none"><path d="M1 20 L16 16 L29 18 L44 8 L58 11 L72 4 L89 2" /></svg>
+        </span>
+        <span className="preview-accent">+</span>
       </span>
       <strong>{themeLabels[variant]}</strong>
     </label>)}

@@ -52,6 +52,7 @@ test('le graphique précède les indicateurs sur mobile et garde ses commandes',
 
 for (const variant of ['coral', 'champagne', 'graphite', 'oled']) {
   test(`contraste du dashboard et des préférences · ${variant}`, async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' })
     await page.addInitScript(scheme => {
       const mode = scheme === 'coral' || scheme === 'champagne' ? 'light' : 'dark'
       localStorage.setItem('portefeuille.theme', mode)

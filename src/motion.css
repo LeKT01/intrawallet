@@ -1,0 +1,63 @@
+:root {
+  --motion-fast: 140ms;
+  --motion-base: 210ms;
+  --motion-slow: 280ms;
+  --ease-premium: cubic-bezier(.22, 1, .36, 1);
+}
+.sidebar .sliding-nav { position: relative; }
+.sliding-nav[data-indicator="ready"]::before {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  left: 0;
+  top: 0;
+  width: var(--active-width);
+  height: var(--active-height);
+  transform: translate(var(--active-x), var(--active-y));
+  border-radius: var(--radius-control);
+  background: var(--accent-pale);
+  transition: transform var(--motion-slow) var(--ease-premium), width var(--motion-slow) var(--ease-premium), height var(--motion-slow) var(--ease-premium);
+}
+.sidebar .sliding-nav::before { background: var(--sidebar-active); }
+.sliding-nav[data-indicator="ready"] > button { position: relative; }
+.sliding-nav[data-indicator="ready"] > :is([aria-current], .selected) { background: transparent; }
+.rail-tooltip { display: block; opacity: 0; transition: opacity var(--motion-fast) ease, visibility var(--motion-fast) ease; }
+.sidebar button:is(:hover, :focus-visible) .rail-tooltip { opacity: 1; }
+@media (hover: hover) {
+  .asset-card:hover { transform: translateY(-2px); box-shadow: var(--mist-shadow); }
+  .primary:hover:not(:disabled, .mobile-add) { transform: translateY(-1px); }
+}
+.asset-card { transition: transform var(--motion-base) var(--ease-premium), box-shadow var(--motion-base) ease, background var(--motion), border-color var(--motion); }
+.asset-card-grid li { animation: iw-card-in 240ms var(--ease-premium) backwards; animation-delay: calc(var(--card-sequence, 0) * 44ms); }
+@keyframes iw-card-in { from { opacity: .3; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes iw-curve { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0); } }
+@keyframes iw-chart-fill { from { opacity: 0; } to { opacity: 1; } }
+.chart-line { animation: iw-curve 560ms var(--ease-premium) both; }
+.chart-area { animation: iw-chart-fill 450ms ease-out both; }
+.history-chart .chart-crosshair { transition: opacity var(--motion-fast) ease; }
+dialog[open].add-actions-dialog { animation: iw-dialog-enter var(--motion-slow) var(--ease-premium) both; }
+dialog[open].add-actions-dialog[data-closing] { animation: iw-dialog-exit var(--motion-fast) ease-in both; }
+dialog[open].add-actions-dialog[data-closing]::backdrop { animation: glass-fade var(--motion-fast) ease-in reverse both; }
+@keyframes iw-dialog-enter { from { opacity: 0; transform: translateY(var(--sheet-travel, 9px)); } to { opacity: 1; transform: none; } }
+@keyframes iw-dialog-exit { to { opacity: 0; transform: translateY(var(--sheet-travel, 9px)); } }
+@media (max-width: 900px) { .add-actions-dialog { --sheet-travel: 24px; } }
+:root[data-theme-transition] :is(body, .panel, .metric, .sidebar, .mobile-nav, .asset-card, .chart-plot) {
+  transition: background-color var(--motion-base) ease, color var(--motion-base) ease, border-color var(--motion-base) ease, box-shadow var(--motion-base) ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sliding-nav::before { transition: none !important; }
+  .asset-card:hover, .primary:hover:not(:disabled, .mobile-add) { transform: none; }
+}
+.motion-segments { position: relative; align-self: start; width: fit-content; max-width: 100%; isolation: isolate; }
+.motion-segments::before { z-index: -1; border-radius: var(--pill) !important; }
+.motion-segments[data-indicator="ready"] .segment-button { background: transparent; }
+.filter-reveal { animation: iw-card-in 210ms var(--ease-premium) both; }
+
+@media (prefers-reduced-motion: no-preference) {
+  :root { view-transition-name: none; }
+  .workspace-content { view-transition-name: iw-workspace; }
+  ::view-transition { pointer-events: none; }
+  ::view-transition-group(iw-workspace) { animation-duration: var(--motion-fast); }
+  ::view-transition-old(iw-workspace) { animation: glass-fade var(--motion-fast) ease-out reverse both; }
+  ::view-transition-new(iw-workspace) { animation: none; }
+}

@@ -1,3 +1,5 @@
+import { useSlidingIndicator } from './motion'
+import type { CSSProperties } from 'react'
 import { readAppearancePreference, saveAppearancePreference } from './Appearance'
 import { useId, useMemo, useState } from 'react'
 import type { Decimal } from 'decimal.js'
@@ -108,6 +110,7 @@ export function PortfolioView({ holdings, platforms, display, quotes, onOpen, on
   holdings: Holding[]; platforms: string[]; display: CurrencyDisplay; quotes: Map<string, Mark>; onOpen: (key: string) => void; onAdd: () => void
 }) {
   const [layout, setLayout] = useState(() => readAppearancePreference('portfolio.layout', ['table', 'cards'] as const, 'table'))
+  const viewIndicator = useSlidingIndicator<HTMLDivElement>(layout)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<Category | ''>('')
   const [platform, setPlatform] = useState('')
@@ -147,7 +150,7 @@ export function PortfolioView({ holdings, platforms, display, quotes, onOpen, on
     </div>
     <div className="portfolio-view-bar">
       <span className="muted">{matching.length} actif{matching.length !== 1 ? 's' : ''}</span>
-      <div className="segments" role="group" aria-label="Vue du portefeuille">
+      <div className="segments motion-segments sliding-nav" role="group" aria-label="Vue du portefeuille" ref={viewIndicator}>
         {(['cards', 'table'] as const).map(view => <button className="secondary segment-button" key={view} type="button"
           aria-pressed={layout === view} onClick={() => {
             setLayout(view)
@@ -157,7 +160,8 @@ export function PortfolioView({ holdings, platforms, display, quotes, onOpen, on
     </div>
     {layout === 'table' || !matching.length
       ? <AssetTable assets={matching} display={display} quotes={quotes} onOpen={onOpen} order={sort} />
-      : <ul className="asset-card-grid">{sortAssets(matching, sort).map(asset => <li key={asset.key}>
+      : <ul className="asset-card-grid" key={JSON.stringify([category, query.trim(), platform, sort])}>{sortAssets(matching, sort).map((asset, index) => <li
+        key={asset.key} style={{ '--card-sequence': Math.min(index, 5) } as CSSProperties}>
         <button type="button" className="asset-card" onClick={() => onOpen(asset.key)}>
           <span className="asset-card-heading"><AssetBadge asset={asset} /><span>
             <strong>{asset.name}</strong><small>{[assetSymbol(asset, asset.entries[0].listing), categories[asset.category]].filter(Boolean).join(' · ')}</small>
@@ -166,8 +170,15 @@ export function PortfolioView({ holdings, platforms, display, quotes, onOpen, on
             <strong>{asset.priced ? display.format(asset.amount) : '—'}</strong>
             <Change value={asset.returnRate}><span className="sr-only">Rendement latent </span>{percentLabel(asset.returnRate)}</Change>
           </span>
-          <small>{asset.platformCount === 1 ? asset.entries[0].platform : asset.platformCount + ' plateformes'}
-            {asset.entries.some(entry => entry.partiallyValued) && ' · Valorisation partielle'}</small>
+          <span className="asset-card-meta">
+            <small>{asset.platformCount === 1 ? asset.entries[0].platform : asset.platformCount + ' plateformes'}</small>
+            {asset.entries.some(entry => entry.partiallyValued)
+              ? <small className="asset-card-state">{asset.priced ? 'Valeur partielle' : 'Cours manquant'}</small>
+              : (() => {
+                const quote = quotes.get(asset.key)
+                return quote && quoteIsStale(quote) ? <small className="asset-card-state">Cours à vérifier</small> : null
+              })()}
+          </span>
         </button>
       </li>)}</ul>}
   </section>

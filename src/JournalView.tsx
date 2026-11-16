@@ -68,7 +68,7 @@ export default function JournalView({ items, platforms, display, sales, onEdit, 
       </div>
     </div>}
     {!filtered.length && <p className="inline-empty">Aucune transaction pour cette sélection.</p>}
-    <ul className="journal-list" aria-label="Transactions">
+    <ul className="journal-list filter-reveal" aria-label="Transactions" key={JSON.stringify([type, query, platform, asset, index])}>
       {filtered.slice(index * pageSize, (index + 1) * pageSize).map(item => {
         const value = item.value
         const operation = item.type === 'operation' ? item.value : null
