@@ -13,17 +13,29 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.ref == 'refs/heads/main' && vars.INFOMANIAK_DEPLOY_ENABLED == 'true'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     environment:
       name: infomaniak
       url: https://intrawallet.nova-studios.site
     env:
       APP_URL: https://intrawallet.nova-studios.site
-      INFOMANIAK_HOST: ${{ vars.INFOMANIAK_HOST }}
-      INFOMANIAK_USER: ${{ vars.INFOMANIAK_USER }}
       INFOMANIAK_WEB_ROOT: ${{ vars.INFOMANIAK_WEB_ROOT }}
     steps:
+      - name: Vérifier les réglages FTP
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER || vars.INFOMANIAK_HOST }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME || vars.INFOMANIAK_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD || secrets.INFOMANIAK_FTP_PASSWORD }}
+        run: |
+          missing=0
+          for name in FTP_SERVER FTP_USERNAME FTP_PASSWORD INFOMANIAK_WEB_ROOT; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Réglage manquant : $name. Voir docs/infomaniak.md."
+              missing=1
+            fi
+          done
+          exit "$missing"
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -40,7 +52,9 @@ jobs:
           cp deploy/infomaniak/market.php deploy/infomaniak/.htaccess dist/
       - name: Transférer les fichiers en FTPES
         env:
-          INFOMANIAK_FTP_PASSWORD: ${{ secrets.INFOMANIAK_FTP_PASSWORD }}
+          INFOMANIAK_HOST: ${{ secrets.FTP_SERVER || vars.INFOMANIAK_HOST }}
+          INFOMANIAK_USER: ${{ secrets.FTP_USERNAME || vars.INFOMANIAK_USER }}
+          INFOMANIAK_FTP_PASSWORD: ${{ secrets.FTP_PASSWORD || secrets.INFOMANIAK_FTP_PASSWORD }}
         run: python3 deploy/infomaniak/upload.py
       - name: Vérifier HTTPS et les routes après déploiement
         run: |

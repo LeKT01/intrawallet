@@ -10,17 +10,17 @@ Ce déploiement utilise `https://intrawallet.nova-studios.site` pour la PWA et l
 
 ## GitHub
 
-Dans **Settings → Secrets and variables → Actions**, créer les variables de dépôt :
+Dans **Settings → Secrets and variables → Actions**, créer les secrets de dépôt avec les mêmes noms que One Immobilier :
 
-| Variable | Valeur |
+| Secret | Valeur |
 | --- | --- |
-| `INFOMANIAK_HOST` | Hôte FTP indiqué dans le Manager |
-| `INFOMANIAK_USER` | Utilisateur FTP du déploiement |
-| `INFOMANIAK_WEB_ROOT` | `/` si le compte FTP est déjà limité au dossier du site. Sinon, chemin du site tel qu’il apparaît dans le client FTP |
-| `INFOMANIAK_DEPLOY_ENABLED` | `true` après configuration |
-| `MARKET_RELAY_URL` | `https://intrawallet.nova-studios.site` pour les prochains APK signés |
+| `FTP_SERVER` | Hôte FTP indiqué dans le Manager |
+| `FTP_USERNAME` | Utilisateur FTP du site IntraWallet |
+| `FTP_PASSWORD` | Mot de passe du compte FTP IntraWallet |
 
-Créer le secret de dépôt `INFOMANIAK_FTP_PASSWORD` avec le mot de passe du compte FTP. Garder les secrets Android existants. Une clé EODHD personnelle reste saisie dans l’app, et le relais la transmet à EODHD. CoinMarketCap utilise l’API publique sans clé.
+Créer la variable de dépôt `INFOMANIAK_WEB_ROOT` avec `/` si le compte FTP est déjà limité au dossier du site. Sinon, utiliser le chemin du site tel qu’il apparaît dans le client FTP. La variable `MARKET_RELAY_URL` peut être réglée sur `https://intrawallet.nova-studios.site` pour les prochains APK signés.
+
+Les anciens réglages `INFOMANIAK_HOST`, `INFOMANIAK_USER` et `INFOMANIAK_FTP_PASSWORD` restent compatibles. Le workflow vérifie les réglages requis au démarrage et affiche les noms manquants. Garder les secrets Android existants. Une clé EODHD personnelle reste saisie dans l’app, et le relais la transmet à EODHD. CoinMarketCap utilise l’API publique sans clé.
 
 Lancer **Actions → Déployer IntraWallet sur Infomaniak → Run workflow → main**. Ensuite, chaque push sur `main` lance les tests, le build et le transfert. Le transfert laisse les anciens fichiers en place pour les clients utilisant encore une ancienne version. La vérification post-déploiement contrôle le HTML, le service worker et le routage PHP. Après le premier déploiement, tester sur iPhone avec un ETF SIX, NQSE, VUSA et LLY (LLY requiert une clé EODHD ou Finnhub), car l’accès aux fournisseurs dépend du réseau de l’hébergement.
 
