@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Decimal } from 'decimal.js'
 import { dailyPortfolioHistory, replay, unitMark } from '../src/ledger.ts'
-import { consolidate, estimatedCost, summarize, unitPrice } from '../src/portfolio.ts'
+import { consolidate, estimatedCost, sharedUnitPrice, summarize, unitPrice } from '../src/portfolio.ts'
 import { currencyDisplay } from "../src/currency.ts"
 import { searchCatalog } from '../src/catalog.ts'
 import { backupText, readBackup } from '../src/backup.ts'
@@ -258,4 +258,15 @@ test('la sauvegarde conserve les plateformes personnalisées et les transactions
   const snapshot = { ...data([], [operation]), platforms: ['Réserve locale', 'Mon courtier'] }
   assert.deepEqual(readBackup(backupText(snapshot)), snapshot)
   assert.throws(() => readBackup(backupText({ ...snapshot, platforms: ['Courtage', 'courtage'] })), /plateformes/)
+})
+
+test('le prix consolidé reste indisponible lorsque les prix ou les cotations divergent', () => {
+  const xetra = { listing: 'XETR:NQSE', market: { code: 'NQSE.XETRA', currency: 'EUR' },
+    unitPrice: new Decimal(15), averageUnitPrice: false }
+  assert.equal(sharedUnitPrice([xetra, { ...xetra, unitPrice: new Decimal(15) }]).price.toFixed(), '15')
+  assert.deepEqual(sharedUnitPrice([xetra, { ...xetra, unitPrice: new Decimal(16) }]), { mixed: true, price: null })
+  assert.deepEqual(sharedUnitPrice([xetra, { ...xetra, unitPrice: null }]), { mixed: false, price: null })
+  assert.deepEqual(sharedUnitPrice([xetra, { ...xetra, listing: 'XSWX:NQSE',
+    market: { code: 'NQSE.SW', currency: 'CHF' } }]), { mixed: true, price: null })
+  assert.deepEqual(sharedUnitPrice([{ ...xetra, averageUnitPrice: true }]), { mixed: true, price: null })
 })

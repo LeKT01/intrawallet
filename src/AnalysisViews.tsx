@@ -50,7 +50,9 @@ export function AnalyticsView({ holdings, history, display, individualHistory }:
     detail: point.reconstructed ? 'Reconstitution' : point.usedOlderPrices ? 'Cours antérieurs inclus' : undefined,
   }))
   return <div className="detail-stack">
-    <section className="panel table-panel"><PanelHeading title="Composition et concentration" description="Analyse des positions ouvertes sur la part valorisée du portefeuille." />
+    <section className="panel table-panel"><PanelHeading title="Composition et concentration" description={individualHistory
+      ? "Positions individuelles et positions exactes des groupes. Les valeurs déclarées des groupes estimatifs sont exclues."
+      : "Analyse des positions ouvertes sur la part valorisée du portefeuille."} />
       <div className="filter-bar">
         <label>Catégorie<select value={category} onChange={event => setCategory(event.target.value as Category | '')}>
           <option value="">Toutes</option>{categoryEntries.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>

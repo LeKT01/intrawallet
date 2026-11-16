@@ -36,3 +36,10 @@ test('le relais CoinMarketCap limite les appels aux identifiants pris en charge'
   assert.equal((await request('/market/coinmarketcap/quotes?id=99999')).status, 400)
   assert.equal(fetch.mock.callCount(), 1)
 })
+
+test('une version Android compilée sans variable utilise le relais officiel', async t => {
+  const { Capacitor } = await import('@capacitor/core')
+  t.mock.method(Capacitor, 'isNativePlatform', () => true)
+  const { marketUrl } = await import('../src/runtime.ts?android-default')
+  assert.equal(marketUrl('/market/xetra/nqse').href, 'https://intrawallet.nova-studios.ch/market/xetra/nqse')
+})

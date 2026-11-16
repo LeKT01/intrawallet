@@ -215,9 +215,9 @@ export function GroupDetail({ group, marks, rate, display, historical, onBack, o
           note={group.mode === 'estimate' && declared ? dateLabel.format(declared.at) : group.mode === 'exact' && holdings.some(item => item.partiallyValued || !item.valuation) ? 'Valorisation partielle' : undefined}>
           {group.mode === 'estimate' && declared ? money(declared.amount, 2, group.currency) : value === null ? '—' : display.format(value)}
         </Metric>
-        <Metric label="Gain latent" note={group.mode === 'estimate' ? 'Allocation estimative' : 'Positions exactes'}>
+        {exact && <Metric label="Gain latent" note="Positions exactes">
           <Change value={summary.gain}>{summary.gain === null ? '—' : display.format(summary.gain, { signed: true })}</Change>
-        </Metric>
+        </Metric>}
       </div>
     </section>
     <section className="panel group-list"><PanelHeading title="Composition" description="Les montants cibles sont calculés sur le capital net confié." />

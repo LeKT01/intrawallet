@@ -117,7 +117,7 @@ export default function Dashboard({ assets, holdings, display, quotes, history, 
 
     <details className="panel dashboard-insights"><summary>Résultats et classement</summary>
       <div className="metric-grid embedded">
-        <Metric label="Gain réalisé connu" note={unknownSales ? unknownSales + ' vente(s) au coût inconnu' : 'Ventes enregistrées'}><Change value={realized}>{display.format(realized, { signed: true })}</Change></Metric>
+        <Metric label={groupCount ? "Gain réalisé des positions individuelles" : "Gain réalisé connu"} note={unknownSales ? unknownSales + ' vente(s) au coût inconnu' : 'Ventes enregistrées'}><Change value={realized}>{display.format(realized, { signed: true })}</Change></Metric>
         {ranked.length > 0 && <Metric label={ranked.length > 1 ? 'Meilleure performance' : 'Performance calculable'} note={ranked[0].name}>
           <Change value={ranked[0].returnRate}>{percentLabel(ranked[0].returnRate)}</Change></Metric>}
         {ranked.length > 1 && <Metric label="Plus faible performance" note={ranked.at(-1)!.name}>
