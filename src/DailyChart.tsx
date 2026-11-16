@@ -1,6 +1,7 @@
 import { useId, useState, type PointerEvent } from 'react'
 import { Decimal } from 'decimal.js'
 import { dayKey, daysBefore } from './currency'
+import { useSlidingIndicator } from './motion'
 
 export const periods = [{ label: '24 h', days: 1 }, { label: '7 j', days: 7 }, { label: '1 mois', days: 30 },
   { label: '3 mois', days: 90 }, { label: '6 mois', days: 183 }, { label: '1 an', days: 365 }, { label: 'Depuis le début', days: Infinity }]
@@ -25,7 +26,8 @@ export function inPeriod<T extends { date: string }>(points: T[], days: number) 
 
 export function PeriodButtons({ range, choose, minimumDays = 1 }: { range: number; choose: (days: number) => void; minimumDays?: number }) {
   const choices = periods.filter(period => period.days >= minimumDays)
-  return <><div className="segments period-segments" role="group" aria-label="Période">
+  const indicator = useSlidingIndicator<HTMLDivElement>(String(range))
+  return <><div className="segments period-segments motion-segments sliding-nav" ref={indicator} role="group" aria-label="Période">
     {choices.map(period => <button type="button" key={period.label} className="secondary segment-button"
       aria-pressed={range === period.days} onClick={() => choose(period.days)}>{period.label}</button>)}
   </div><label className="period-select">Période
@@ -93,7 +95,7 @@ export default function DailyChart({ points, label, format, empty }: {
 
   return <>
     <div className="chart-plot chart-enter">
-    <p className="history-readout"><strong>{format(active.value!)}</strong><span>{labelOf(active)}{active.detail ? ' · ' + active.detail : ''}</span></p>
+    <p className="history-readout"><strong>{format(active.value!)}</strong><span className="chart-readout-context"><span>{labelOf(active)}</span>{active.detail && <small>{active.detail}</small>}</span></p>
     <div className="chart-scale" aria-hidden="true">
       <span>{format(max)}</span><span>{format(min.plus(spread.div(2)))}</span><span>{format(min)}</span>
     </div>
@@ -107,6 +109,7 @@ export default function DailyChart({ points, label, format, empty }: {
         const area = paths[index] + ' L' + segment.at(-1)!.x + ' 150 L' + segment[0].x + ' 150 Z'
         return <path className="chart-area" key={segment[0].x} d={area} style={{ fill: 'url(#' + fillId + ')' }} />
       })}
+      <path d={paths.join(' ')} className="chart-glow" aria-hidden="true" />
       <path d={paths.join(' ')} className="chart-line" />
       {activeCoord && <line className="chart-crosshair" x1={activeCoord.x}
         x2={activeCoord.x} y1="22" y2="150" />}

@@ -307,6 +307,7 @@ export default function App() {
   const ready = Boolean(loaded && !loaded.failed)
   const page = usePageReveal(route.section + '/' + (route.asset ?? ''), ready)
   useEffect(() => {
+    document.querySelector('.workspace')?.scrollTo({ top: 0 })
     if (route.section !== 'data' || !route.anchor || !ready) return
     const frame = requestAnimationFrame(() => {
       const target = document.getElementById(route.anchor!)
@@ -513,8 +514,8 @@ export default function App() {
             declaredGroups={declaredGroups} emptyExactGroups={emptyExactGroups}
             intraday={loaded.view.intraday} display={display} quotes={marketByAsset} realized={loaded.view.realized} unknownSales={loaded.view.unknownSales}
             lastChecked={lastChecked} refreshing={refreshing} refreshStatus={refreshStatus} demo={demoMode}
-            onRefresh={() => void refreshQuotes(true)} onOpen={openAsset} onPortfolio={() => navigate('positions')} />
-            {groups.length > 0 && <Suspense fallback={null}><GroupList groups={groups} {...groupDisplay} onCreate={createGroup} onOpen={openGroup} /></Suspense>}</>}
+            onRefresh={() => void refreshQuotes(true)} onOpen={openAsset} onPortfolio={() => navigate('positions')}
+            groupsContent={groups.length > 0 ? <Suspense fallback={null}><GroupList groups={groups} {...groupDisplay} onCreate={createGroup} onOpen={openGroup} /></Suspense> : undefined} /></>}
       </main>
     </div>
     {groupEditor !== null && <Suspense fallback={null}><GroupEditor current={groupEditor === 'new' ? undefined : groupEditor} platforms={platforms}

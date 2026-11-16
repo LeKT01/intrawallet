@@ -221,7 +221,7 @@ export function AssetDetail({ asset, data, series, quote: market, display, crypt
     && position.source.source === market.source) ? market : undefined
   const usesManualValuation = asset.entries.some(position => position.usesManualValuation)
   const native = quote?.originalPrice && quote.currency ? unitPrice(quote.originalPrice, quote.currency as Currency) : null
-  return <div className="detail-stack">
+  return <div className="detail-stack asset-detail-layout">
     <div className="detail-actions"><button className="secondary" onClick={onBack}><Icon name="back" /> Portefeuille</button>
       <button className="primary" onClick={onTrade}><Icon name="plus" /> Ajouter une transaction</button></div>
     <section className="panel asset-detail-hero">
@@ -233,7 +233,8 @@ export function AssetDetail({ asset, data, series, quote: market, display, crypt
           {quote.source !== 'Tradegate · relevé' && ' · ' + timestamp.format(quote.sourceAt)}
           {quote.receivedAt && <><br />Reçu le {timestamp.format(quote.receivedAt)}</>}</p>}</div>
     </section>
-    <section className="panel">
+    <section className="panel chart-panel"><AssetHistory {...chart} asset={entry} cryptoKey={cryptoKey} name={asset.name} display={display} /></section>
+    <section className="panel asset-position-summary">
       <PanelHeading title="Ma position" description={asset.estimated ? 'Le coût inclut une estimation.' : 'Le coût moyen tient compte des frais enregistrés.'} />
       <div className="metric-grid embedded">
         <Metric label="Quantité">{quantity(asset.quantity)}</Metric>
@@ -244,8 +245,7 @@ export function AssetDetail({ asset, data, series, quote: market, display, crypt
         <Metric label="Gain latent" note={percentLabel(asset.returnRate)}><Change value={asset.gain}>{asset.gain === null ? '—' : display.format(asset.gain, { signed: true })}</Change></Metric>
       </div>
     </section>
-    <section className="panel chart-panel"><AssetHistory {...chart} asset={entry} cryptoKey={cryptoKey} name={asset.name} display={display} /></section>
-    <section className="panel table-panel">
+    <section className="panel table-panel asset-platforms">
       <PanelHeading title="Par plateforme" />
       <div className="platform-holdings">{asset.entries.map(position => {
         const totals = summarize([position])

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Decimal } from 'decimal.js'
 import type { CurrencyDisplay } from './currency'
 import HistoryChart, { portfolioPeriod } from './HistoryChart'
@@ -14,7 +14,8 @@ import { useValueReveal } from './motion'
 const allocationCategories: [Category, string][] = [['stock', 'Actions'], ['etf', 'ETF'], ['crypto', 'Cryptos']]
 
 export default function Dashboard({ assets, holdings, display, quotes, history, intraday, platforms, realized, unknownSales,
-  lastChecked, refreshing, refreshStatus, demo, declaredCapital, declaredGroups, emptyExactGroups, groupCount, recent, onJournal, onRefresh, onOpen, onPortfolio }: {
+  lastChecked, refreshing, refreshStatus, demo, declaredCapital, declaredGroups, emptyExactGroups, groupCount, recent, onJournal, onRefresh, onOpen, onPortfolio, groupsContent }: {
+  groupsContent?: ReactNode
   recent: JournalItem[]; onJournal: () => void
   declaredCapital: Decimal | null
   declaredGroups: { name: string; platform: string; value: Decimal | null }[]; emptyExactGroups: number; groupCount: number
@@ -59,6 +60,7 @@ export default function Dashboard({ assets, holdings, display, quotes, history, 
   return <div className="dashboard-grid">
     <section className="panel valuation-panel" data-reveal aria-labelledby="valuation-title">
       <div className="valuation-content">
+        <span className="valuation-eyebrow">Mon patrimoine</span>
         <h2 className="valuation-label" id="valuation-title">{unknown ? 'Valeur connue du portefeuille' : 'Valeur totale du portefeuille'}</h2>
         <p className="valuation-amount" ref={amountRef}>{valuationAmount}</p>
         <div className="valuation-result">
@@ -68,10 +70,14 @@ export default function Dashboard({ assets, holdings, display, quotes, history, 
             <span>{gain.lt(0) ? 'Perte latente' : 'Gain latent'}</span>
           </>}
         </div>
+        {unknown > 0 && <p className="valuation-notice">{unknown} valorisation{unknown > 1 ? 's' : ''} incomplète{unknown > 1 ? 's' : ''}</p>}
         {declaredGroups.some(group => group.value !== null) && <p className="hint">Dont {display.format(declaredTotal)} de valeurs déclarées</p>}
         <div className="valuation-quote">
-          {demo ? <span>Cotations simulées</span> : <button type="button" className="secondary dashboard-refresh" aria-busy={refreshing}
-            onClick={onRefresh} disabled={refreshing}><Icon name="refresh" />{refreshing ? 'Actualisation…' : 'Actualiser les cours'}</button>}
+          {demo ? <span><Icon name="clock" /> Cotations simulées</span> : <>
+            <button type="button" className="secondary dashboard-refresh" aria-busy={refreshing}
+              onClick={onRefresh} disabled={refreshing}><Icon name="refresh" />{refreshing ? 'Actualisation…' : 'Actualiser les cours'}</button>
+            <small>{lastChecked === null ? 'Cours à vérifier' : 'Vérifié le ' + timestamp.format(lastChecked)}</small>
+          </>}
         </div>
       </div>
       <div className="valuation-art" aria-hidden="true"><span /><span /><span><Icon name="wallet" /></span></div>
@@ -86,51 +92,61 @@ export default function Dashboard({ assets, holdings, display, quotes, history, 
         </label>
       </PanelHeading>
       <Allocation rows={rows} display={display} ring />
+      <footer className="panel-link-footer"><a className="text-button" href="#analytics">Explorer les analyses <Icon name="next" /></a></footer>
     </section>
 
     <HistoryChart history={history} selection={selection} display={display} range={range} chooseRange={setRange} individualOnly={groupCount > 0} />
 
-    <div className="dashboard-side">
-      <section className="panel table-panel dashboard-positions" data-reveal><PanelHeading title="Positions principales">
-        <button className="secondary" aria-label="Voir tout le portefeuille" onClick={onPortfolio}>Tout voir <Icon name="next" /></button></PanelHeading>
-        <AssetTable assets={assets} display={display} quotes={quotes} onOpen={onOpen} limit={6} compact />
-      </section>
-      <details className="panel quote-status floating-glass" data-reveal>
-        <summary><span>État des cotations</span><small>{demo ? 'Démo' : lastChecked === null ? 'En attente' : timestamp.format(lastChecked)}</small></summary>
-        <dl>
-          <div><dt>Valorisations incomplètes</dt><dd>{unknown}</dd></div>
-          <div><dt>Cours anciens ou non horodatés</dt><dd>{stale}</dd></div>
-          {manual > 0 && <div><dt>Actifs valorisés manuellement</dt><dd>{manual}</dd></div>}
-        </dl>
-        {latest && !demo && <p className="hint">Dernier cours daté · {timestamp.format(latest.sourceAt)} · {latest.source}</p>}
-      </details>
-      <p className="sr-only" role="status">{refreshStatus}</p>
-    </div>
+    <section className="panel table-panel dashboard-positions" data-reveal>
+      <PanelHeading title="Positions principales">
+        <button className="secondary" aria-label="Voir tout le portefeuille" onClick={onPortfolio}>Tout voir <Icon name="next" /></button>
+      </PanelHeading>
+      <AssetTable assets={assets} display={display} quotes={quotes} onOpen={onOpen} limit={6} compact />
+    </section>
 
     <div className="metric-grid dashboard-metrics" aria-label="Indicateurs du portefeuille" data-reveal>
       <Metric label="Capital investi" icon="wallet" note={total.costCount < holdings.length ? 'Coûts connus des positions ouvertes'
         : total.estimated ? 'Estimation incluse' : 'Positions ouvertes'}>{total.costCount ? display.format(total.cost) : '—'}</Metric>
-      <Metric label="Actifs détenus" icon="positions">{assets.length}</Metric>
-      <Metric label="Plateformes" icon="platforms">{platforms.length}</Metric>
       <Metric label="Résultat sur la période" icon="clock" note={[period, groupCount ? 'Positions individuelles' : null,
         periodChange === null ? 'Relevés insuffisants' : 'Hors flux'].filter(Boolean).join(' · ')}>
         <Change value={periodChange}>{periodChange === null ? '—' : display.format(periodChange, { day: last?.date, signed: true })}</Change>
       </Metric>
-      {declaredGroups.length > 0 && <Metric label="Capital net des groupes estimatifs" note={declaredCapital === null ? 'Taux de change manquant' : undefined}>
-        {declaredCapital === null ? '—' : display.format(declaredCapital)}
-      </Metric>}
+    </div>
+    <div className="metric-grid dashboard-counts" aria-label="Composition du portefeuille" data-reveal>
+      <Metric label="Actifs détenus" icon="positions" note="Positions exactes">{assets.length}</Metric>
+      <Metric label="Plateformes" icon="platforms" note="Établissements suivis">{platforms.length}</Metric>
     </div>
 
+    {groupsContent && <div className="dashboard-groups" data-reveal>
+      {groupsContent}
+      {declaredGroups.length > 0 && <div className="group-capital-note"><Icon name="group" />
+        <span>Capital net des groupes estimatifs <strong>{declaredCapital === null ? 'Taux de change manquant' : display.format(declaredCapital)}</strong></span>
+      </div>}
+    </div>}
+
     {recent.length > 0 && <section className="panel dashboard-activity" data-reveal>
-      <PanelHeading title="Activité récente"><button type="button" className="text-button" onClick={onJournal} aria-label="Voir les transactions"><Icon name="next" /></button></PanelHeading>
+      <PanelHeading title="Activité récente"><button type="button" className="text-button" onClick={onJournal} aria-label="Voir les transactions">Le journal <Icon name="next" /></button></PanelHeading>
       <ul>{recent.map(item => {
         const label = item.type === 'operation' ? operationNames[item.value.kind] : 'Acquisition initiale'
         return <li key={item.type + '/' + item.value.id}>
-          <Icon name={item.type === 'operation' ? item.value.kind : 'wallet'} />
-          <div><strong>{item.value.name}</strong><small>{label} · {timestamp.format(item.at)}</small></div>
+          <span className="activity-icon"><Icon name={item.type === 'operation' ? item.value.kind : 'wallet'} /></span>
+          <div><strong>{item.value.name}</strong><small>{label}</small></div>
+          <time dateTime={new Date(item.at).toISOString()}>{timestamp.format(item.at)}</time>
         </li>
       })}</ul>
     </section>}
+
+    <details className="panel quote-status floating-glass" data-reveal>
+      <summary><Icon name="diagnostic" /><span>État des cotations</span><small>{demo ? 'Démo' : unknown || stale ? 'À vérifier' : lastChecked === null ? 'En attente' : 'Dernière vérification'}</small></summary>
+      <dl>
+        <div><dt>Valorisations incomplètes</dt><dd>{unknown}</dd></div>
+        <div><dt>Cours anciens ou non horodatés</dt><dd>{stale}</dd></div>
+        {manual > 0 && <div><dt>Actifs valorisés manuellement</dt><dd>{manual}</dd></div>}
+      </dl>
+      {lastChecked !== null && !demo && <p className="hint">Dernière vérification · {timestamp.format(lastChecked)}</p>}
+      {latest && !demo && <p className="hint">Dernier cours daté · {timestamp.format(latest.sourceAt)} · {latest.source}</p>}
+      <p className="sr-only" role="status">{refreshStatus}</p>
+    </details>
 
     <details className="panel dashboard-insights"><summary>Résultats et classement</summary>
       <div className="metric-grid embedded">

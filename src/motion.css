@@ -32,7 +32,7 @@
 @keyframes iw-card-in { from { opacity: .3; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes iw-curve { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0); } }
 @keyframes iw-chart-fill { from { opacity: 0; } to { opacity: 1; } }
-.chart-line { animation: iw-curve 560ms var(--ease-premium) both; }
+.chart-line, .chart-glow { animation: iw-curve 560ms var(--ease-premium) both; }
 .chart-area { animation: iw-chart-fill 450ms ease-out both; }
 .history-chart .chart-crosshair { transition: opacity var(--motion-fast) ease; }
 dialog[open].add-actions-dialog { animation: iw-dialog-enter var(--motion-slow) var(--ease-premium) both; }

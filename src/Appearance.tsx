@@ -92,10 +92,11 @@ function ThemeOptions<T extends keyof typeof themeLabels>({ label, variants, sel
       <input type="radio" name={label} checked={selected === variant} onChange={() => onSelect(variant)} />
       <span className="theme-preview" data-variant={variant} aria-hidden="true">
         <span className="preview-rail"><i /><i /><i /></span>
-        <span className="preview-card"><small>Patrimoine</small>
+        <span className="preview-hero"><small>Patrimoine</small><b>— CHF</b></span>
+        <span className="preview-card">
           <svg viewBox="0 0 90 22" preserveAspectRatio="none"><path d="M1 20 L16 16 L29 18 L44 8 L58 11 L72 4 L89 2" /></svg>
         </span>
-        <span className="preview-accent">+</span>
+        <span className="preview-widget"><i /><i /></span><span className="preview-accent">+</span>
       </span>
       <strong>{themeLabels[variant]}</strong>
     </label>)}

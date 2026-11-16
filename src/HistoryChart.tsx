@@ -43,6 +43,7 @@ export default function HistoryChart({ history, selection, display, range, choos
 
   return <section className="panel history-panel" data-reveal aria-labelledby={id}>
     <h2 id={id}>{individualOnly ? 'Évolution des positions individuelles' : 'Évolution du portefeuille'}</h2>
+    <p className="history-caption">{metric === 'value' ? 'Valeur suivie au fil du temps' : 'Résultat cumulé hors flux d’investissement'}</p>
     {individualOnly && <p className="hint history-scope">Les portefeuilles groupés sont exclus de ce graphique.</p>}
     <div className="history-toolbar">
       <PeriodButtons range={range} choose={chooseRange} />

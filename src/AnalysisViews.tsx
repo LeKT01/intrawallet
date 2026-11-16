@@ -37,6 +37,8 @@ export function AnalyticsView({ holdings, history, display, individualHistory }:
   const filtered = holdings.filter(item => (!category || item.category === category) && (!platform || platformKey(item.platform) === platform))
   const assets = consolidate(filtered)
   const total = summarize(filtered)
+  const contributors = assets.filter(item => item.gain !== null).sort((a, b) => b.gain!.abs().cmp(a.gain!.abs())).slice(0, 10)
+  const largestContribution = contributors[0]?.gain?.abs() ?? new Decimal(0)
   const top = assets.slice(0, 3).reduce((amount, item) => amount.plus(item.amount), new Decimal(0))
   const groups = [
     { title: 'Catégorie', rows: grouped(filtered, item => categories[item.category]) },
@@ -76,12 +78,19 @@ export function AnalyticsView({ holdings, history, display, individualHistory }:
       </section>)}
       <section className="panel analysis-panel"><PanelHeading title="Devises de cotation" description="Répartition par devise du cours observé. L’exposition économique des fonds peut différer." />
         <Allocation rows={exposure} display={display} /></section>
-      <section className="panel analysis-panel"><PanelHeading title="Contributions latentes" description="Gains et pertes des positions ouvertes au coût connu." />
+      <section className="panel analysis-panel analysis-contributions"><PanelHeading title="Contributions latentes" description="Gains et pertes des positions ouvertes au coût connu." />
         {assets.every(item => item.gain === null) && <p className="inline-empty">Aucune position avec un coût et un cours connus.</p>}
-        <ul className="analysis-results">{assets.filter(item => item.gain !== null).sort((a, b) => b.gain!.abs().cmp(a.gain!.abs()))
-          .slice(0, 10).map(item => <li key={item.key}><span>{item.name}</span><Change value={item.gain}>{display.format(item.gain!, { signed: true })}</Change></li>)}</ul>
+        <ul className="analysis-results">{contributors.map(item => <li key={item.key}>
+          <span>{item.name}</span><Change value={item.gain}>{display.format(item.gain!, { signed: true })}</Change>
+          <span className={'contribution-track ' + (item.gain!.gt(0) ? 'positive' : item.gain!.lt(0) ? 'negative' : 'muted')} aria-hidden="true">
+            <i style={{ width: (largestContribution.gt(0) ? item.gain!.abs().div(largestContribution).times(100).toNumber() : 0) + '%' }} />
+          </span>
+        </li>)}</ul>
       </section>
     </div>
+    <details className="panel analysis-breakdown"><summary>Répartition complète par actif</summary>
+      <Allocation rows={assets.map(asset => ({ label: asset.name + ' · ' + asset.reference, amount: asset.amount }))} display={display} />
+    </details>
     <section className="panel chart-panel"><PanelHeading title="Évolution de la répartition" description={individualHistory ? "Poids historique des positions individuelles, sur les dates valorisables." : "Poids historique dans l’ensemble du portefeuille, sur les dates valorisables."} />
       <div className="filter-bar"><label>Catégorie historique<select value={historyCategory} onChange={event => setHistoryCategory(event.target.value as Category)}>
         {categoryEntries.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
