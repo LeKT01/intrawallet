@@ -1,0 +1,67 @@
+name: Déployer IntraWallet sur Infomaniak
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: intrawallet-infomaniak
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main' && vars.INFOMANIAK_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    environment:
+      name: infomaniak
+      url: https://intrawallet.nova-studios.site
+    env:
+      APP_URL: https://intrawallet.nova-studios.site
+      INFOMANIAK_HOST: ${{ vars.INFOMANIAK_HOST }}
+      INFOMANIAK_USER: ${{ vars.INFOMANIAK_USER }}
+      INFOMANIAK_WEB_ROOT: ${{ vars.INFOMANIAK_WEB_ROOT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+        env:
+          VITE_MARKET_RELAY_URL: ${{ env.APP_URL }}
+      - name: Vérifier le relais PHP et préparer les fichiers
+        run: |
+          php -l deploy/infomaniak/market.php
+          cp deploy/infomaniak/market.php deploy/infomaniak/.htaccess dist/
+      - name: Transférer les fichiers par SSH
+        env:
+          SSH_KEY: ${{ secrets.INFOMANIAK_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.INFOMANIAK_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          [[ "$INFOMANIAK_HOST" =~ ^[a-zA-Z0-9.-]+$ && "$INFOMANIAK_USER" =~ ^[a-zA-Z0-9_-]+$ ]]
+          [[ "$INFOMANIAK_WEB_ROOT" =~ ^/?[a-zA-Z0-9_-][a-zA-Z0-9_./-]+$ && "$INFOMANIAK_WEB_ROOT" != *..* ]]
+          [[ -n "$SSH_KEY" && -n "$SSH_KNOWN_HOSTS" ]]
+          umask 077
+          keydir=$(mktemp -d)
+          trap 'rm -rf "$keydir"' EXIT
+          printf '%s\n' "$SSH_KEY" > "$keydir/identity"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$keydir/known_hosts"
+          ssh_opts="ssh -i $keydir/identity -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$keydir/known_hosts"
+          destination="$INFOMANIAK_USER@$INFOMANIAK_HOST:${INFOMANIAK_WEB_ROOT%/}/"
+          rsync -rt --delay-updates --exclude=index.html --exclude=sw.js -e "$ssh_opts" dist/ "$destination"
+          rsync -rt --delay-updates -e "$ssh_opts" dist/index.html dist/sw.js "$destination"
+      - name: Vérifier HTTPS et les routes après déploiement
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 15 "$APP_URL/" -o /tmp/intrawallet-live.html
+          cmp dist/index.html /tmp/intrawallet-live.html
+          curl --fail --silent --show-error --max-time 15 "$APP_URL/sw.js" -o /tmp/intrawallet-live-sw.js
+          cmp dist/sw.js /tmp/intrawallet-live-sw.js
+          status=$(curl --silent --show-error --max-time 15 -o /dev/null -w '%{http_code}' "$APP_URL/market/eodhd/eod/LLY.US")
+          [[ "$status" == 400 ]]

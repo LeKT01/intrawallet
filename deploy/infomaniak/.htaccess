@@ -1,0 +1,7 @@
+RewriteEngine On
+RewriteRule ^market/(?:six/etf-closings|xetra/nqse|tradegate/vusa|coinmarketcap/quotes|eodhd/(?:search|eod)/[^/]+)$ market.php [END]
+<IfModule mod_headers.c>
+  <FilesMatch "^(index\.html|sw\.js|manifest\.webmanifest)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+</IfModule>
