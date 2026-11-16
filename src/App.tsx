@@ -1,3 +1,5 @@
+import { nativeApp } from './runtime'
+import useAndroidUpdate from './useAndroidUpdate'
 import InstallHelp from './InstallHelp'
 import { Decimal } from 'decimal.js'
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
@@ -99,6 +101,7 @@ export default function App() {
   const [message, setMessage] = useState('')
   const [quoteKey, setQuoteKey] = useState<QuoteKeys>(() => ({ finnhub: demoMode ? '' : readSessionQuoteKey('finnhub'), eodhd: demoMode ? '' : readSessionQuoteKey('eodhd'), coingecko: demoMode ? '' : readSessionQuoteKey('coingecko') }))
   const [online, setOnline] = useState(() => navigator.onLine)
+  const androidUpdate = useAndroidUpdate(nativeApp && !demoMode, online)
   useEffect(() => {
     const sync = () => setOnline(navigator.onLine)
     window.addEventListener('online', sync)
@@ -420,6 +423,10 @@ export default function App() {
       </header>
 
       <main className="workspace-content">
+        {androidUpdate.update && <section className="panel preference-panel" aria-label="Mise à jour Android">
+          <p role="status">IntraWallet {androidUpdate.update.version} est disponible.</p>
+          <a className="secondary" href={androidUpdate.update.url}>Ouvrir la release GitHub</a>
+        </section>}
         {!online && <p className="panel preference-panel" role="status">Hors ligne · données locales et derniers cours enregistrés.</p>}
         {demoMode && <aside className="demo-banner" aria-label="Mode démo">
           <div><strong>Mode démo</strong><p>Portefeuille fictif · les cours de cet espace sont simulés.</p></div>
@@ -446,7 +453,7 @@ export default function App() {
         </div>
           : loaded.failed ? <div className="panel blank"><h2>Stockage local indisponible</h2><p>Autorise le stockage du site dans ton navigateur, puis recharge la page.</p></div>
           : section === 'data' ? <>
-            <InstallHelp />
+            <InstallHelp androidUpdate={androidUpdate} online={online} />
             <section className="panel preference-panel">
               <h2 id="appearance" tabIndex={-1}>Apparence</h2><div className="filter-bar">
                 <label>Thème<select value={theme} onChange={event => chooseTheme(event.target.value as Theme)}><option value="light">Clair</option><option value="dark">Sombre</option><option value="system">Système</option></select></label>
