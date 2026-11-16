@@ -14,7 +14,7 @@ for (const theme of ['light', 'dark'] as const) {
         if (route === 'positions') {
           await expect(page.getByRole('heading', { name: 'Portefeuilles groupés' })).toBeVisible()
         }
-        await expect(page).toHaveScreenshot(`${route}-${theme}-${width}.png`, {
+        await expect.soft(page).toHaveScreenshot(`${route}-${theme}-${width}.png`, {
           animations: 'disabled', fullPage: true, maxDiffPixelRatio: 0.005,
         })
       }

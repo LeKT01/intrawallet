@@ -34,12 +34,19 @@ export function Change({ value, children }: { value: Decimal | null; children: R
   return <span className={value?.gt(0) ? 'positive' : value?.lt(0) ? 'negative' : 'muted'}>{children}</span>
 }
 
+/** Allow a line break before the currency, never inside its three-letter code. */
+export function MoneyText({ children }: { children: string }) {
+  const match = children.match(/^(.*)\s(CHF|EUR|USD)$/)
+  if (!match) return <>{children}</>
+  return <><span className="money-number">{match[1]}</span> <span className="money-currency">{match[2]}</span></>
+}
+
 export function Metric({ label, children, note, icon }: {
   label: string; children: ReactNode; note?: ReactNode; icon?: IconName
 }) {
   return <div className="metric">
     {icon && <span className="metric-icon"><Icon name={icon} /></span>}
-    <span>{label}</span><strong>{children}</strong>{note && <small>{note}</small>}
+    <span>{label}</span><strong>{typeof children === 'string' ? <MoneyText>{children}</MoneyText> : children}</strong>{note && <small>{note}</small>}
   </div>
 }
 

@@ -6,7 +6,7 @@ import type { CurrencyDisplay } from './currency'
 import type { HistoryPoint, Holding, Mark } from './ledger'
 import { categories, consolidate, platformKey, summarize, type Category } from './portfolio'
 import { Allocation, AssetTable, assetSymbol, type AllocationRow } from './PortfolioViews'
-import { Change, Icon, Metric, PanelHeading, percentLabel } from './ui'
+import { Change, Icon, Metric, MoneyText, PanelHeading, percentLabel } from './ui'
 
 const categoryEntries = Object.entries(categories) as [Category, string][]
 
@@ -147,7 +147,7 @@ export function PlatformsView({ holdings, declaredGroups, platforms, quotes, dis
     <div className="platform-cards">{groups.map(({ label, assets, entries, totals, declared, known, declaredValue }) => <details className="panel platform-panel" key={label}>
       <summary><span className="platform-icon"><Icon name="platforms" /></span><span><strong>{label}</strong><small>{assets.length} {assets.length === 1 ? 'actif' : 'actifs'}{assets.length > 0 && ' · ' + assets.slice(0, 3)
           .map(asset => assetSymbol(asset, asset.entries[0].listing) || asset.name).join(' · ')}</small></span>
-        <span><strong>{totals.priced || known.length ? display.format(totals.amount.plus(declaredValue)) : '—'}</strong><small>{declared.length || totals.gain === null ? 'Gain latent indéterminé' : display.format(totals.gain, { signed: true })}</small></span><Icon name="next" /></summary>
+        <span><strong><MoneyText>{totals.priced || known.length ? display.format(totals.amount.plus(declaredValue)) : '—'}</MoneyText></strong><small>{declared.length || totals.gain === null ? 'Gain latent indéterminé' : display.format(totals.gain, { signed: true })}</small></span><Icon name="next" /></summary>
       <div className="platform-detail">
         {known.length > 0 && <p className="hint">Valeurs déclarées incluses · {display.format(declaredValue)}</p>}
         <button className="secondary" onClick={() => edit(label)}>Renommer la plateforme</button>

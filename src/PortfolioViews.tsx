@@ -11,7 +11,7 @@ import { currencies, type Currency, type CurrencyDisplay } from './currency'
 import { assetChartMarks, type Holding, type Mark, type PortfolioData } from './ledger'
 import { categories, consolidate, platformKey, quantity, sharedUnitPrice, summarize, unitPrice, type Category } from './portfolio'
 import { quoteIsStale, quoteTiming } from './quotes'
-import { Change, Icon, Metric, PanelHeading, percentLabel, timestamp } from './ui'
+import { Change, Icon, Metric, MoneyText, PanelHeading, percentLabel, timestamp } from './ui'
 
 export type Asset = ReturnType<typeof consolidate<Holding>>[number]
 type Sort = 'value' | 'performance' | 'name'
@@ -67,7 +67,7 @@ export function AssetTable({ assets, display, quotes, onOpen, limit, order, comp
             {!limit && <small className="mobile-quantity">{quantity(asset.quantity)} unité(s)</small>}
             {!compact && mixed && <small>Plusieurs prix unitaires</small>}
             {!compact && price !== null && <small>Cours · {display.format(price, { unit: true })}</small>}</span>
-          <span className="mobile-position-value"><strong>{asset.priced ? display.format(asset.amount) : '—'}</strong>
+          <span className="mobile-position-value"><strong><MoneyText>{asset.priced ? display.format(asset.amount) : '—'}</MoneyText></strong>
             <small><span className="sr-only">Rendement latent </span><Change value={asset.returnRate}>{percentLabel(asset.returnRate)}</Change></small>
             {asset.entries.some(entry => entry.partiallyValued) && <small>{asset.priced ? 'Valeur partielle' : 'Cours manquant'}</small>}</span>
         </button>
@@ -93,7 +93,7 @@ export function AssetTable({ assets, display, quotes, onOpen, limit, order, comp
             {price !== null && asset.entries.some(entry => entry.usesManualValuation) && <small>Prix unitaire estimé</small>}
             {quote && quoteIsStale(quote) && <small className="stale-label">
               {quote.source === 'Tradegate · relevé' ? 'Heure de transaction inconnue' : 'Cours ancien'}</small>}</td>
-          <td data-label="Valeur"><strong>{asset.priced ? display.format(asset.amount) : '—'}</strong>
+          <td data-label="Valeur"><strong><MoneyText>{asset.priced ? display.format(asset.amount) : '—'}</MoneyText></strong>
             {asset.entries.some(entry => entry.usesManualValuation) && <small>Saisie manuelle incluse</small>}
             {asset.entries.some(entry => entry.partiallyValued) && <small>{asset.priced ? 'Partielle' : 'En attente de cours'}</small>}</td>
           <td data-label="Gain latent"><Change value={asset.gain}>{asset.gain === null ? '—' : display.format(asset.gain, { signed: true })}
@@ -167,7 +167,7 @@ export function PortfolioView({ holdings, platforms, display, quotes, onOpen, on
             <strong>{asset.name}</strong><small>{[assetSymbol(asset, asset.entries[0].listing), categories[asset.category]].filter(Boolean).join(' · ')}</small>
           </span><Icon name="next" /></span>
           <span className="asset-card-value">
-            <strong>{asset.priced ? display.format(asset.amount) : '—'}</strong>
+            <strong><MoneyText>{asset.priced ? display.format(asset.amount) : '—'}</MoneyText></strong>
             <Change value={asset.returnRate}><span className="sr-only">Rendement latent </span>{percentLabel(asset.returnRate)}</Change>
           </span>
           <span className="asset-card-meta">
@@ -227,7 +227,7 @@ export function AssetDetail({ asset, data, series, quote: market, display, crypt
     <section className="panel asset-detail-hero">
       <div className="asset-detail-identity"><AssetBadge asset={asset} /><div><h2>{asset.name}</h2><p>{assetDescription(entry) || categories[asset.category]}</p></div></div>
       <div className="asset-detail-price"><small>{quote ? 'Dernier cours de marché' : usesManualValuation ? 'Prix unitaire estimé' : 'Prix unitaire'}</small>
-        <strong>{mixed ? 'Plusieurs prix' : native ?? (price === null ? 'Indisponible' : display.format(price, { unit: true }))}</strong>
+        <strong><MoneyText>{mixed ? 'Plusieurs prix' : native ?? (price === null ? 'Indisponible' : display.format(price, { unit: true }))}</MoneyText></strong>
         {quote && <p className={quoteIsStale(quote) ? 'stale-label' : 'muted'}>
           {quoteIsStale(quote) && quote.source !== 'Tradegate · relevé' && 'Cours ancien · '}{quoteTiming(quote)} · {quote.instrument ? quote.instrument + ' · ' : ''}{quote.source}
           {quote.source !== 'Tradegate · relevé' && ' · ' + timestamp.format(quote.sourceAt)}

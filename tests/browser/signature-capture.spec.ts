@@ -53,6 +53,7 @@ for (const theme of ['light', 'dark'] as const) {
       ]) {
         await page.goto('/?demo=1#' + route)
         await expect(page.locator(selector).first()).toBeVisible()
+        if (route === 'positions') await expect(page.locator('.group-list')).toBeVisible()
         if (route === 'diagnostic') {
           await page.getByRole('button', { name: 'Lancer les vérifications' }).click()
           await expect(page.locator('.diagnostic-summary')).toBeVisible()

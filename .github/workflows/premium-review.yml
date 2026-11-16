@@ -54,6 +54,9 @@ jobs:
         if: ${{ !cancelled() }}
         continue-on-error: true
         run: npm run test:visual -- --output=visual-comparison
+      - name: Exporter les différences pour inspection manuelle
+        if: ${{ !cancelled() && matrix.revision == 'candidate' && steps.visual.outcome == 'failure' }}
+        run: node scripts/export-review-snapshots.mjs
       - name: Résumer la comparaison
         if: ${{ !cancelled() }}
         env:

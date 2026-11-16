@@ -113,11 +113,13 @@ test('zoom 200 % simulé par viewport CSS réduit avec échelle de pixels doubl�
 
 for (const theme of ['light', 'dark'] as const) {
   test('accessibilité des cartes, analyses et du journal · ' + theme, async ({ page }) => {
-    await page.emulateMedia({ colorScheme: theme })
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' })
     for (const [route, selector] of [['positions', '.portfolio-panel'], ['analytics', '.analysis-grid'], ['journal', '.journal-panel']]) {
       await page.goto('/?demo=1#' + route)
       await expect(page.locator(selector)).toBeVisible()
       if (route === 'positions') await page.getByRole('button', { name: 'Cartes', exact: true }).click()
+      // Measure the final UI, not a partially transparent entrance frame.
+      await expect.poll(() => page.locator(selector).evaluate(node => node.getAnimations({ subtree: true }).filter(animation => animation.playState === 'running').length)).toBe(0)
       const audit = await new AxeBuilder({ page }).include(selector).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()
       expect(audit.violations).toEqual([])
     }

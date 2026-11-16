@@ -313,6 +313,12 @@ body {
   .asset-position-summary .metric:nth-child(2) { grid-column: 1 / -1; grid-row: 1; border-bottom: 1px solid var(--line); padding-bottom: .8rem; }
   .asset-position-summary .metric:nth-child(2) > strong { font-size: 1.7rem; }
   .analysis-grid { grid-template-columns: minmax(0, 1fr); }
+  .platform-panel summary { grid-template-columns: 38px minmax(0, 1fr) 18px; gap: .35rem .7rem; }
+  .platform-panel summary > .platform-icon { grid-column: 1; grid-row: 1 / span 2; }
+  .platform-panel summary > span:nth-child(2) { grid-column: 2; grid-row: 1; }
+  .platform-panel summary > span:nth-child(3) { grid-column: 2; grid-row: 2; }
+  .platform-panel summary > span:nth-child(3) > strong { font-size: 1.2rem; font-variant-numeric: tabular-nums; }
+  .platform-panel summary > svg { grid-column: 3; grid-row: 1 / span 2; }
   .theme-preview { min-height: 6.4rem; }
 }
 @media (max-width: 360px) {
