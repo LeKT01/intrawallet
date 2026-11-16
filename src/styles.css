@@ -161,8 +161,7 @@ input::placeholder { color: var(--muted); opacity: 1; }
 .brand { display: inline-flex; align-items: center; gap: .7rem; padding: 0; border: 0; background: none; font-size: 1rem; font-weight: 820; letter-spacing: -.035em; color: inherit; text-align: left; }
 .sidebar .brand { margin: .2rem .38rem 1.75rem; }
 .brand small { display: block; color: var(--sidebar-muted); letter-spacing: .18em; font-size: .58rem; margin-top: .18rem; }
-.brand-mark { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 13px; background: var(--sidebar-active); color: var(--sidebar-selected-ink); }
-.brand-mark svg { width: 23px; height: 23px; }
+.brand-mark { display: block; flex: none; width: 38px; height: 38px; border-radius: 11px; }
 .sidebar nav { display: grid; gap: .3rem; }
 .sidebar nav button { display: flex; align-items: center; gap: .62rem; min-height: 44px; text-align: left; padding: .5rem .64rem; border: 0;
   border-radius: var(--radius-control); background: transparent; color: var(--sidebar-muted); font-size: .82rem; font-weight: 650;
@@ -588,7 +587,6 @@ fieldset[aria-busy="true"] { cursor: progress; }
   .topbar { min-height: 50px; padding-inline: 0; gap: .35rem; }
   .brand { gap: .36rem; font-size: .83rem; }
   .brand-mark { width: 32px; height: 32px; border-radius: 8px; }
-  .brand-mark svg { width: 19px; height: 19px; }
   .topbar-actions { gap: .25rem; }
   .currency-picker select { width: 3.8rem; padding-inline: .3rem; }
   .workspace-content { padding-top: 1.02rem; }

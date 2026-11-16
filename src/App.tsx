@@ -369,7 +369,7 @@ export default function App() {
   return <div className="app-layout">
     <aside className="sidebar">
       <button className="brand" onClick={() => navigate('overview')} aria-label="IntraWallet, accueil">
-        <span className="brand-mark"><Icon name="analytics" /></span><span>IntraWallet<small>PORTEFEUILLE LOCAL</small></span>
+        <img className="brand-mark" src={import.meta.env.BASE_URL + 'icons/intrawallet.svg'} alt="" /><span>IntraWallet<small>PORTEFEUILLE LOCAL</small></span>
       </button>
       <nav aria-label="Navigation principale">
         {(Object.keys(sections) as Section[]).map(item => <button type="button" key={item} className={section === item ? 'selected' : ''}
@@ -408,7 +408,7 @@ export default function App() {
     <div className="workspace">
       <header className="topbar">
         <button className="brand mobile-brand" onClick={() => navigate('overview')} aria-label="IntraWallet, accueil">
-          <span className="brand-mark"><Icon name="analytics" /></span><span>IntraWallet</span>
+          <img className="brand-mark" src={import.meta.env.BASE_URL + 'icons/intrawallet.svg'} alt="" /><span>IntraWallet</span>
         </button>
         <span className="topbar-location"><Icon name={section} /><span>Espace privé</span><Icon name="next" />{sections[section]}</span>
         <div className="topbar-actions">
