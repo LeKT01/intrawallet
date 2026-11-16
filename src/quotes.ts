@@ -1,6 +1,6 @@
 import { localMarketRelay, marketRelay, marketUrl } from './runtime.ts'
 import { Decimal } from 'decimal.js'
-import { catalogEntry, type CatalogAsset } from './catalog.ts'
+import { catalogEntry, coinGeckoAsset, coinGeckoId, type CatalogAsset } from './catalog.ts'
 import { hasUnknownQuoteTime, quoteTarget, type Mark } from './ledger.ts'
 import { dayKey, daysBefore, type FxRate } from './currency.ts'
 import { closeTimestamp, latestClosingDay, marketOpen } from './marketCalendar.ts'
@@ -92,7 +92,7 @@ export function hasAutomaticTradegateQuote(asset: QuoteAsset) {
 }
 
 export function quoteAccess(asset: QuoteAsset, keys: QuoteKeys) {
-  if (asset.category === 'crypto') return catalogEntry(asset.category, asset.reference)?.coinId ? 'available' : 'manual'
+  if (asset.category === 'crypto') return coinGeckoId(asset) ? 'available' : 'manual'
   if (hasAutomaticSixQuote(asset) || hasAutomaticNqseQuote(asset) || hasAutomaticTradegateQuote(asset)) return 'available'
   const exchange = listing(asset)
   if (!exchange && !asset.market && !asset.isin && !isinPattern.test(asset.reference)) return 'manual'
@@ -165,9 +165,22 @@ function cachedRequest(key: string, interval: number, load: () => Promise<Mark[]
   return entry.result
 }
 
+export async function searchCrypto(query: string, key = '') {
+  const url = new URL('https://api.coingecko.com/api/v3/search')
+  url.search = new URLSearchParams({ query: query.trim(), ...(key ? { x_cg_demo_api_key: key } : {}) }).toString()
+  const data = await json(url, 'CoinGecko')
+  if (!Array.isArray(data?.coins)) throw new Error('Résultats CoinGecko indisponibles.')
+  const matches = new Map<string, CatalogAsset>()
+  for (const row of data.coins.slice(0, 20)) {
+    const asset = coinGeckoAsset(row?.id, row?.name, row?.symbol)
+    if (asset) matches.set(asset.reference, asset)
+  }
+  return [...matches.values()]
+}
+
 async function cryptoQuotes(assets: QuoteAsset[], key: string, force: boolean) {
   const matched = assets.flatMap(asset => {
-    const coinId = catalogEntry(asset.category, asset.reference)?.coinId
+    const coinId = coinGeckoId(asset)
     return coinId ? [{ asset, coinId }] : []
   })
   if (!matched.length) return []
@@ -416,7 +429,7 @@ export async function fetchQuotes(assets: QuoteAsset[], keys: QuoteKeys,
 }
 
 async function cryptoHistory(asset: QuoteAsset, key: string, days: number) {
-  const coin = catalogEntry(asset.category, asset.reference)?.coinId
+  const coin = coinGeckoId(asset)
   if (!coin) return []
   const url = new URL('https://api.coingecko.com/api/v3/coins/' + encodeURIComponent(coin) + '/market_chart')
   url.search = new URLSearchParams({ vs_currency: 'chf', days: String(days), ...(key ? { x_cg_demo_api_key: key } : {}) }).toString()

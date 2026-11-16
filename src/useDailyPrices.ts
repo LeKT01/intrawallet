@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { catalogEntry } from './catalog'
+import { coinGeckoId } from './catalog'
 import { dayKey } from './currency'
 import { loadDailyPrices, saveDailyPrices } from './database'
 import { quoteTarget } from './ledger'
@@ -28,7 +28,7 @@ export default function useDailyPrices(assets: Asset[], key: string) {
       const missing = latest.current.assets.filter(asset => {
         const target = quoteTarget(asset)
         const series = cached.get(target)
-        return catalogEntry(asset.category, asset.reference)?.coinId
+        return coinGeckoId(asset)
           && (!series || dayKey(series.fetchedAt) !== today)
           && now - (attempts.current.get(key + '/' + target) ?? 0) >= 300000
       }).slice(0, 2)

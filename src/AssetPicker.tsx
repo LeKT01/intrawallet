@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { catalogEntry, searchCatalog, type CatalogAsset } from './catalog'
-import { hasAutomaticSixQuote, searchMarket } from './quotes'
+import { hasAutomaticSixQuote, searchCrypto, searchMarket } from './quotes'
 import { categories, type Category } from './portfolio'
 
 export type AssetInput = Pick<CatalogAsset, 'category' | 'reference' | 'name' | 'listing' | 'detail' | 'aliases' | 'isin' | 'market'>
@@ -35,10 +35,11 @@ interface Props {
   disableManual?: boolean
   fixedCategory?: boolean
   marketKey?: string
+  cryptoKey?: string
   onCustom: (asset: ChosenAsset | null) => void
 }
 
-export default function AssetPicker({ category, selected, onCategory, onChoose, onCustom, marketKey, fixedCategory, disableManual }: Props) {
+export default function AssetPicker({ category, selected, onCategory, onChoose, onCustom, marketKey, cryptoKey, fixedCategory, disableManual }: Props) {
   const [query, setQuery] = useState('')
   const [manual, setManual] = useState(false)
   const [name, setName] = useState('')
@@ -53,16 +54,17 @@ export default function AssetPicker({ category, selected, onCategory, onChoose, 
     setMarketStatus('')
     setSearching(false)
   }
+  const canSearch = category === 'crypto' ? cryptoKey !== undefined : Boolean(marketKey)
   async function lookup() {
-    if (!marketKey || category === 'crypto' || query.trim().length < 2 || searching) return
+    if (!canSearch || query.trim().length < 2 || searching) return
     const id = ++searchId.current
     setSearching(true)
     setMarketStatus('')
     try {
-      const items = await searchMarket(category, query, marketKey)
+      const items = category === 'crypto' ? await searchCrypto(query, cryptoKey) : await searchMarket(category, query, marketKey!)
       if (id !== searchId.current) return
       setMarketResults(items)
-      setMarketStatus(items.length ? '' : 'Aucun titre compatible trouvé. Essaie un symbole ou un ISIN.')
+      setMarketStatus(items.length ? '' : category === 'crypto' ? 'Aucune crypto trouvée par CoinGecko.' : 'Aucun titre compatible trouvé. Essaie un symbole ou un ISIN.')
     } catch (cause) {
       if (id === searchId.current) setMarketStatus(cause instanceof Error ? cause.message : 'Recherche indisponible.')
     } finally {
@@ -101,7 +103,7 @@ export default function AssetPicker({ category, selected, onCategory, onChoose, 
             <input value={name} maxLength={100} placeholder="Ex. Vanguard Global Aggregate Bond"
               onChange={event => { setName(event.target.value); onCustom(customAsset(category, event.target.value, code)) }} />
           </label>
-          <label className="full">Symbole ou ISIN <small>facultatif</small>
+          <label className="full">{category === 'crypto' ? 'Symbole' : 'Symbole ou ISIN'} <small>facultatif</small>
             <input value={code} maxLength={50} placeholder="Laisse vide si tu ne le connais pas"
               onChange={event => { setCode(event.target.value); onCustom(customAsset(category, name, event.target.value)) }} />
           </label>
@@ -126,13 +128,13 @@ export default function AssetPicker({ category, selected, onCategory, onChoose, 
               </button>
             </li>)}
           </ul>
-          {marketKey && category !== 'crypto' && query.trim().length >= 2 && <div className="market-search">
+          {canSearch && query.trim().length >= 2 && <div className="market-search">
             <button type="button" className="secondary" disabled={searching} onClick={() => void lookup()}>
-              {searching ? 'Recherche…' : 'Rechercher sur les marchés'}
+              {searching ? 'Recherche…' : category === 'crypto' ? 'Rechercher sur CoinGecko' : 'Rechercher sur les marchés'}
             </button>
             {marketStatus && <p className="hint" role="status">{marketStatus}</p>}
-            {marketResults.length > 0 && <ul className="picker-list" aria-label="Résultats EODHD">
-              {marketResults.map(asset => <li key={asset.market?.code}><button type="button" onClick={() => { resetCustom(); onChoose(asset) }}>
+            {marketResults.length > 0 && <ul className="picker-list" aria-label={category === 'crypto' ? 'Résultats CoinGecko' : 'Résultats EODHD'}>
+              {marketResults.map(asset => <li key={asset.reference}><button type="button" onClick={() => { resetCustom(); onChoose(asset) }}>
                 <strong>{asset.name}</strong><small>{assetDescription(asset)}{hasAutomaticSixQuote(asset) ? ' · Cours SIX sans clé' : ''}</small>
               </button></li>)}
             </ul>}

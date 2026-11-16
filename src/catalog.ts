@@ -55,7 +55,7 @@ export const catalog: CatalogAsset[] = [
     ['XRP', 'XRP', 'ripple'], ['Cardano', 'ADA', 'cardano'], ['Dogecoin', 'DOGE', 'dogecoin'],
     ['BNB', 'BNB', 'binancecoin'], ['Avalanche', 'AVAX', 'avalanche-2'], ['Chainlink', 'LINK', 'chainlink'],
     ['Litecoin', 'LTC', 'litecoin'], ['Polkadot', 'DOT', 'polkadot'], ['USD Coin', 'USDC', 'usd-coin'],
-    ['Tether', 'USDT', 'tether'],
+    ['Tether', 'USDT', 'tether'], ['Bittensor', 'TAO', 'bittensor'], ['Render', 'RENDER', 'render-token'],
   ] as const).map(([name, reference, coinId]) => ({ category: 'crypto' as const, name, reference, coinId })),
   ...([
     ['Apple', 'XNAS:AAPL'], ['Microsoft', 'XNAS:MSFT'], ['NVIDIA', 'XNAS:NVDA'],
@@ -74,6 +74,24 @@ for (const asset of catalog) {
 
 export function catalogEntry(category: Category, reference: string) {
   return byReference.get(category + '/' + reference)
+}
+
+const cryptoById = new Map(catalog.flatMap(asset => asset.coinId ? [[asset.coinId, asset] as const] : []))
+const coinIdPattern = /^[a-z0-9][a-z0-9-]{0,99}$/
+
+export function coinGeckoId(asset: Pick<CatalogAsset, 'category' | 'reference'>) {
+  if (asset.category !== 'crypto') return undefined
+  const id = asset.reference.startsWith('coingecko:') ? asset.reference.slice(10) : ''
+  return catalogEntry(asset.category, asset.reference)?.coinId ?? (coinIdPattern.test(id) ? id : undefined)
+}
+
+export function coinGeckoAsset(id: unknown, name: unknown, symbol: unknown): CatalogAsset | null {
+  if (typeof id !== 'string' || !coinIdPattern.test(id) || typeof name !== 'string' || !name.trim()
+    || typeof symbol !== 'string' || !symbol.trim()) return null
+  return {
+    category: 'crypto', reference: cryptoById.get(id)?.reference ?? 'coingecko:' + id,
+    name: name.trim().slice(0, 100), detail: symbol.trim().toUpperCase().slice(0, 30) + ' · CoinGecko',
+  }
 }
 
 function normalize(text: string) {

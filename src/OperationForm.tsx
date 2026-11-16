@@ -19,11 +19,12 @@ interface Props {
   fixedPlatform?: string
   platforms: string[]
   marketKey?: string
+  cryptoKey?: string
   onSave: (operation: Operation) => Promise<void>
   onClose: () => void
 }
 
-export default function OperationForm({ current, initialAsset, data, platforms, fixedPlatform, marketKey, onSave, onClose }: Props) {
+export default function OperationForm({ current, initialAsset, data, platforms, fixedPlatform, marketKey, cryptoKey, onSave, onClose }: Props) {
   const { dialog, close } = useModal(onClose)
   const [kind, setKind] = useState<OperationKind>(current?.kind ?? 'buy')
   const [category, setCategory] = useState<Category>(current?.category ?? initialAsset?.category ?? 'etf')
@@ -119,7 +120,7 @@ export default function OperationForm({ current, initialAsset, data, platforms, 
           </select>
         </label>}
         {kind === 'buy' && <AssetPicker fixedCategory={Boolean(fixedPlatform)} category={category} selected={chosen} onCategory={setCategory}
-          onChoose={setChosen} onCustom={setCustom} marketKey={marketKey} />}
+          onChoose={setChosen} onCustom={setCustom} marketKey={marketKey} cryptoKey={cryptoKey} />}
         {kind !== 'buy' && candidates.length === 0 && <p className="hint">Ajoute d’abord une position ou un achat dans ton portefeuille.</p>}
 
         <div className="step"><span>2</span><h3>Renseigne le mouvement</h3></div>

@@ -549,7 +549,7 @@ export default function App() {
       onConfigure={() => { setEditor(null); navigate('data') }} onClose={() => setEditor(null)}
       onSave={async (position, quote) => { await savePosition(position, editor !== 'new', quote); setMessage('Position enregistrée.') }} />}
     {tradeEditor !== null && <OperationForm current={tradeEditor === 'new' ? null : tradeEditor} initialAsset={tradeAsset}
-      data={data} platforms={platforms} marketKey={demoMode ? undefined : quoteKey.eodhd} onClose={() => setTradeEditor(null)}
+      data={data} platforms={platforms} marketKey={demoMode ? undefined : quoteKey.eodhd} cryptoKey={demoMode ? undefined : quoteKey.coingecko} onClose={() => setTradeEditor(null)}
       onSave={async operation => { await saveOperation(operation, tradeEditor !== 'new'); setMessage('Transaction enregistrée.') }} />}
     {toDelete && <ConfirmDialog title="Supprimer cette entrée ?" description={`L’entrée de ${toDelete.name} sera retirée du journal.`}
       confirm="Supprimer" busy={deleting} danger onClose={() => setToDelete(null)} onConfirm={() => void confirmDelete()} />}

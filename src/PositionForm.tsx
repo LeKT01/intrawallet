@@ -294,7 +294,7 @@ export default function PositionForm({ current, fixedPlatform, fixedCategory, po
               setConfirmedInstrument(false)
               setManualInput('')
               setManualCurrencyChoice(undefined)
-            }} marketKey={demoMode ? undefined : eodhd} />
+            }} marketKey={demoMode ? undefined : eodhd} cryptoKey={demoMode ? undefined : coingecko} />
 
           {asset && <>
             <section className="quote-card" aria-label="Cours de l’actif">
