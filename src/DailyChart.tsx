@@ -30,7 +30,7 @@ export function PeriodButtons({ range, choose, minimumDays = 1 }: { range: numbe
   return <><div className="segments period-segments motion-segments sliding-nav" ref={indicator} role="group" aria-label="Période">
     {choices.map(period => <button type="button" key={period.label} className="secondary segment-button"
       aria-pressed={range === period.days} onClick={() => choose(period.days)}>{period.label}</button>)}
-  </div><label className="period-select">Période
+  </div><label className="period-select"><span>Période</span>
     <select value={String(range)} onChange={event => choose(Number(event.target.value))}>
       {choices.map(period => <option key={period.days} value={String(period.days)}>{period.label}</option>)}
     </select>

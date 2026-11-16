@@ -76,7 +76,9 @@ body {
   isolation: isolate;
   overflow: hidden;
 }
-.valuation-content { position: relative; z-index: 1; min-width: 0; }
+.valuation-content { position: relative; z-index: 1; min-width: 0; container-type: inline-size; }
+.valuation-number, .valuation-currency { white-space: nowrap; }
+.valuation-panel[data-long-value] .valuation-amount { font-size: clamp(1rem, calc(160cqi / var(--amount-chars)), 3.1rem); }
 .valuation-eyebrow { display: block; font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; font-weight: 650; color: var(--hero-soft); margin-bottom: .65rem; }
 .valuation-panel .valuation-label { color: var(--hero-soft); font-size: .86rem; letter-spacing: -.01em; font-weight: 580; }
 .valuation-amount { font-size: clamp(2rem, 3.7vw, 4.15rem); line-height: 1.06; margin: .45rem 0 .65rem; font-weight: 790; letter-spacing: -.055em; overflow-wrap: normal; }
@@ -135,7 +137,10 @@ body {
 .panel-link-footer a { justify-content: space-between; width: 100%; font-size: .76rem; }
 .panel-link-footer svg { width: 14px; flex: none; }
 .dashboard-grid > .allocation-panel { backdrop-filter: none; }
-.dashboard-grid .allocation-composition { padding-inline: var(--card-pad); gap: .8rem; }
+.dashboard-grid .allocation-panel .panel-header { padding-block: 1rem .5rem; }
+.dashboard-grid .allocation-composition { padding: .35rem var(--card-pad) .6rem; gap: .8rem; }
+.dashboard-grid .allocation-composition .allocation-list li { padding-block: .2rem; }
+.dashboard-grid .allocation-composition .allocation-list li > div { gap: .25rem; }
 .dashboard-positions .compact-positions { padding: 0 .5rem .5rem; }
 .dashboard-positions .position-list button { min-height: 4.65rem; }
 .dashboard-positions .mobile-position-name strong { font-size: .88rem; }
@@ -265,6 +270,10 @@ body {
   .valuation-panel { min-height: 12rem; grid-template-columns: minmax(0, 1fr) minmax(5.1rem, .35fr); }
   .valuation-amount { font-size: clamp(1.8rem, 7.6vw, 3.65rem); }
   .valuation-art { animation: none; }
+  .valuation-panel[data-long-value] { position: relative; grid-template-columns: minmax(0, 1fr); }
+  .valuation-panel[data-long-value] .valuation-art { position: absolute; right: 1rem; top: .8rem; width: 5.8rem; height: 5.5rem; }
+  .valuation-panel[data-long-value] .valuation-label { max-width: calc(100% - 6.2rem); min-height: 2.5rem; }
+  .valuation-panel[data-long-value] .valuation-amount { margin-top: .8rem; }
   .dashboard-grid > .dashboard-metrics { order: 1; grid-column: 1 / -1; }
   .dashboard-grid > .history-panel { order: 2; }
   .dashboard-grid > .dashboard-positions { order: 3; }
@@ -294,7 +303,9 @@ body {
   .dashboard-activity li { grid-template-columns: 28px minmax(0, 1fr); gap: .35rem .6rem; }
   .dashboard-activity time { grid-column: 2; text-align: start; }
   .dashboard-activity .activity-icon { grid-row: 1 / span 2; width: 28px; height: 28px; }
+  .history-caption { display: none; }
   .history-toolbar { gap: .5rem .35rem; }
+  .history-toolbar .period-select > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .history-toolbar .period-select { gap: .25rem; font-size: .72rem; }
   .history-toolbar .period-select select { padding-inline: .35rem; max-width: 6.4rem; }
   .history-toolbar .segment-button { min-height: 44px; padding-inline: .42rem; font-size: .72rem; }

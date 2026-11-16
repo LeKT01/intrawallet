@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useState, type CSSProperties, type ReactNode } from 'react'
 import { Decimal } from 'decimal.js'
 import type { CurrencyDisplay } from './currency'
 import HistoryChart, { portfolioPeriod } from './HistoryChart'
@@ -30,6 +30,8 @@ export default function Dashboard({ assets, holdings, display, quotes, history, 
   const valuationAmount = total.priced || declaredGroups.some(group => group.value !== null) || (!holdings.length && !groupCount)
     ? display.format(total.amount.plus(declaredTotal)) : '—'
   const amountRef = useValueReveal(valuationAmount)
+  const [amountNumber, amountCurrency] = valuationAmount.split(/\s(?=(?:CHF|EUR|USD)$)/)
+  const longAmount = valuationAmount.length > 15
   const gain = declaredGroups.length || emptyExactGroups ? null : total.gain
   const returnRate = gain === null ? null : total.returnRate
   const period = periods.find(item => item.days === range)?.label
@@ -58,11 +60,11 @@ export default function Dashboard({ assets, holdings, display, quotes, history, 
   if (allocation === 'category' && declaredGroups.length) rows.push({ label: 'Groupes · valeurs déclarées', amount: declaredTotal })
 
   return <div className="dashboard-grid">
-    <section className="panel valuation-panel" data-reveal aria-labelledby="valuation-title">
+    <section className="panel valuation-panel" data-reveal data-long-value={longAmount || undefined} aria-labelledby="valuation-title">
       <div className="valuation-content">
         <span className="valuation-eyebrow">Mon patrimoine</span>
         <h2 className="valuation-label" id="valuation-title">{unknown ? 'Valeur connue du portefeuille' : 'Valeur totale du portefeuille'}</h2>
-        <p className="valuation-amount" ref={amountRef}>{valuationAmount}</p>
+        <p className="valuation-amount" ref={amountRef} style={{ '--amount-chars': amountNumber.length } as CSSProperties}><span className="valuation-number">{amountNumber}</span>{amountCurrency && <> <span className="valuation-currency">{amountCurrency}</span></>}</p>
         <div className="valuation-result">
           {gain === null ? <span>Gain latent indéterminé</span> : <>
             <Change value={gain}>{display.format(gain, { signed: true })}</Change>

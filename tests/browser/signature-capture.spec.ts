@@ -1,8 +1,9 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test'
+import { reviewTime, seedStressPortfolio } from './signature-fixtures'
 
 // Review artifacts, not golden snapshots. Never rewrite baselines automatically.
 test.skip(process.env.INTRAWALLET_CAPTURE !== '1', 'Capture à la demande dans le workflow de revue.')
-const fixedTime = new Date('2026-11-11T12:00:00+01:00')
+const fixedTime = reviewTime
 
 async function capture(page: Page, info: TestInfo, name: string, preview = false) {
   await page.evaluate(() => document.fonts.ready)
@@ -25,6 +26,12 @@ for (const [theme, width, height] of [
     await expect(page.locator('.valuation-amount')).toContainText('CHF')
     await expect(page.locator('.chart-line').first()).toBeVisible()
     await capture(page, info, `dashboard-${theme}-${width}`, true)
+    if (width <= 900) {
+      await page.locator('.history-panel').evaluate(node => node.scrollIntoView({ block: 'start' }))
+      await capture(page, info, `graphique-${theme}-${width}`, true)
+      await page.locator('.dashboard-positions').evaluate(node => node.scrollIntoView({ block: 'start' }))
+      await capture(page, info, `positions-dashboard-${theme}-${width}`, true)
+    }
   })
 }
 
@@ -42,10 +49,14 @@ for (const theme of ['light', 'dark'] as const) {
       }
       for (const [route, selector] of [
         ['positions', '.portfolio-panel'], ['journal', '.journal-panel'], ['analytics', '.analysis-grid'],
-        ['platforms', '.platform-workspace'], ['space', '.space-grid'], ['data', '.appearance-panel'],
+        ['platforms', '.platform-workspace'], ['space', '.space-grid'], ['data', '.appearance-panel'], ['diagnostic', '.diagnostic-panel'],
       ]) {
         await page.goto('/?demo=1#' + route)
         await expect(page.locator(selector).first()).toBeVisible()
+        if (route === 'diagnostic') {
+          await page.getByRole('button', { name: 'Lancer les vérifications' }).click()
+          await expect(page.locator('.diagnostic-summary')).toBeVisible()
+        }
         await shot(route)
         if (route === 'positions') {
           await page.getByRole('button', { name: 'Cartes', exact: true }).click()
@@ -93,3 +104,60 @@ for (const theme of ['light', 'dark'] as const) {
     })
   }
 }
+
+for (const theme of ['light', 'dark'] as const) for (const width of [390, 1440]) {
+  test('états complexes ' + theme + ' ' + width + ' @capture', async ({ page }, info) => {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 })
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' })
+    await page.clock.setFixedTime(reviewTime)
+    await page.goto('/?demo=1')
+    await expect(page.locator('.valuation-amount')).toContainText('CHF')
+    await seedStressPortfolio(page)
+    await expect(page.locator('.valuation-label')).toHaveText('Valeur connue du portefeuille')
+    await capture(page, info, 'montants-longs-' + theme + '-' + width, true)
+    await page.locator('.group-list').getByRole('button', { name: /Gestion déléguée/ }).click()
+    await expect(page.locator('.group-summary')).toBeVisible()
+    await capture(page, info, 'groupe-' + theme + '-' + width, true)
+    await page.getByRole('button', { name: 'Modifier', exact: true }).click()
+    await expect(page.getByRole('dialog', { name: 'Modifier le portefeuille groupé' })).toBeVisible()
+    await capture(page, info, 'formulaire-groupe-' + theme + '-' + width, true)
+    await page.keyboard.press('Escape')
+    await page.goto('/?demo=1#positions')
+    await page.getByRole('button', { name: 'Cartes', exact: true }).click()
+    await expect(page.locator('.asset-card')).toHaveCount(27)
+    await capture(page, info, 'cartes-longues-' + theme + '-' + width, true)
+    await page.goto('/#overview')
+    await expect(page.locator('.empty')).toBeVisible()
+    await capture(page, info, 'portefeuille-vide-' + theme + '-' + width, true)
+  })
+}
+for (const variant of ['champagne', 'oled'] as const) {
+  test('variante ' + variant + ' @capture', async ({ page }, info) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.clock.setFixedTime(reviewTime)
+    await page.addInitScript(variant => {
+      const theme = variant === 'oled' ? 'dark' : 'light'
+      localStorage.setItem('portefeuille.theme', theme)
+      localStorage.setItem('portefeuille.theme.' + theme, variant)
+    }, variant)
+    await page.goto('/?demo=1')
+    await expect(page.locator('.valuation-amount')).toContainText('CHF')
+    await capture(page, info, 'dashboard-' + variant, true)
+  })
+}
+test('référence officielle Vision UI @capture', async ({ page }, info) => {
+  const response = await page.request.get('https://i.ibb.co/YjWPdyT/vision-ui-free-react.png', { timeout: 15_000 }).catch(() => null)
+  test.skip(!response?.ok(), 'Capture officielle inaccessible depuis ce runner.')
+  const bytes = await response!.body()
+  await info.attach('reference-officielle-vision-ui', { body: bytes, contentType: 'image/png' })
+  await page.setContent('<canvas></canvas>')
+  const image = await page.evaluate(async data => {
+    const img = new Image(); img.src = 'data:image/png;base64,' + data
+    await img.decode()
+    const canvas = document.querySelector('canvas')!
+    canvas.width = Math.min(1440, img.width); canvas.height = Math.round(canvas.width * img.height / img.width)
+    canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height)
+    return canvas.toDataURL('image/jpeg', .7).split(',')[1]
+  }, bytes.toString('base64'))
+  console.log('IW_PREVIEW:reference-vision-ui:' + image + ':END_PREVIEW')
+})

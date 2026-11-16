@@ -29,8 +29,10 @@ jobs:
         if: matrix.revision == 'v7'
         run: |
           git show "$GITHUB_SHA:tests/browser/signature-capture.spec.ts" > "$RUNNER_TEMP/signature-capture.spec.ts"
+          git show "$GITHUB_SHA:tests/browser/signature-fixtures.ts" > "$RUNNER_TEMP/signature-fixtures.ts"
           git checkout --detach dbf7133da087d511702b5542052a6c96a6f1508e
           cp "$RUNNER_TEMP/signature-capture.spec.ts" tests/browser/signature-capture.spec.ts
+          cp "$RUNNER_TEMP/signature-fixtures.ts" tests/browser/signature-fixtures.ts
       - uses: actions/setup-node@v4
         with:
           node-version: 24
