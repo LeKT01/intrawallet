@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 
 const output = new URL('../dist/', import.meta.url)
 const files = ['index.html', 'manifest.webmanifest', ...await readdir(new URL('assets/', output)).then(names => names.map(name => 'assets/' + name)),
-  ...await readdir(new URL('icons/', output)).then(names => names.map(name => 'icons/' + name))].sort()
+  ...await readdir(new URL('app-icons/', output)).then(names => names.map(name => 'app-icons/' + name))].sort()
 const hash = createHash('sha256')
 for (const path of files) hash.update(path).update(await readFile(new URL(path, output)))
 const source = await readFile(new URL('./service-worker.js', import.meta.url), 'utf8')
