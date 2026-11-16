@@ -38,24 +38,10 @@ jobs:
         run: |
           php -l deploy/infomaniak/market.php
           cp deploy/infomaniak/market.php deploy/infomaniak/.htaccess dist/
-      - name: Transférer les fichiers par SSH
+      - name: Transférer les fichiers en FTPES
         env:
-          SSH_KEY: ${{ secrets.INFOMANIAK_SSH_KEY }}
-          SSH_KNOWN_HOSTS: ${{ secrets.INFOMANIAK_SSH_KNOWN_HOSTS }}
-        run: |
-          set -euo pipefail
-          [[ "$INFOMANIAK_HOST" =~ ^[a-zA-Z0-9.-]+$ && "$INFOMANIAK_USER" =~ ^[a-zA-Z0-9_-]+$ ]]
-          [[ "$INFOMANIAK_WEB_ROOT" =~ ^/?[a-zA-Z0-9_-][a-zA-Z0-9_./-]+$ && "$INFOMANIAK_WEB_ROOT" != *..* ]]
-          [[ -n "$SSH_KEY" && -n "$SSH_KNOWN_HOSTS" ]]
-          umask 077
-          keydir=$(mktemp -d)
-          trap 'rm -rf "$keydir"' EXIT
-          printf '%s\n' "$SSH_KEY" > "$keydir/identity"
-          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$keydir/known_hosts"
-          ssh_opts="ssh -i $keydir/identity -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$keydir/known_hosts"
-          destination="$INFOMANIAK_USER@$INFOMANIAK_HOST:${INFOMANIAK_WEB_ROOT%/}/"
-          rsync -rt --delay-updates --exclude=index.html --exclude=sw.js -e "$ssh_opts" dist/ "$destination"
-          rsync -rt --delay-updates -e "$ssh_opts" dist/index.html dist/sw.js "$destination"
+          INFOMANIAK_FTP_PASSWORD: ${{ secrets.INFOMANIAK_FTP_PASSWORD }}
+        run: python3 deploy/infomaniak/upload.py
       - name: Vérifier HTTPS et les routes après déploiement
         run: |
           set -euo pipefail

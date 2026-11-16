@@ -5,14 +5,8 @@ Ce déploiement utilise `https://intrawallet.nova-studios.site` pour la PWA et l
 ## Manager Infomaniak
 
 1. Dans l’hébergement Web, ajouter un **site Apache/PHP** pour `intrawallet.nova-studios.site` et laisser le Manager configurer son DNS, ou appliquer ses indications si la zone DNS est ailleurs.
-2. Activer Let’s Encrypt pour ce site et la redirection de HTTP vers HTTPS. Relever le dossier racine exact de ce site et les coordonnées SSH. Utiliser un compte SSH pouvant écrire dans ce dossier.
-3. Générer une clé dédiée à GitHub Actions, sans passphrase et stockée hors du dépôt. Dans PowerShell :
-
-   ```powershell
-   ssh-keygen -t ed25519 -f "$env:USERPROFILE\.ssh\intrawallet-deploy" -C "intrawallet-github-actions"
-   ```
-
-   Appuyer deux fois sur Entrée à la demande de passphrase. Installer le contenu du fichier `.pub` dans `~/.ssh/authorized_keys` du compte distant. Vérifier la connexion et confirmer l’empreinte du serveur avec Infomaniak ou une connexion déjà de confiance. Utiliser ensuite l’entrée correspondante de `known_hosts` pour GitHub. Vérifier aussi que `rsync` est disponible sur le serveur.
+2. Activer Let’s Encrypt et la redirection HTTPS.
+3. Dans **FTP / SSH**, utiliser un compte **FTP** limité au dossier du site IntraWallet. Relever l’hôte et l’utilisateur indiqués dans le Manager. Le transfert utilise FTP explicite sur TLS (FTPES), port 21, en mode passif. Tester si nécessaire avec FileZilla en exigeant le TLS explicite.
 
 ## GitHub
 
@@ -20,13 +14,13 @@ Dans **Settings → Secrets and variables → Actions**, créer les variables de
 
 | Variable | Valeur |
 | --- | --- |
-| `INFOMANIAK_HOST` | Hôte SSH indiqué dans le Manager |
-| `INFOMANIAK_USER` | Utilisateur SSH du déploiement |
-| `INFOMANIAK_WEB_ROOT` | Racine distante du site IntraWallet, relative au compte SSH ou absolue |
+| `INFOMANIAK_HOST` | Hôte FTP indiqué dans le Manager |
+| `INFOMANIAK_USER` | Utilisateur FTP du déploiement |
+| `INFOMANIAK_WEB_ROOT` | `/` si le compte FTP est déjà limité au dossier du site. Sinon, chemin du site tel qu’il apparaît dans le client FTP |
 | `INFOMANIAK_DEPLOY_ENABLED` | `true` après configuration |
 | `MARKET_RELAY_URL` | `https://intrawallet.nova-studios.site` pour les prochains APK signés |
 
-Créer les secrets de dépôt `INFOMANIAK_SSH_KEY` (fichier privé complet, sans suffixe `.pub`) et `INFOMANIAK_SSH_KNOWN_HOSTS` (entrée hôte vérifiée). Garder les secrets Android existants. Une clé EODHD personnelle reste saisie dans l’app, et le relais la transmet à EODHD. CoinMarketCap utilise l’API publique sans clé.
+Créer le secret de dépôt `INFOMANIAK_FTP_PASSWORD` avec le mot de passe du compte FTP. Garder les secrets Android existants. Une clé EODHD personnelle reste saisie dans l’app, et le relais la transmet à EODHD. CoinMarketCap utilise l’API publique sans clé.
 
 Lancer **Actions → Déployer IntraWallet sur Infomaniak → Run workflow → main**. Ensuite, chaque push sur `main` lance les tests, le build et le transfert. Le transfert laisse les anciens fichiers en place pour les clients utilisant encore une ancienne version. La vérification post-déploiement contrôle le HTML, le service worker et le routage PHP. Après le premier déploiement, tester sur iPhone avec un ETF SIX, NQSE, VUSA et LLY (LLY requiert une clé EODHD ou Finnhub), car l’accès aux fournisseurs dépend du réseau de l’hébergement.
 
