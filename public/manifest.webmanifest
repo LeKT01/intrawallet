@@ -10,7 +10,7 @@
   "theme_color": "#78352f",
   "background_color": "#f8f1eb",
   "icons": [
-    { "src": "icons/intrawallet-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icons/intrawallet-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "icons/intrawallet-wallet-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/intrawallet-wallet-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ]
 }
