@@ -64,32 +64,29 @@ export function closeTimestamp(venue: string, day: string) {
   return noon + (closeMinute(venue, day) - clock(noon, schedules[venue]?.[0] ?? 'Europe/Zurich').minute) * 60000
 }
 
-/** Visual reference intervals only: these are not portfolio valuations. */
-export function missingWeekendIntervals(points: readonly { date: string; value: unknown }[]) {
-  const first = points[0]?.date
-  const last = points.at(-1)?.date
-  if (!first || !last || first === last) return []
-  const dayMs = 86400000
-  const at = (date: string) => Date.parse(date + 'T00:00:00Z')
-  const available = points.filter(point => point.value !== null)
-  const timestamps = new Set(available.map(point => at(point.date)))
-  const intervals: { start: number; end: number; reference: string }[] = []
-  const firstTime = at(first)
-  const lastTime = at(last)
-  let index = 0
-  for (let start = firstTime; start < lastTime; start += dayMs) {
-    while (index + 1 < available.length && at(available[index + 1].date) <= start) index++
-    const reference = available[index]?.date
-    const weekday = new Date(start).getUTCDay()
-    if (!reference || at(reference) >= start || timestamps.has(start) || (weekday !== 0 && weekday !== 6)) continue
-    const end = Math.min(start + dayMs, lastTime)
-    const previous = intervals.at(-1)
-    if (previous?.end === start && previous.reference === reference) previous.end = end
-    else intervals.push({
-      start: at(reference) === start - dayMs ? at(reference) : start,
-      end,
-      reference,
-    })
+export const weekendCarryLabel = 'Marchés actions et ETF fermés · dernier relevé du portefeuille'
+
+/** Adds display points during weekend closures without changing recorded history. */
+export function carryWeekendChartPoints<T>(
+  points: readonly { date: string; value: T | null; detail?: string }[], today: string,
+) {
+  const display: (typeof points)[number][] = []
+  let previous: (typeof points)[number] | undefined
+  for (const next of [...points, undefined]) {
+    const limit = next ? daysBefore(next.date, 1) : today
+    if (previous && previous.value !== null) {
+      for (let date = daysBefore(previous.date, -1); date <= limit && marketClosedDay('', date); date = daysBefore(date, -1)) {
+        display.push({ date, value: previous.value, detail: weekendCarryLabel })
+      }
+    }
+    if (next) {
+      const last = display.at(-1)
+      previous = next.value === null && last?.value != null
+        && last.date === daysBefore(next.date, 1) && marketClosedDay('', next.date)
+        ? { date: next.date, value: last.value, detail: weekendCarryLabel }
+        : next
+      display.push(previous)
+    }
   }
-  return intervals
+  return display
 }

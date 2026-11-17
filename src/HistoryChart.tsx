@@ -2,6 +2,7 @@ import { useSlidingIndicator } from './motion'
 import { useId, useState } from 'react'
 import type { HistoryPoint } from './ledger'
 import { dayKey, daysBefore, type CurrencyDisplay } from './currency'
+import { carryWeekendChartPoints, weekendCarryLabel } from './marketCalendar'
 import { money } from './portfolio'
 import DailyChart, { formatDay, inPeriod, PeriodButtons } from './DailyChart'
 
@@ -29,13 +30,18 @@ export default function HistoryChart({ history, selection, display, range, choos
   const flow = recent?.netFlows ?? null
   const useClosedSnapshot = range === 1 && !points.some(point => point[metric] !== null)
     && recent?.closedMarketCarry && recent.date === dayKey(Date.now())
-  const graph = (useClosedSnapshot ? [recent] : points).map(point => ({
+  const recordedGraph = (useClosedSnapshot ? [recent] : points).map(point => ({
     date: point.date,
     at: range === 1 && !useClosedSnapshot ? point.at : undefined,
     value: point[metric] === null ? null : display.convert(point[metric], point.date),
     detail: point.closedMarketCarry ? 'Marchés fermés · dernières clôtures' : point.usesNonMarketPrices ? 'Prix déclarés ou d’opération inclus' : point.reconstructed ? 'Estimation sur cours historiques'
       : point.usedOlderPrices ? 'Relevé avec cours antérieurs' : undefined,
   }))
+
+  const graph = range !== 1 && showClosedMarkets
+    ? carryWeekendChartPoints(recordedGraph, dayKey(Date.now()))
+    : recordedGraph
+  const hasWeekendCarry = graph.some(point => point.detail === weekendCarryLabel)
 
   const daily = new Map(history.map((point, index) => {
     const previous = history[index - 1]
@@ -56,10 +62,11 @@ export default function HistoryChart({ history, selection, display, range, choos
       </div>
     </div>
     {(!first || !last || first === last) && <p className="hint history-coverage">Deux relevés comparables sont nécessaires pour mesurer le résultat sur la période.</p>}
-    <DailyChart showClosedMarkets={range !== 1 && showClosedMarkets} key={range + '/' + metric} points={graph} label={(metric === 'value' ? 'Courbe de valeur en ' : 'Courbe du résultat cumulé en ') + display.currency}
+    <DailyChart key={range + '/' + metric} points={graph} label={(metric === 'value' ? 'Courbe de valeur en ' : 'Courbe du résultat cumulé en ') + display.currency}
       format={value => (metric === 'result' && value.gt(0) ? '+' : '') + money(value, 2, display.currency)}
       empty={range === 1 ? 'Aucun relevé complet dans les dernières 24 heures.' : metric === 'value' ? 'La courbe apparaîtra avec une valorisation complète et un taux disponible.'
         : 'Le calcul nécessite une valorisation complète et des montants investis connus.'} />
+    {hasWeekendCarry && <p className="hint">Marchés actions et ETF fermés le week-end. Le palier reprend le dernier relevé du portefeuille.</p>}
     <details className="history-details"><summary>Détails du calcul</summary>
     <p className="hint">{range === 1 ? 'Relevés horodatés des dernières 24 heures.' : 'Relevés quotidiens et estimations selon les cours disponibles.'}
       {' '}Le résultat est calculé hors flux d’achat, de vente et d’ouverture.
