@@ -1,7 +1,7 @@
 import { useSlidingIndicator } from './motion'
 import { useId, useState } from 'react'
 import type { HistoryPoint } from './ledger'
-import { daysBefore, type CurrencyDisplay } from './currency'
+import { dayKey, daysBefore, type CurrencyDisplay } from './currency'
 import { money } from './portfolio'
 import DailyChart, { formatDay, inPeriod, PeriodButtons } from './DailyChart'
 
@@ -26,11 +26,13 @@ export default function HistoryChart({ history, selection, display, range, choos
   const { points, first, last } = selection
   const result = recent?.result ?? null
   const flow = recent?.netFlows ?? null
-  const graph = points.map(point => ({
+  const useClosedSnapshot = range === 1 && !points.some(point => point[metric] !== null)
+    && recent?.closedMarketCarry && recent.date === dayKey(Date.now())
+  const graph = (useClosedSnapshot ? [recent] : points).map(point => ({
     date: point.date,
-    at: range === 1 ? point.at : undefined,
+    at: range === 1 && !useClosedSnapshot ? point.at : undefined,
     value: point[metric] === null ? null : display.convert(point[metric], point.date),
-    detail: point.usesNonMarketPrices ? 'Prix déclarés ou d’opération inclus' : point.reconstructed ? 'Estimation sur cours historiques'
+    detail: point.closedMarketCarry ? 'Marchés fermés · dernières clôtures' : point.usesNonMarketPrices ? 'Prix déclarés ou d’opération inclus' : point.reconstructed ? 'Estimation sur cours historiques'
       : point.usedOlderPrices ? 'Relevé avec cours antérieurs' : undefined,
   }))
 
@@ -79,7 +81,7 @@ export default function HistoryChart({ history, selection, display, range, choos
             <td>{point.value === null ? '—' : display.format(point.value, { day: point.date })}</td>
             <td>{change == null ? '—' : display.format(change, { day: point.date, signed: true })}</td>
             <td>{point.result === null ? '—' : display.format(point.result, { day: point.date, signed: true })}</td>
-            <td>{point.usesNonMarketPrices ? 'Prix déclarés ou d’opération' : point.reconstructed ? 'Estimé' : point.usedOlderPrices ? 'Cours antérieurs inclus' : 'Relevé'}</td></tr>
+            <td>{point.closedMarketCarry ? 'Marchés fermés · dernières clôtures' : point.usesNonMarketPrices ? 'Prix déclarés ou d’opération' : point.reconstructed ? 'Estimé' : point.usedOlderPrices ? 'Cours antérieurs inclus' : 'Relevé'}</td></tr>
         })}</tbody>
       </table></div></details>}
   </section>

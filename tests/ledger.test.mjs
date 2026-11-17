@@ -270,3 +270,23 @@ test('le prix consolidé reste indisponible lorsque les prix ou les cotations di
     market: { code: 'NQSE.SW', currency: 'CHF' } }]), { mixed: true, price: null })
   assert.deepEqual(sharedUnitPrice([{ ...xetra, averageUnitPrice: true }]), { mixed: true, price: null })
 })
+
+test('les clôtures du vendredi complètent le week-end sans masquer un lundi manquant', () => {
+  const friday = day(7)
+  const stock = { category: 'stock', name: 'Apple', reference: 'AAPL', listing: 'XNAS:AAPL' }
+  const position = { ...opening('stock', '100', '90'), ...stock }
+  const close = date => ({ id: 'close-' + date, kind: 'market', target: 'stock/AAPL', price: '120',
+    source: 'Clôture', timing: 'close', at: day(date), sourceAt: day(date) })
+  const input = data([position], [], [close(7), close(11)])
+  const history = dailyPortfolioHistory(input, replay(input).history, [])
+  const carried = history.filter(point => point.closedMarketCarry)
+  assert.deepEqual(carried.slice(0, 2).map(point => [point.date, point.value.toFixed()]), [
+    ['2025-11-08', '120'], ['2025-11-09', '120'],
+  ])
+  assert.equal(history.some(point => point.date === '2025-11-10'), false)
+  assert.equal(history.find(point => point.at === friday).closedMarketCarry, undefined)
+  const mixed = data([position, opening('eth', '100', '90')], [], [close(7), close(11)])
+  assert.equal(dailyPortfolioHistory(mixed, replay(mixed).history, []).some(point => point.closedMarketCarry), false)
+  const older = data([position], [], [close(6)])
+  assert.equal(dailyPortfolioHistory(older, replay(older).history, []).some(point => point.closedMarketCarry), false)
+})

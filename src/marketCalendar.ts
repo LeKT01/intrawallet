@@ -31,6 +31,13 @@ export function marketClosedDay(venue: string, date: string) {
   return weekday === 0 || weekday === 6 || Boolean(holidays[venueFor(venue)]?.includes(date))
 }
 
+/** The session preceding a closed calendar day, or null on a trading day. */
+export function closingSessionForClosedDay(venue: string, date: string) {
+  if (!marketClosedDay(venue, date)) return null
+  do { date = daysBefore(date, 1) } while (marketClosedDay(venue, date))
+  return date
+}
+
 function closeMinute(venue: string, date: string) {
   return venue === 'US' && earlyUS.has(date) ? 780 : (schedules[venue]?.[2] ?? 1050)
 }

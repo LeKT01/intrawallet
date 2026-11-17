@@ -180,6 +180,7 @@ export function GroupDetail({ group, marks, rate, display, historical, onBack, o
   const observed = exact ? replay({ ...ledger, marks: ledger.marks.filter(mark => mark.source !== 'Tradegate · relevé') }).history.filter(point => point.at >= firstTrackingDate(ledger)) : []
   const graph = exact ? dailyPortfolioHistory(ledger, observed, historical).map(point => ({
     date: point.date, value: point.value === null ? null : display.convert(point.value, point.date),
+    detail: point.closedMarketCarry ? 'Marchés fermés · dernières clôtures' : undefined,
   })) : [...new Map([...group.valuations].sort((a, b) => a.at - b.at).map(point =>
     [dayKey(point.at), { date: dayKey(point.at), value: new Decimal(point.amount) }])).values()]
   const graphCurrency = exact ? display.currency : group.currency
