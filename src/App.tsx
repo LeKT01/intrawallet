@@ -137,7 +137,7 @@ export default function App() {
   const data = loaded?.data ?? emptyData
   const groups = useMemo(() => data.groups ?? [], [data.groups])
   const groupAssets = useMemo(() => groups.flatMap(group => [...group.positions, ...group.operations]), [groups])
-  const start = firstTrackingDate(data)
+  const start = useMemo(() => firstTrackingDate(data), [data])
   const needsFx = useMemo(() => data.marks.some(mark => mark.currency === 'EUR' || mark.currency === 'USD')
     || data.positions.some(position => position.valuation?.manual && position.valuation.manual.currency !== 'CHF'), [data.marks, data.positions])
   const { display, loading: fxLoading, choose: chooseCurrency, rateToCHF } = useCurrency(start, needsFx || editor !== null || groupPosition !== null || groups.some(group => group.currency !== 'CHF'))
@@ -179,8 +179,10 @@ export default function App() {
     }
     return [...byAsset.values()].map(({ category, reference, name, listing, isin, market }) => ({ category, reference, name, listing, isin, market }))
   }, [loaded, groupAssets])
-  const liveTargets = new Set(allHoldings.map(quoteTarget))
-  const liveSymbols = symbols.filter(asset => liveTargets.has(quoteTarget(asset)))
+  const liveSymbols = useMemo(() => {
+    const liveTargets = new Set(allHoldings.map(quoteTarget))
+    return symbols.filter(asset => liveTargets.has(quoteTarget(asset)))
+  }, [allHoldings, symbols])
   const dailyPrices = useDailyPrices(demoMode || !autoRefresh ? [] : symbols, quoteKey.coingecko)
   const historySources = useMemo(() => {
     const series = new Map(dailyPrices.map(item => [item.target, item]))
@@ -198,8 +200,8 @@ export default function App() {
   }, [loaded, start, historySources])
   const latest = useRef({ liveSymbols, symbols, quoteKey, marketByAsset })
   latest.current = { liveSymbols, symbols, quoteKey, marketByAsset }
-  const trackedAssets = symbols.map(asset => quoteTarget(asset) + '/' + (asset.listing ?? '') + '/' + (asset.market?.code ?? '')).sort().join('|')
-  const activeTargets = liveSymbols.map(quoteTarget).sort().join('|')
+  const trackedAssets = useMemo(() => symbols.map(asset => quoteTarget(asset) + '/' + (asset.listing ?? '') + '/' + (asset.market?.code ?? '')).sort().join('|'), [symbols])
+  const activeTargets = useMemo(() => liveSymbols.map(quoteTarget).sort().join('|'), [liveSymbols])
   const previousTargets = useRef('')
   const firstCheck = useRef(true)
 
@@ -283,15 +285,18 @@ export default function App() {
       transition?.skipTransition()
       const version = ++request
       const next = readRoute()
+      const mobile = window.matchMedia('(max-width: 900px)').matches
       const apply = () => {
         if (version !== request) return
         actionSheet.current?.close()
         setEditor(null); setTradeEditor(null); setToDelete(null)
         setRoute(next)
-        window.scrollTo({ top: 0 })
-        if (!next.anchor) requestAnimationFrame(() => heading.current?.focus())
+        if (!mobile) window.scrollTo({ top: 0 })
+        if (!next.anchor) requestAnimationFrame(() => {
+          if (version === request) heading.current?.focus({ preventScroll: mobile })
+        })
       }
-      if (document.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      if (!mobile && document.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
         transition = document.startViewTransition(() => flushSync(apply))
         void transition.ready.catch(() => undefined)
       } else apply()
