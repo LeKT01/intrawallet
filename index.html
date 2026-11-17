@@ -4,6 +4,23 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
+    <script>
+      (() => {
+        const read = key => {
+          try { return localStorage.getItem('portefeuille.' + key) } catch { return null }
+        }
+        const saved = read('theme')
+        const theme = saved === 'dark' || saved === 'light'
+          ? saved
+          : matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+        const variant = read('theme.' + theme)
+        Object.assign(document.documentElement.dataset, {
+          theme,
+          variant: theme === 'dark' ? variant === 'oled' ? 'oled' : 'graphite' : variant === 'champagne' ? 'champagne' : 'coral',
+          density: read('density') === 'compact' ? 'compact' : 'comfortable',
+        })
+      })()
+    </script>
     <meta name="description" content="Portefeuille personnel d’actions, ETF et cryptos, stocké sur cet appareil." />
     <meta name="theme-color" content="#78352f" />
     <link rel="manifest" href="./manifest.webmanifest" />

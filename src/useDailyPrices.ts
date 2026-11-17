@@ -7,6 +7,8 @@ import { quoteTarget } from './ledger'
 import type { Position } from './portfolio'
 import { fetchDailyPrices } from './quotes'
 
+const noDailyPrices: Awaited<ReturnType<typeof loadDailyPrices>> = []
+
 type Asset = Pick<Position, 'category' | 'reference' | 'name' | 'listing'>
 
 export default function useDailyPrices(assets: Asset[], key: string) {
@@ -53,5 +55,5 @@ export default function useDailyPrices(assets: Asset[], key: string) {
     return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', update) }
   }, [tracked, ready, key])
 
-  return series ?? []
+  return series ?? noDailyPrices
 }

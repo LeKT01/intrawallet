@@ -5,7 +5,7 @@ import { catalogEntry, searchCatalog } from '../src/catalog.ts'
 import { dayKey } from '../src/currency.ts'
 import { assetChartMarks, quoteTarget, replay } from '../src/ledger.ts'
 import { nqseIsin, nqseRoute, parseNqseQuote } from '../src/nqseQuote.ts'
-import { fetchQuotes, quoteAccess } from '../src/quotes.ts'
+import { fetchQuotes, hasAutomaticNqseQuote, probeQuoteProvider, quoteAccess } from '../src/quotes.ts'
 import { tradegateRoute } from '../src/tradegateQuote.ts'
 
 test('NQSE récupère le prix Xetra en EUR sans clé et rejette une autre cotation', async t => {
@@ -41,6 +41,13 @@ test('NQSE récupère le prix Xetra en EUR sans clé et rejette une autre cotati
   const asset = catalogEntry('etf', 'XETR:NQSE')
   const keys = { eodhd: '', finnhub: '', coingecko: '' }
   assert.equal(quoteAccess(asset, keys), 'available')
+  for (const listing of ['XSWX:NQSE', 'XLON:NQSE', 'XETR:NQSB', 'XETR:NQSE:OTHER']) {
+    assert.equal(hasAutomaticNqseQuote({ ...asset, listing }), false, listing)
+  }
+  assert.equal(hasAutomaticNqseQuote({ ...asset, market: { ...asset.market, currency: 'USD' } }), false)
+  assert.equal(hasAutomaticNqseQuote({ ...asset, market: { ...asset.market, code: 'NQSE.LSE' } }), false)
+  const alias = { ...asset, reference: 'XETR:NQSE' }
+
   const { marks, issues } = await fetchQuotes([asset], keys)
   assert.deepEqual(issues, [])
   assert.equal(marks.length, 1)
@@ -51,6 +58,9 @@ test('NQSE récupère le prix Xetra en EUR sans clé et rejette une autre cotati
     cost: null, valuation: null }
   assert.equal(replay({ positions: [position], operations: [], marks }, [], undefined, true).holdings[0].valuation.amount, '680.94')
   assert.equal(upstream.mock.calls.filter(call => new URL(call.arguments[0]).hostname === 'api.boerse-frankfurt.de').length, 1)
+  const separate = await fetchQuotes([alias], keys)
+  assert.equal(separate.marks[0]?.target, quoteTarget(alias))
+
 })
 
 test('VUSA Tradegate est valorisé en EUR indépendamment de la cotation SIX', async t => {
@@ -126,6 +136,7 @@ test('VUSA Tradegate est valorisé en EUR indépendamment de la cotation SIX', a
   const restored = { positions, operations: [], marks: [...marks, unknown] }
   assert.equal(replay(restored, [], undefined, true).holdings.find(position => position.reference === tradegate.reference).unitPrice.toFixed(), marks[0].price)
   assert.deepEqual(assetChartMarks(restored, quoteTarget(tradegate), []).marks, marks)
+  assert.equal(await probeQuoteProvider('Tradegate', keys), 'undated')
 })
 
 test('VWCE et VWRA restent distincts et la recherche par ISIN trouve les deux lignes', () => {

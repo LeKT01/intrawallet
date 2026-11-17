@@ -1,3 +1,6 @@
+import { useSlidingIndicator } from './motion'
+import type { CSSProperties } from 'react'
+import { readAppearancePreference, saveAppearancePreference } from './Appearance'
 import { useId, useMemo, useState } from 'react'
 import type { Decimal } from 'decimal.js'
 import AssetHistory from './AssetHistory'
@@ -6,9 +9,9 @@ import type { DailySeries } from './database'
 import { catalogEntry } from './catalog'
 import { currencies, type Currency, type CurrencyDisplay } from './currency'
 import { assetChartMarks, type Holding, type Mark, type PortfolioData } from './ledger'
-import { categories, consolidate, platformKey, quantity, summarize, unitPrice, type Category } from './portfolio'
+import { categories, consolidate, platformKey, quantity, sharedUnitPrice, summarize, unitPrice, type Category } from './portfolio'
 import { quoteIsStale, quoteTiming } from './quotes'
-import { Change, Icon, Metric, PanelHeading, percentLabel, timestamp } from './ui'
+import { Change, Icon, Metric, MoneyText, PanelHeading, percentLabel, timestamp } from './ui'
 
 export type Asset = ReturnType<typeof consolidate<Holding>>[number]
 type Sort = 'value' | 'performance' | 'name'
@@ -55,21 +58,28 @@ export function AssetTable({ assets, display, quotes, onOpen, limit, order, comp
         <option value="value">Valeur</option><option value="performance">Performance</option><option value="name">Nom</option>
       </select></label>
     </div>}
-    {sorted.length ? <><ul className={compact ? "position-list compact-positions" : "position-list mobile-positions"}>{sorted.map(asset => <li key={asset.key}>
-      <button type="button" onClick={() => onOpen(asset.key)}>
-        <AssetBadge asset={asset} />
-        <span className="mobile-position-name"><strong>{asset.name}</strong><small>{[assetSymbol(asset, asset.entries[0].listing), categories[asset.category]].filter(Boolean).join(' · ')}</small>
-          {!limit && <small className="mobile-quantity">{quantity(asset.quantity)} unité(s)</small>}
-          {!compact && asset.entries[0].unitPrice !== null && <small>Cours · {display.format(asset.entries[0].unitPrice, { unit: true })}</small>}</span>
-        <span className="mobile-position-value"><strong>{asset.priced ? display.format(asset.amount) : '—'}</strong>
-          <small><span className="sr-only">Rendement latent </span><Change value={asset.returnRate}>{percentLabel(asset.returnRate)}</Change></small>
-          {asset.entries.some(entry => entry.partiallyValued) && <small>{asset.priced ? 'Valeur partielle' : 'Cours manquant'}</small>}</span>
-      </button></li>)}</ul>
+    {sorted.length ? <><ul className={compact ? "position-list compact-positions" : "position-list mobile-positions"}>{sorted.map(asset => {
+      const { price, mixed } = sharedUnitPrice(asset.entries)
+      return <li key={asset.key}>
+        <button type="button" onClick={() => onOpen(asset.key)}>
+          <AssetBadge asset={asset} />
+          <span className="mobile-position-name"><strong>{asset.name}</strong><small>{[assetSymbol(asset, asset.entries[0].listing), categories[asset.category]].filter(Boolean).join(' · ')}</small>
+            {!limit && <small className="mobile-quantity">{quantity(asset.quantity)} unité(s)</small>}
+            {!compact && mixed && <small>Plusieurs prix unitaires</small>}
+            {!compact && price !== null && <small>Cours · {display.format(price, { unit: true })}</small>}</span>
+          <span className="mobile-position-value"><strong><MoneyText>{asset.priced ? display.format(asset.amount) : '—'}</MoneyText></strong>
+            <small><span className="sr-only">Rendement latent </span><Change value={asset.returnRate}>{percentLabel(asset.returnRate)}</Change></small>
+            {asset.entries.some(entry => entry.partiallyValued) && <small>{asset.priced ? 'Valeur partielle' : 'Cours manquant'}</small>}</span>
+        </button>
+      </li>
+    })}</ul>
     {!compact && <table className="financial-table">
       <thead><tr><th>Actif</th><th>Quantité</th><th>Cours</th><th>Valeur</th><th>Gain latent</th><th><span className="sr-only">Fiche</span></th></tr></thead>
       <tbody>{sorted.map(asset => {
-        const quote = quotes.get(asset.key)
-        const price = asset.entries[0].unitPrice
+        const { price, mixed } = sharedUnitPrice(asset.entries)
+        const market = quotes.get(asset.key)
+        const quote = price !== null && market && asset.entries.every(entry => entry.source?.id === market.id
+          && entry.source.source === market.source) ? market : undefined
         const quoteCurrency = currencies.find(code => code === quote?.currency)
         return <tr key={asset.key}>
           <th scope="row"><button type="button" className="asset-link" onClick={() => onOpen(asset.key)}>
@@ -77,12 +87,13 @@ export function AssetTable({ assets, display, quotes, onOpen, limit, order, comp
               <small>{[assetSymbol(asset, asset.entries[0].listing), categories[asset.category]].filter(Boolean).join(' · ')}</small></span>
           </button></th>
           <td data-label="Quantité">{quantity(asset.quantity)}</td>
-          <td data-label="Cours">{price === null ? '—' : display.format(price, { unit: true })}
+          <td data-label="Cours">{mixed ? 'Plusieurs prix' : price === null ? '—' : display.format(price, { unit: true })}
             {quote && <small>{[quote.instrument, quote.originalPrice && quoteCurrency && quoteCurrency !== display.currency
               ? unitPrice(quote.originalPrice, quoteCurrency) : null, quote.source].filter(Boolean).join(' · ')}</small>}
-            {asset.entries[0].usesManualValuation && <small>Prix unitaire estimé</small>}
-            {quote && quoteIsStale(quote) && <small className="stale-label">Cours ancien</small>}</td>
-          <td data-label="Valeur"><strong>{asset.priced ? display.format(asset.amount) : '—'}</strong>
+            {price !== null && asset.entries.some(entry => entry.usesManualValuation) && <small>Prix unitaire estimé</small>}
+            {quote && quoteIsStale(quote) && <small className="stale-label">
+              {quote.source === 'Tradegate · relevé' ? 'Heure de transaction inconnue' : 'Cours ancien'}</small>}</td>
+          <td data-label="Valeur"><strong><MoneyText>{asset.priced ? display.format(asset.amount) : '—'}</MoneyText></strong>
             {asset.entries.some(entry => entry.usesManualValuation) && <small>Saisie manuelle incluse</small>}
             {asset.entries.some(entry => entry.partiallyValued) && <small>{asset.priced ? 'Partielle' : 'En attente de cours'}</small>}</td>
           <td data-label="Gain latent"><Change value={asset.gain}>{asset.gain === null ? '—' : display.format(asset.gain, { signed: true })}
@@ -98,6 +109,8 @@ export function AssetTable({ assets, display, quotes, onOpen, limit, order, comp
 export function PortfolioView({ holdings, platforms, display, quotes, onOpen, onAdd }: {
   holdings: Holding[]; platforms: string[]; display: CurrencyDisplay; quotes: Map<string, Mark>; onOpen: (key: string) => void; onAdd: () => void
 }) {
+  const [layout, setLayout] = useState(() => readAppearancePreference('portfolio.layout', ['table', 'cards'] as const, 'table'))
+  const viewIndicator = useSlidingIndicator<HTMLDivElement>(layout)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<Category | ''>('')
   const [platform, setPlatform] = useState('')
@@ -106,6 +119,7 @@ export function PortfolioView({ holdings, platforms, display, quotes, onOpen, on
   const filtersId = useId()
   const assets = useMemo(() => consolidate(holdings.filter(holding =>
     (!category || holding.category === category) && (!platform || platformKey(holding.platform) === platform))), [holdings, category, platform])
+  const matching = assets.filter(asset => matchesAsset(asset, query))
   return <section className="panel table-panel portfolio-panel">
     <PanelHeading title="Positions consolidées" description="Les lots et opérations de chaque actif sont disponibles dans sa fiche.">
       <button className="primary portfolio-add" onClick={onAdd}><Icon name="plus" /> Ajouter un investissement</button>
@@ -134,7 +148,39 @@ export function PortfolioView({ holdings, platforms, display, quotes, onOpen, on
         </div>
       </div>
     </div>
-    <AssetTable assets={assets.filter(asset => matchesAsset(asset, query))} display={display} quotes={quotes} onOpen={onOpen} order={sort} />
+    <div className="portfolio-view-bar">
+      <span className="muted">{matching.length} actif{matching.length !== 1 ? 's' : ''}</span>
+      <div className="segments motion-segments sliding-nav" role="group" aria-label="Vue du portefeuille" ref={viewIndicator}>
+        {(['cards', 'table'] as const).map(view => <button className="secondary segment-button" key={view} type="button"
+          aria-pressed={layout === view} onClick={() => {
+            setLayout(view)
+            saveAppearancePreference('portfolio.layout', view)
+          }}>{view === 'cards' ? 'Cartes' : 'Tableau'}</button>)}
+      </div>
+    </div>
+    {layout === 'table' || !matching.length
+      ? <AssetTable assets={matching} display={display} quotes={quotes} onOpen={onOpen} order={sort} />
+      : <ul className="asset-card-grid" key={JSON.stringify([category, query.trim(), platform, sort])}>{sortAssets(matching, sort).map((asset, index) => <li
+        key={asset.key} style={{ '--card-sequence': Math.min(index, 5) } as CSSProperties}>
+        <button type="button" className="asset-card" onClick={() => onOpen(asset.key)}>
+          <span className="asset-card-heading"><AssetBadge asset={asset} /><span>
+            <strong>{asset.name}</strong><small>{[assetSymbol(asset, asset.entries[0].listing), categories[asset.category]].filter(Boolean).join(' · ')}</small>
+          </span><Icon name="next" /></span>
+          <span className="asset-card-value">
+            <strong><MoneyText>{asset.priced ? display.format(asset.amount) : '—'}</MoneyText></strong>
+            <Change value={asset.returnRate}><span className="sr-only">Rendement latent </span>{percentLabel(asset.returnRate)}</Change>
+          </span>
+          <span className="asset-card-meta">
+            <small>{asset.platformCount === 1 ? asset.entries[0].platform : asset.platformCount + ' plateformes'}</small>
+            {asset.entries.some(entry => entry.partiallyValued)
+              ? <small className="asset-card-state">{asset.priced ? 'Valeur partielle' : 'Cours manquant'}</small>
+              : (() => {
+                const quote = quotes.get(asset.key)
+                return quote && quoteIsStale(quote) ? <small className="asset-card-state">Cours à vérifier</small> : null
+              })()}
+          </span>
+        </button>
+      </li>)}</ul>}
   </section>
 }
 
@@ -164,28 +210,31 @@ export function Allocation({ rows, display, ring = false }: { rows: AllocationRo
   </div>
 }
 
-export function AssetDetail({ asset, data, series, quote, display, cryptoKey, onBack, onTrade, journal }: {
+export function AssetDetail({ asset, data, series, quote: market, display, cryptoKey, onBack, onTrade, journal }: {
   asset: Asset; data: PortfolioData; series?: DailySeries; quote?: Mark; display: CurrencyDisplay; cryptoKey: string
   onBack: () => void; onTrade: () => void; journal: React.ReactNode
 }) {
   const chart = assetChartMarks(data, asset.key, series?.marks ?? [])
   const entry = asset.entries[0]
+  const { price, mixed } = sharedUnitPrice(asset.entries)
+  const quote = price !== null && market && asset.entries.every(position => position.source?.id === market.id
+    && position.source.source === market.source) ? market : undefined
   const usesManualValuation = asset.entries.some(position => position.usesManualValuation)
   const native = quote?.originalPrice && quote.currency ? unitPrice(quote.originalPrice, quote.currency as Currency) : null
-  return <div className="detail-stack">
+  return <div className="detail-stack asset-detail-layout">
     <div className="detail-actions"><button className="secondary" onClick={onBack}><Icon name="back" /> Portefeuille</button>
       <button className="primary" onClick={onTrade}><Icon name="plus" /> Ajouter une transaction</button></div>
     <section className="panel asset-detail-hero">
       <div className="asset-detail-identity"><AssetBadge asset={asset} /><div><h2>{asset.name}</h2><p>{assetDescription(entry) || categories[asset.category]}</p></div></div>
-      <div className="asset-detail-price"><small>{!quote && entry.usesManualValuation ? 'Prix unitaire estimé' : 'Dernier cours de marché'}</small>
-        <strong>{native ?? (entry.unitPrice === null ? 'Indisponible' : display.format(entry.unitPrice, { unit: true }))}</strong>
+      <div className="asset-detail-price"><small>{quote ? 'Dernier cours de marché' : usesManualValuation ? 'Prix unitaire estimé' : 'Prix unitaire'}</small>
+        <strong><MoneyText>{mixed ? 'Plusieurs prix' : native ?? (price === null ? 'Indisponible' : display.format(price, { unit: true }))}</MoneyText></strong>
         {quote && <p className={quoteIsStale(quote) ? 'stale-label' : 'muted'}>
           {quoteIsStale(quote) && quote.source !== 'Tradegate · relevé' && 'Cours ancien · '}{quoteTiming(quote)} · {quote.instrument ? quote.instrument + ' · ' : ''}{quote.source}
           {quote.source !== 'Tradegate · relevé' && ' · ' + timestamp.format(quote.sourceAt)}
           {quote.receivedAt && <><br />Reçu le {timestamp.format(quote.receivedAt)}</>}</p>}</div>
     </section>
     <section className="panel chart-panel"><AssetHistory {...chart} asset={entry} cryptoKey={cryptoKey} name={asset.name} display={display} /></section>
-    <section className="panel">
+    <section className="panel asset-position-summary">
       <PanelHeading title="Ma position" description={asset.estimated ? 'Le coût inclut une estimation.' : 'Le coût moyen tient compte des frais enregistrés.'} />
       <div className="metric-grid embedded">
         <Metric label="Quantité">{quantity(asset.quantity)}</Metric>
@@ -196,12 +245,13 @@ export function AssetDetail({ asset, data, series, quote, display, cryptoKey, on
         <Metric label="Gain latent" note={percentLabel(asset.returnRate)}><Change value={asset.gain}>{asset.gain === null ? '—' : display.format(asset.gain, { signed: true })}</Change></Metric>
       </div>
     </section>
-    <section className="panel table-panel">
+    <section className="panel table-panel asset-platforms">
       <PanelHeading title="Par plateforme" />
       <div className="platform-holdings">{asset.entries.map(position => {
         const totals = summarize([position])
         return <div className="entry" key={position.id}>
-          <span><strong>{position.platform}</strong><small>{quantity(position.quantity)} unité(s)</small></span>
+          <span><strong>{position.platform}</strong><small>{quantity(position.quantity)} unité(s)</small>
+            {position.unitPrice !== null && <small>{position.averageUnitPrice ? 'Prix moyen' : 'Prix unitaire'} · {display.format(position.unitPrice, { unit: true })}</small>}</span>
           <span><strong>{position.valuation ? display.format(position.valuation.amount) : '—'}</strong>
             <small>{position.usesManualValuation ? 'Valeur saisie manuellement' : 'Valeur détenue'}</small></span>
           <span><Change value={totals.gain}>{totals.gain === null ? '—' : display.format(totals.gain, { signed: true })}</Change><small>Gain latent</small></span>

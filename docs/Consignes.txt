@@ -1,0 +1,1311 @@
+# INTRAWALLET — MASTER PROMPT V8
+## RECONSTRUCTION PREMIUM — VISION UI × INTRAWALLET
+### Direction artistique définitive, dashboard financier immersif, motion design, glassmorphism, UX/UI desktop et mobile
+
+---
+
+# 0. TA MISSION — EXÉCUTER, PAS INTERPRÉTER
+
+Tu es une équipe senior composée de :
+
+- Un Creative Director spécialisé dans les interfaces SaaS haut de gamme.
+- Un Lead Product Designer fintech.
+- Un expert en design systems, typographie et glassmorphism.
+- Un Motion Designer spécialisé dans les interfaces web.
+- Un Senior React/TypeScript Engineer.
+- Un architecte local-first / IndexedDB.
+- Un QA Engineer spécialisé dans Playwright, accessibilité et régression visuelle.
+
+Tu dois transformer **IntraWallet** en un véritable dashboard financier premium, en t'appuyant sur des références précises et une direction artistique désormais arrêtée.
+
+Les dernières refontes ont trop souvent dégradé des éléments existants pour finalement produire des interfaces ordinaires.
+
+**Cette fois, tu ne dois pas inventer une nouvelle direction artistique. Tu dois appliquer celle définie ci-dessous.**
+
+Je veux une amélioration immédiatement perceptible, sans altérer mes couleurs, mon logo, mon illustration de portefeuille ni les fonctionnalités existantes.
+
+### Repository
+
+`https://github.com/LeKT01/portefeuille-local`
+
+### Branche de travail obligatoire
+
+`refonte-premium-intrawallet`
+
+### Dernier commit audité
+
+`dbf7133da087d511702b5542052a6c96a6f1508e`
+
+### Branche de comparaison
+
+`main`
+
+Vérifie le HEAD actuel, car la branche peut avoir évolué.
+
+Travaille dans la branche existante sans écraser de modifications non commitées.
+
+Ne fusionne pas dans `main`, ne déploie pas sur Infomaniak et ne crée pas de nouvelle release sans mon autorisation.
+
+---
+
+# 1. RÉFÉRENCES DE DESIGN — ORDRE DE PRIORITÉ OBLIGATOIRE
+
+Je te fournis ici toutes les références nécessaires. Tu n'as pas besoin que je t'envoie d'autres captures, vidéos ou explications.
+
+## RÉFÉRENCE 1 — VISION UI DASHBOARD
+
+**PRIORITÉ ABSOLUE.**
+
+Figma :
+
+https://www.figma.com/community/file/1060952013207459371/vision-ui-dashboard-react-mui-dashboard-free-version
+
+Code React officiel :
+
+https://github.com/creativetimofficial/vision-ui-dashboard-react
+
+Documentation :
+
+https://www.creative-tim.com/learning-lab/react/overview/vision-ui-dashboard/
+
+C'est désormais la référence principale d'IntraWallet.
+
+Ce que tu dois reprendre :
+
+- L'atmosphère sophistiquée et immersive.
+- Les grandes cartes principales.
+- Les panneaux visuellement profonds.
+- Les surfaces foncées travaillées.
+- Les contrastes entre widgets.
+- Les dégradés et reflets subtils.
+- La hiérarchie des statistiques.
+- La qualité des graphiques.
+- Les tableaux et listes intégrés.
+- Les espacements maîtrisés.
+- L'asymétrie des grilles.
+- Le traitement très abouti des composants.
+- La sensation de produit technologique premium.
+
+L'élément le plus important de Vision UI est le **sentiment de profondeur et de cohérence globale**.
+
+Les éléments ne sont pas simplement posés les uns à côté des autres : ils appartiennent à une composition commune.
+
+### Ce qui ne doit PAS être repris
+
+- La palette bleue ou violette.
+- Les méduses ou illustrations étrangères à IntraWallet.
+- Les fonctionnalités CRM ou administratives sans rapport avec le patrimoine.
+- Les faux profils utilisateur.
+- Les faux graphiques.
+- La structure technique complète du template.
+
+Vision UI repose sur React et Material UI, mais notre application utilise déjà React et son propre CSS.
+
+**Ne migre pas automatiquement tout IntraWallet vers MUI.**
+
+Réutilise le système existant et introduis uniquement les dépendances réellement nécessaires et justifiées.
+
+---
+
+## RÉFÉRENCE 2 — RECEHTOK CRYPTO DASHBOARD
+
+Figma Design :
+
+https://www.figma.com/design/9DFHrsnbCjJi1ZaBBxaZHZ/Free-Crypto-Dashboard---RecehTok-Dark--Community-?node-id=11-0
+
+Figma Community :
+
+https://www.figma.com/community/file/885716846179508986/free-crypto-dashboard-recehtok-dark
+
+Utilise cette référence pour les composants financiers et crypto.
+
+Le fichier présente notamment :
+
+- Une sidebar sobre.
+- De petits widgets BTC, ETH et LTC.
+- Des mini-courbes.
+- Un grand graphique à plusieurs séries.
+- Une valeur sélectionnée mise en avant.
+- Des effets de lumière et de glow.
+- Des contrastes entre panneaux sombres.
+- Des indicateurs de hausse ou de baisse.
+- Des cartes de tendance compactes.
+
+### Adaptation à IntraWallet
+
+Je souhaite reprendre :
+
+1. Les petites cartes financières avec mini-sparklines lorsque les historiques existent.
+2. Le système de graphique visuellement profond.
+3. Les infobulles et valeurs sélectionnées élégantes.
+4. Les petits indicateurs de variation.
+5. Les panneaux secondaires compacts.
+6. Les effets lumineux subtils autour des données sélectionnées.
+
+**N'utilise pas les couleurs néon multicolores de RecehTok comme nouvelle palette.**
+
+Transcris ces effets dans les nuances corail, pêche et graphite d'IntraWallet.
+
+Évite d'importer les fonctions de trading et de wallets connectés qui ne correspondent pas au périmètre de notre application.
+
+---
+
+## RÉFÉRENCE 3 — HORIZON UI
+
+https://www.figma.com/community/file/1098131983383434513/horizon-ui-trendiest-open-source-admin-template-dashboard
+
+Utilise Horizon UI pour :
+
+- L'architecture des grilles.
+- Le rythme des espacements.
+- Les petites cartes KPI.
+- Les tableaux.
+- Les surfaces légères.
+- Les alignements.
+- La lisibilité.
+- La composition responsive.
+
+Horizon UI est une référence pour **l'organisation de l'information**, pas pour changer les couleurs d'IntraWallet.
+
+---
+
+## RÉFÉRENCE 4 — PURITY UI
+
+https://www.figma.com/community/file/1020707462188017225/purity-ui-dashboard-chakra-ui-dashboard
+
+Utilise Purity UI pour :
+
+- Les interfaces claires.
+- La typographie.
+- La sobriété des tableaux.
+- Les espaces de respiration.
+- Les formulaires.
+- Les composants secondaires.
+- Les états de chargement et les informations d'aide.
+
+---
+
+## RÉFÉRENCE 5 — DESIGN4USERS
+
+https://design4users.com/dashboard-design-concepts/
+
+Étudie particulièrement les concepts financiers et les dashboards présentant des graphiques, indicateurs et informations complexes.
+
+Utilise ces exemples pour évaluer les compositions et la hiérarchie visuelle.
+
+Ne mélange pas arbitrairement les styles de tous les projets présentés.
+
+---
+
+## RÉFÉRENCES COMPLÉMENTAIRES
+
+Power BI Dashboards :
+
+https://www.figma.com/community/file/1092948514982172510/power-bi-dashboards-atualizado
+
+Dashboard Community :
+
+https://www.figma.com/community/file/1048559673287861086/dashboard
+
+Ces références servent uniquement à enrichir :
+
+- La lisibilité des données.
+- Les outils de filtrage.
+- La hiérarchie des tableaux.
+- La densité de l'information.
+- Les analyses visuelles.
+
+Elles ne doivent jamais remplacer Vision UI comme référence principale.
+
+### Règle de consultation
+
+Essaie d'inspecter directement les Figma, leurs captures et, lorsque disponibles, les démos officielles.
+
+Si un fichier Figma est inaccessible, utilise les pages publiques ou les démos vérifiables, puis poursuis avec les règles explicites du présent prompt.
+
+Ne bloque pas le travail et ne me demande pas de fournir d'autres références.
+
+Ne prétends pas avoir inspecté une source inaccessible.
+
+Respecte les licences. Ne copie pas directement des illustrations, assets ou composants tiers sans autorisation compatible.
+
+---
+
+# 2. DIRECTION ARTISTIQUE DÉFINITIVE
+
+## Le concept
+
+**INTRAWALLET SIGNATURE — PREMIUM FINTECH**
+
+L'application doit combiner :
+
+- Le caractère immersif de Vision UI.
+- La finesse des widgets financiers de RecehTok.
+- La rigueur de composition de Horizon UI.
+- La lisibilité de Purity UI.
+- L'identité corail/crème/anthracite d'IntraWallet.
+
+Je veux un résultat :
+
+- Moderne.
+- Immersif.
+- Élégant.
+- Technologique.
+- Financier.
+- Professionnel.
+- Chaleureux.
+- Très soigné dans les détails.
+
+Il doit avoir une personnalité immédiatement reconnaissable.
+
+**Il est interdit de remplacer la direction artistique existante par un dashboard générique.**
+
+---
+
+# 3. COULEURS — AUCUN CHANGEMENT DE MARQUE
+
+Conserve les tokens actuels du dépôt.
+
+En particulier :
+
+- `--accent`
+- `--accent-hover`
+- `--accent-pale`
+- `--hero`
+- `--hero-ink`
+- `--hero-soft`
+- `--bg`
+- `--surface`
+- `--ink`
+- `--muted`
+
+L'intention de la palette reste :
+
+### Signature clair
+
+- Crème.
+- Ivoire.
+- Blanc chaleureux.
+- Pêche.
+- Corail de marque.
+- Texte anthracite.
+
+### Graphite sombre
+
+- Anthracite profond.
+- Graphite.
+- Gris bleuté.
+- Corail clair de marque.
+- Texte blanc adouci.
+
+### Principe fondamental
+
+Deux couleurs calmes construisent l'interface, et le corail sert d'accent fort.
+
+Les couleurs de gains, pertes et alertes conservent leur sens financier.
+
+**Ne transforme pas les gains en corail uniquement pour harmoniser le design.**
+
+---
+
+# 4. LA CARTE PATRIMOINE — ÉLÉMENT INTANGIBLE
+
+C'est le composant le plus important de l'identité d'IntraWallet.
+
+Le dernier commit V7 a correctement restauré :
+
+- Le fond dégradé corail.
+- Le montant en grand.
+- Les trois cartes superposées.
+- L'icône portefeuille.
+- L'animation légère des cartes.
+
+Ces éléments doivent être conservés.
+
+## Fichiers concernés
+
+- `src/Dashboard.tsx`
+- `src/signature.css`
+- `src/theme.css`
+- `src/motion.css`
+
+## Résultat attendu
+
+La carte patrimoine doit devenir l'équivalent du **hero illustré de Vision UI**, mais avec l'identité IntraWallet.
+
+Elle doit afficher :
+
+- Valeur totale ou valeur connue du patrimoine.
+- Gain/perte latent connu.
+- Pourcentage lorsque calculable.
+- Information de valorisation incomplète si nécessaire.
+- État des cours discrètement.
+- Illustration des trois cartes à droite.
+
+### Finition visuelle
+
+Améliore la profondeur de l'illustration :
+
+- Reflets subtils.
+- Traits translucides.
+- Ombres douces.
+- Couches bien différenciées.
+- Perspectives légères.
+- Mouvement discret au survol.
+
+Ajoute éventuellement une lumière diffuse corail derrière l'illustration.
+
+Évite les glow énormes ou une illumination excessive.
+
+**La carte doit rester parfaitement lisible même sans animation.**
+
+## Sur mobile
+
+Ne supprime pas l'illustration.
+
+Réduis-la intelligemment, tout en gardant le montant clairement visible.
+
+Aucun texte ne doit être masqué par les cartes.
+
+Ne divise pas cette carte en deux petites cartes sans impact.
+
+---
+
+# 5. NOUVELLE COMPOSITION DU DASHBOARD — DES PLACEMENTS PRÉCIS
+
+La V7 a rétabli les bonnes couleurs, mais sa composition reste trop ordinaire.
+
+Je veux une grille beaucoup plus proche de Vision UI.
+
+## 5.1 Desktop large — à partir de 1280 px
+
+Utilise une grille de 12 colonnes, avec des espacements cohérents d'environ 16 à 24 px selon la densité.
+
+### Rangée 1 — Identité et patrimoine
+
+**Colonnes 1 à 8 : carte patrimoine**
+
+- Grande carte corail.
+- Illustration des trois cartes.
+- Montant dominant.
+- Informations financières bien hiérarchisées.
+
+**Colonnes 9 à 12 : allocation**
+
+- Panneau plus compact.
+- Répartition par catégorie.
+- Graphique circulaire sobre.
+- Pourcentages alignés.
+- Navigation vers les analyses.
+
+Les deux modules doivent avoir une hauteur visuellement équilibrée.
+
+### Rangée 2 — Analyse et positions
+
+**Colonnes 1 à 8 : graphique principal**
+
+- Grande carte graphique.
+- Courbe.
+- Axes discrets.
+- Filtres de période.
+- Infobulle premium.
+- Interaction fluide.
+
+**Colonnes 9 à 12 : positions principales**
+
+- Liste compacte.
+- Actifs avec logo ou icône.
+- Montants.
+- Variations.
+- Séparateurs élégants.
+- Accès à la fiche.
+
+Le panneau de droite ne doit pas présenter un vide important si la liste contient peu d'actifs : adapte la hauteur et la composition.
+
+### Rangée 3 — Indicateurs financiers
+
+Dispose des widgets compacts :
+
+- Capital investi.
+- Résultat sur la période.
+- Actifs détenus.
+- Plateformes.
+
+Ajoute les données des groupes lorsqu'elles sont pertinentes, sans créer de cartes vides.
+
+L'importance du patrimoine doit rester nettement supérieure à celle de ces widgets.
+
+### Rangée 4 — Activité et données complémentaires
+
+Répartis selon les données disponibles :
+
+- Activité récente.
+- Portefeuilles groupés.
+- État des cours.
+- Résultats détaillés.
+
+Ne crée pas une rangée entière de cartes décoratives sans utilité.
+
+### IMPORTANT
+
+**Les modules ne doivent pas avoir tous la même hauteur, la même taille et le même style.**
+
+Crée trois niveaux de hiérarchie :
+
+- Hero principal.
+- Modules de données importants.
+- Widgets secondaires compacts.
+
+Les proportions doivent être intentionnelles.
+
+---
+
+# 6. DESKTOP INTERMÉDIAIRE ET TABLETTE
+
+Entre 768 et 1279 px :
+
+- Réduis les marges raisonnablement.
+- Évite de comprimer les textes.
+- Passe les grandes sections à une seule colonne si nécessaire.
+- Préserve la priorité de la carte patrimoine.
+- Ne maintiens pas une colonne de droite trop étroite.
+- Utilise des container queries lorsque pertinent.
+
+La tablette ne doit pas ressembler à une version desktop écrasée.
+
+---
+
+# 7. VERSION MOBILE — UNE EXPÉRIENCE À PART ENTIÈRE
+
+C'est une priorité majeure.
+
+Actuellement, la V7 empile encore de nombreuses cartes, et la navigation fixe traverse visuellement le graphique sur certaines captures.
+
+## Structure cible à 390 × 844
+
+### Première zone
+
+- Header compact.
+- Logo IntraWallet.
+- Sélecteur de devise.
+- Titre de la page.
+
+### Deuxième zone
+
+**Carte patrimoine corail sur toute la largeur.**
+
+- Montant principal.
+- Performance.
+- Illustration à droite.
+- Dimensions compactes mais généreuses.
+
+### Troisième zone
+
+Deux widgets financiers par ligne lorsque la largeur le permet.
+
+Présente au maximum les informations les plus importantes avant le graphique.
+
+### Quatrième zone
+
+**Graphique principal.**
+
+Il doit être lisible et interactif.
+
+Le sélecteur de périodes doit rester compact.
+
+### Zones suivantes
+
+- Positions.
+- Répartition.
+- Groupes.
+- Activité.
+- Détails.
+
+## Règles spécifiques
+
+- Aucun débordement horizontal.
+- Aucun texte comprimé.
+- Aucun chevauchement.
+- Aucune carte inutilement gigantesque.
+- Aucun graphique masqué par la navigation.
+- Des zones tactiles accessibles.
+- Des listes d'actifs lisibles.
+- Des montants correctement formatés.
+
+### Navigation inférieure
+
+Conserve :
+
+Accueil — Portefeuille — + — Analyses — Espace.
+
+Rends la barre flottante et légèrement translucide si le contraste le permet.
+
+Elle doit respecter les safe areas.
+
+Réserve l'espace nécessaire sous le contenu pour qu'elle ne masque pas les derniers éléments.
+
+---
+
+# 8. GRAPHIQUES — L'INSPIRATION VISION UI ET RECEHTOK
+
+Les graphiques sont aujourd'hui trop simples visuellement.
+
+Je veux une visualisation financière premium, sans fausser les données.
+
+## Graphique principal
+
+Améliore :
+
+- La netteté de la courbe.
+- Les épaisseurs.
+- Les axes.
+- Les repères temporels.
+- La grille.
+- Le tooltip.
+- Le curseur.
+- Le dernier point.
+- Les transitions de période.
+
+## Effets visuels
+
+Un effet glow très discret peut accompagner la courbe principale.
+
+Utilise une courbe nette au premier plan et éventuellement une couche lumineuse très floue derrière.
+
+La surface sous la courbe peut recevoir un dégradé très léger.
+
+N'ajoute pas de couleurs fluo étrangères à la marque.
+
+## Tooltip
+
+Au survol ou au toucher :
+
+- Date.
+- Valeur.
+- Devise.
+- Variation si connue.
+- Source ou indication de fiabilité lorsque pertinente.
+
+La bulle doit rester dans les limites du graphique.
+
+## Mini-sparklines
+
+Pour les actifs disposant d'un historique fiable, ajoute éventuellement une petite courbe dans leur carte.
+
+Pas de données ? Pas de sparkline inventée.
+
+## Performance
+
+Vérifie le rendu sur les téléphones Android et les navigateurs mobiles.
+
+Évite les filtres et animations trop lourds.
+
+Ne remplace le composant SVG existant par une bibliothèque que si le gain en ergonomie est démontré.
+
+---
+
+# 9. GLASSMORPHISM — IMPLÉMENTATION MAÎTRISÉE
+
+Vision UI et RecehTok utilisent de la profondeur, des surfaces superposées et des effets lumineux.
+
+Je veux retrouver cette sensation.
+
+## Utilisation autorisée
+
+- Sidebar.
+- Navigation mobile.
+- Header flottant si pertinent.
+- Popovers.
+- Menus.
+- Modales.
+- Panneaux contextuels.
+- Aperçus de thèmes.
+- Petits détails de l'illustration du portefeuille.
+
+## Utilisation limitée
+
+- Tables.
+- Grandes cartes de lecture financière.
+- Graphiques.
+
+Ces éléments doivent rester parfaitement lisibles.
+
+## Niveau d'effet recherché
+
+- Flou d'arrière-plan subtil.
+- Saturation modérée.
+- Bordure presque imperceptible.
+- Légère lumière interne.
+- Ombre diffuse.
+- Profondeur perceptible.
+
+Prévoyez des surfaces opaques de secours lorsque le flou n'est pas pris en charge.
+
+Évite les animations coûteuses sur de grandes zones avec `backdrop-filter`.
+
+---
+
+# 10. MOTION DESIGN — CONSERVE V6/V7 ET PERFECTIONNE
+
+Les animations actuelles sont une amélioration.
+
+Ne les supprime pas.
+
+Fichiers :
+
+- `src/motion.ts`
+- `src/motion.css`
+
+## Entrée du dashboard
+
+Séquence souhaitée :
+
+1. Sidebar et header stables.
+2. Apparition de la carte patrimoine.
+3. Révélation subtile des trois cartes du portefeuille.
+4. Apparition de l'allocation.
+5. Apparition du graphique.
+6. Révélation de la courbe.
+7. Apparition progressive des autres widgets.
+
+Durées indicatives :
+
+- Interactions : 150 à 250 ms.
+- Entrée des cartes : 250 à 350 ms.
+- Décalage entre modules : 40 à 60 ms.
+- Courbe : environ 500 à 600 ms.
+
+La séquence doit être rapide et naturelle.
+
+## Autres interactions
+
+- Indicateur actif glissant dans les menus.
+- Hover léger des cartes cliquables.
+- Compression subtile des boutons.
+- Ouverture fluide des modales.
+- Feuille Ajouter animée depuis le bas.
+- Transitions discrètes des filtres.
+- Changement de thème sans flash.
+- Animation de sélection des périodes.
+
+Ne rejoue pas toute l'animation lors d'une simple actualisation de cotation.
+
+Respecte `prefers-reduced-motion`.
+
+---
+
+# 11. FICHES D'ACTIFS — PRÉSENTATION PREMIUM
+
+Reprends le même langage que Vision UI et RecehTok.
+
+## En-tête
+
+- Identité de l'actif.
+- Ticker.
+- ISIN lorsque présent.
+- Place de cotation.
+- Cours.
+- Devise.
+- Variation.
+- État de la source.
+
+## Contenu principal
+
+- Graphique.
+- Valeur détenue.
+- Quantité.
+- Coût d'acquisition.
+- Gain ou perte latent.
+
+## Contenu secondaire
+
+- Répartition par plateforme.
+- Historique des transactions.
+- Lots.
+- Informations de cotation.
+
+Le graphique et la valeur doivent être les éléments dominants.
+
+Les détails techniques doivent rester accessibles sans surcharger l'écran.
+
+---
+
+# 12. PAGE PORTEFEUILLE — CARTES ET TABLEAU
+
+Conserve les deux vues.
+
+## Vue Cartes
+
+Inspire-toi des cartes crypto de RecehTok.
+
+Chaque carte doit être structurée autour de :
+
+- Identité.
+- Valeur.
+- Performance.
+- Informations secondaires.
+- Mini-graphique uniquement si disponible.
+
+Ajoute une légère profondeur et des interactions élégantes.
+
+## Vue Tableau
+
+Inspire-toi de Horizon UI et Purity UI.
+
+- Colonnes bien alignées.
+- Chiffres tabulaires.
+- Noms lisibles.
+- Filtres compacts.
+- Sélection claire.
+- Densité adaptée au desktop.
+
+Ne transforme pas un tableau financier en collection de petites cartes décoratives.
+
+---
+
+# 13. ANALYSES — DASHBOARD ANALYTIQUE PREMIUM
+
+Organise les analyses en sections réellement distinctes.
+
+## Vue d'ensemble
+
+- Valeur analysée.
+- Actifs.
+- Concentration.
+- Résultats connus.
+
+## Répartition
+
+- Catégorie.
+- Plateforme.
+- Actif.
+- Devise.
+
+## Performance
+
+- Contributions positives.
+- Contributions négatives.
+- Historique.
+- Indicateurs calculables.
+
+## Détails
+
+- Tableaux.
+- Répartitions complètes.
+- Informations complémentaires.
+
+Utilise des cartes de dimensions variées.
+
+Évite de multiplier les graphiques circulaires pour toutes les données.
+
+---
+
+# 14. TRANSACTIONS, GROUPES, PLATEFORMES ET PARAMÈTRES
+
+Toutes les pages doivent bénéficier du même design system.
+
+## Transactions
+
+- Journal structuré.
+- Filtres élégants.
+- Statistiques compactes.
+- Achats, ventes et transferts différenciés.
+- Actions secondaires discrètes.
+- Bonne expérience mobile.
+
+## Portefeuilles groupés
+
+- Résumé du groupe.
+- Capital net confié.
+- Valeur déclarée ou calculée.
+- Composition.
+- Allocations.
+- Graphique.
+- Versements et retraits.
+- Actions de gestion.
+
+Les allocations estimatives ne doivent jamais être présentées comme des positions exactes.
+
+## Plateformes
+
+- Vue synthétique par établissement.
+- Positions.
+- Valeurs connues.
+- Accès aux détails.
+
+## Espace
+
+- Groupes compacts.
+- Navigation simple.
+- Pas de grandes surfaces vides.
+
+## Paramètres
+
+- Apparence.
+- Devises.
+- Sources de marché.
+- Données locales.
+- Sauvegardes.
+- Installation.
+- Diagnostic.
+
+Les fenêtres et formulaires doivent être parfaitement responsive.
+
+---
+
+# 15. SYSTÈME DE THÈMES — QUALITÉ AVANT QUANTITÉ
+
+Les variantes actuelles ne sont pas suffisamment différenciées.
+
+Je veux prioriser :
+
+## THÈME 1 — SIGNATURE
+
+Le thème clair officiel d'IntraWallet.
+
+- Fond crème.
+- Surfaces ivoire.
+- Carte patrimoine corail.
+- Ombres subtiles.
+- Typographie forte.
+- Glassmorphism léger.
+- Contraste excellent.
+
+## THÈME 2 — GRAPHITE
+
+Le thème sombre officiel d'IntraWallet.
+
+- Fond anthracite.
+- Surfaces graphite.
+- Carte patrimoine corail.
+- Détails lumineux discrets.
+- Graphiques corail.
+- Contrastes maîtrisés.
+- Profondeur inspirée de Vision UI.
+
+## CHAMPAGNE
+
+Variante plus mate et minimaliste de Signature.
+
+Elle doit être visuellement identifiable, sans changer les couleurs de marque.
+
+## OLED
+
+Variante plus profonde de Graphite.
+
+Fond presque noir, surfaces mieux différenciées et détails lumineux contrôlés.
+
+Si Champagne ou OLED ne sont pas suffisamment aboutis, ne les présente pas comme des thèmes premium terminés.
+
+Préserve les préférences existantes.
+
+## Aperçus
+
+Les prévisualisations doivent montrer une mini-interface complète :
+
+- Sidebar.
+- Carte patrimoine.
+- Petit graphique.
+- Bouton.
+- Widget.
+
+Les quatre thèmes ne doivent pas être représentés par de simples rectangles de couleur.
+
+---
+
+# 16. TYPOGRAPHIE ET DESIGN SYSTEM
+
+Vérifie le chargement réel de la police.
+
+Je veux une typographie moderne, très lisible, avec une hiérarchie visuelle forte.
+
+## Montants
+
+- Grande taille sur la carte patrimoine.
+- Chiffres tabulaires dans les tableaux.
+- Gestion des longues valeurs.
+- Espacements cohérents.
+- Pas de coupure de devise.
+
+## Titres
+
+- Peu de tailles différentes.
+- Contrastes maîtrisés.
+- Espacement vertical régulier.
+- Pas de titres énormes au détriment du contenu.
+
+## Composants
+
+Centralise :
+
+- Surfaces.
+- Ombres.
+- Bordures.
+- Arrondis.
+- Espacements.
+- Boutons.
+- Inputs.
+- Badges.
+- Modales.
+- Navigation.
+- Tableaux.
+- Graphiques.
+- Animations.
+
+Évite les nouvelles règles CSS ajoutées en fin de fichier pour écraser des styles précédents sans raison.
+
+Rationalise progressivement `styles.css`, `workspace.css`, `signature.css`, `theme.css` et `motion.css`.
+
+---
+
+# 17. INTÉGRITÉ FINANCIÈRE — AUCUNE RÉGRESSION AUTORISÉE
+
+IntraWallet reste local-first.
+
+Conserve :
+
+- React/TypeScript.
+- Dexie/IndexedDB.
+- Decimal.js.
+- Les positions.
+- Les opérations.
+- Les plateformes.
+- Les groupes.
+- Les sauvegardes.
+- Les cotations.
+- CHF/EUR/USD.
+- PWA et Android.
+
+Aucune connexion de courtage ou transaction réelle ne doit être ajoutée.
+
+## Attention aux périmètres
+
+La valeur totale peut inclure des portefeuilles groupés estimatifs tandis que certains historiques ne représentent que les positions individuelles.
+
+Les interfaces doivent expliquer clairement cette différence.
+
+Ne mélange pas :
+
+- Gain latent.
+- Résultat réalisé.
+- Résultat cumulé hors flux.
+- Rendement.
+- Valeur déclarée.
+- Valeur de marché.
+
+Ne fabrique aucune donnée pour remplir une carte ou animer un graphique.
+
+## Cotations
+
+Conserve la distinction entre :
+
+- Instrument.
+- ISIN.
+- Ligne de cotation.
+- Place.
+- Devise.
+- Source.
+- Date réelle du cours.
+- Date de récupération.
+
+Toute modification de ces mécanismes doit être couverte par des tests financiers spécifiques.
+
+---
+
+# 18. VALIDATION VISUELLE OBLIGATOIRE
+
+Cette partie est aussi importante que l'implémentation.
+
+La qualité premium ne peut pas être validée uniquement par TypeScript ou des tests unitaires.
+
+## Captures à produire
+
+Sur le dashboard :
+
+- Desktop Signature 1440 × 900.
+- Desktop Graphite 1440 × 900.
+- Desktop large 1920 × 1080.
+- Mobile Signature 390 × 844.
+- Mobile Graphite 390 × 844.
+- Mobile 440 × 956.
+- Tablette 768 × 1024.
+
+Sur les pages secondaires :
+
+- Portefeuille Cartes.
+- Portefeuille Tableau.
+- Fiche d'actif.
+- Groupe.
+- Transactions.
+- Analyses.
+- Plateformes.
+- Espace.
+- Paramètres.
+- Modal d'ajout.
+- Menu Ajouter.
+
+Teste les thèmes principaux.
+
+## Conditions de test
+
+Utilise les mêmes données de démonstration pour comparer avant et après.
+
+Teste aussi :
+
+- Portefeuille vide.
+- Gros portefeuille.
+- Noms d'ETF très longs.
+- Plusieurs plateformes.
+- Groupes estimatifs.
+- Valeurs partielles.
+- Cours manquants.
+- Cotations périmées.
+- Devises CHF/EUR/USD.
+- Montants très importants.
+- Navigation au clavier.
+- Zoom navigateur.
+- Reduced motion.
+
+## Inspection humaine simulée par revue visuelle
+
+Analyse réellement les captures.
+
+Recherche :
+
+- Espaces vides excessifs.
+- Alignements incohérents.
+- Cartes trop grandes.
+- Typographie trop petite.
+- Faibles contrastes.
+- Graphiques masqués.
+- Navigation superposée au contenu.
+- Boutons mal placés.
+- Mauvaise densité.
+- Répétitions inutiles.
+
+Ne remplace jamais les captures de référence des tests sans vérifier que le résultat constitue une amélioration.
+
+---
+
+# 19. TESTS TECHNIQUES OBLIGATOIRES
+
+Exécute les scripts réellement disponibles :
+
+- `npm ci`
+- `npm test`
+- `npm run check`
+- `npm run build`
+- `npm run test:browser`
+- `npm run test:visual`
+
+Ajoute des tests lorsque nécessaire pour :
+
+- Navigation.
+- Responsive.
+- Thèmes.
+- Animations.
+- Formulaires.
+- Menu Ajouter.
+- Grilles.
+- Cotations.
+- Groupes.
+- Données locales.
+
+Vérifie les workflows GitHub lorsque disponibles.
+
+Ne prétends pas qu'un test a été exécuté s'il ne l'a pas été.
+
+---
+
+# 20. MÉTHODE DE DÉVELOPPEMENT — ORDRE STRICT
+
+## LOT 0 — BASELINE
+
+1. Vérifier le HEAD.
+2. Examiner la branche V7.
+3. Vérifier les références de design accessibles.
+4. Générer les captures de l'état actuel.
+5. Exécuter les tests initiaux.
+6. Identifier les composants à préserver.
+
+## LOT 1 — DESIGN SYSTEM VISION UI × INTRAWALLET
+
+Créer les tokens et composants communs pour :
+
+- Surface immersive.
+- Carte principale.
+- Carte secondaire.
+- Widget KPI.
+- Carte d'actif.
+- Panneau glass.
+- Tableau.
+- Tooltip.
+- Bouton.
+- Navigation.
+
+Conserver les couleurs de marque.
+
+## LOT 2 — DASHBOARD DESKTOP
+
+Implémenter réellement :
+
+- Carte patrimoine.
+- Allocation.
+- Graphique.
+- Positions principales.
+- KPI.
+- Modules secondaires.
+
+Vérifier la composition complète à 1440 × 900.
+
+## LOT 3 — DASHBOARD MOBILE ET TABLETTE
+
+Adapter la composition sans la comprimer.
+
+Vérifier l'emplacement de la navigation flottante.
+
+Le graphique et les actions doivent rester entièrement exploitables.
+
+## LOT 4 — MOTION ET MICRO-INTERACTIONS
+
+Finaliser :
+
+- Entrées de pages.
+- Révélation des cartes.
+- Sidebar.
+- Boutons.
+- Filtres.
+- Courbes.
+- Tooltips.
+- Menus.
+- Modales.
+- Changement de thème.
+
+## LOT 5 — PAGES MÉTIER
+
+Appliquer le même niveau de qualité à toutes les pages.
+
+## LOT 6 — THÈMES
+
+Finaliser Signature et Graphite.
+
+Ensuite seulement, perfectionner Champagne et OLED.
+
+## LOT 7 — QA FINAL
+
+- Tests métier.
+- Build.
+- Responsive.
+- Accessibilité.
+- Tests visuels.
+- Tests de mouvement.
+- Vérification de l'intégrité des données.
+- Documentation.
+- Commits cohérents.
+
+Continue les lots sans me demander une nouvelle explication pour chaque décision mineure.
+
+---
+
+# 21. CRITÈRES DE REFUS
+
+La refonte sera refusée si :
+
+1. Le résultat ressemble encore à une grille générique de rectangles.
+2. La carte patrimoine corail disparaît ou perd son illustration.
+3. Le design ne rappelle pas la richesse et la profondeur de Vision UI.
+4. Les couleurs de marque sont remplacées par du bleu/violet.
+5. Les animations V6/V7 disparaissent.
+6. Les thèmes ne sont que des substitutions mineures de couleurs.
+7. Le mobile reste un long empilement sans hiérarchie.
+8. Les graphiques sont recouverts par la navigation.
+9. Les KPI sont disproportionnés.
+10. Les pages secondaires ne suivent pas le même design system.
+11. Le glassmorphism est illisible ou excessif.
+12. Les effets lumineux deviennent artificiels.
+13. Les données de démonstration sont mélangées avec de vraies valeurs.
+14. Les calculs financiers sont altérés.
+15. Les captures avant/après ne sont pas vérifiées.
+
+Un build réussi ne suffit pas à valider la qualité graphique.
+
+---
+
+# 22. LIVRABLE FINAL IMPÉRATIF
+
+À la fin de ton intervention, fournis :
+
+### A. Développement
+
+- Branche utilisée.
+- Commits créés.
+- Fichiers modifiés.
+- Composants refondus.
+- Dépendances ajoutées, le cas échéant.
+- Modifications d'architecture justifiées.
+
+### B. Design
+
+- Captures avant/après.
+- Comparaison visuelle avec l'état initial.
+- Explication des nouveaux placements.
+- Application précise des inspirations Vision UI, RecehTok, Horizon UI et Purity UI.
+- Rendu desktop, tablette et mobile.
+- Rendu Signature et Graphite.
+
+### C. Animations
+
+- Liste des animations réellement implémentées.
+- Durées.
+- Déclencheurs.
+- Comportement avec mouvement réduit.
+- Captures séquentielles ou enregistrement lorsqu'il est possible d'en produire.
+
+### D. Qualité
+
+- Commandes exécutées.
+- Résultats des tests.
+- Régressions corrigées.
+- Limites restantes.
+- Compatibilité des données locales.
+
+### E. État final
+
+- Ce qui est terminé.
+- Ce qui reste éventuellement à améliorer.
+- L'état Git.
+- Confirmation qu'aucun déploiement ou merge non autorisé n'a été réalisé.
+
+---
+
+# INSTRUCTION FINALE — À EXÉCUTER
+
+Je veux une application qui donne immédiatement une impression de qualité professionnelle.
+
+**Vision UI est ta référence principale.**
+
+**RecehTok est ta référence de profondeur et de widgets financiers.**
+
+**Horizon UI est ta référence de composition.**
+
+**Purity UI est ta référence de lisibilité.**
+
+**IntraWallet reste l'identité à préserver.**
+
+Je ne veux pas de nouveau logo, pas de nouvelle palette bleue ou violette, pas de nouveau projet React et pas de réécriture des calculs financiers.
+
+Je veux une refonte visuelle ambitieuse, mais maîtrisée.
+
+La grande carte corail et son illustration de portefeuille doivent être au centre de l'expérience.
+
+Le reste du dashboard doit être reconstruit avec une composition sophistiquée, des widgets financiers de grande qualité, des graphiques immersifs, des surfaces travaillées et des animations élégantes.
+
+Les interfaces doivent être exceptionnelles aussi bien sur PC que sur smartphone.
+
+**Tu disposes maintenant des références, de l'architecture cible, des comportements à implémenter, des critères d'acceptation et de la méthode de validation. N'attends pas de nouvelles consignes de ma part.**
+
+Commence directement par analyser le HEAD actuel de `refonte-premium-intrawallet`, puis implémente cette refonte en conservant tout ce qui fonctionne.
+
+Ne fusionne pas dans `main` et ne déploie rien sans mon autorisation.
+
+**Objectif final : IntraWallet doit présenter la qualité visuelle et la profondeur d'un véritable produit fintech premium, avec sa propre identité corail/crème/anthracite.**

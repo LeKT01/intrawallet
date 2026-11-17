@@ -1,3 +1,6 @@
+import { flushSync } from 'react-dom'
+import { closeAnimatedDialog, usePageReveal, useSlidingIndicator } from './motion'
+import Appearance, { useAppearance } from './Appearance'
 import { nativeApp } from './runtime'
 import useAndroidUpdate from './useAndroidUpdate'
 import InstallHelp from './InstallHelp'
@@ -32,8 +35,8 @@ const sections = { overview: 'Vue d’ensemble', positions: 'Portefeuille', jour
 type Section = keyof typeof sections
 const spaceSections: Section[] = ['space', 'journal', 'platforms', 'data', 'diagnostic']
 const spaceGroups: { title: string; links: { label: string; description: string; section: Section; anchor?: string }[] }[] = [
-  { title: 'Activité', links: [{ label: 'Transactions', description: 'Historique des achats, ventes et transferts', section: 'journal' }] },
-  { title: 'Gestion', links: [
+  { title: 'Portefeuille', links: [
+    { label: 'Transactions', description: 'Historique des achats, ventes et transferts', section: 'journal' },
     { label: 'Plateformes', description: 'Comptes et établissements', section: 'platforms' },
     { label: 'Sauvegarde locale', description: 'Exporter ou restaurer les données', section: 'data', anchor: 'backup' },
   ] },
@@ -41,8 +44,8 @@ const spaceGroups: { title: string; links: { label: string; description: string;
     { label: 'Paramètres', description: 'Devises et cotations', section: 'data' },
     { label: 'Installation', description: 'Installer IntraWallet sur iPhone ou Android', section: 'data', anchor: 'installation' },
     { label: 'Apparence', description: 'Thème clair, sombre ou système', section: 'data', anchor: 'appearance' },
+    { label: 'Diagnostic', description: 'Vérifier le stockage, les cours et les calculs', section: 'diagnostic' },
   ] },
-  { title: 'Fiabilité', links: [{ label: 'Diagnostic', description: 'Vérifier le stockage, les cours et les calculs', section: 'diagnostic' }] },
 ]
 const descriptions: Record<Section, string> = {
   overview: 'La valeur et les mouvements de tes investissements.',
@@ -56,7 +59,6 @@ const descriptions: Record<Section, string> = {
 }
 const emptyData: PortfolioData = { positions: [], operations: [], marks: [] }
 const quoteInterval = 60000
-type Theme = 'light' | 'dark' | 'system'
 type Route = { section: Section; asset?: string; anchor?: string }
 
 function readRoute(): Route {
@@ -69,14 +71,6 @@ function readRoute(): Route {
   return { section: Object.hasOwn(sections, path) ? path as Section : 'overview' }
 }
 
-function initialTheme(): Theme {
-  try {
-    const stored = localStorage.getItem('portefeuille.theme')
-    if (stored === 'light' || stored === 'dark') return stored
-  } catch { /* Use system preference. */ }
-  return 'system'
-}
-
 function initialAutoRefresh() {
   try { return localStorage.getItem('portefeuille.auto-refresh') !== 'off' }
   catch { return true }
@@ -85,7 +79,7 @@ function initialAutoRefresh() {
 export default function App() {
   const [route, setRoute] = useState(readRoute)
   const { section } = route
-  const [theme, setTheme] = useState(initialTheme)
+  const appearance = useAppearance()
   const [autoRefresh, setAutoRefresh] = useState(initialAutoRefresh)
   const [consolidatedView, setConsolidatedView] = useState(false)
   const [groupEditor, setGroupEditor] = useState<InvestmentGroup | 'new' | null>(null)
@@ -116,6 +110,8 @@ export default function App() {
   const [lastChecked, setLastChecked] = useState<number | null>(null)
   const heading = useRef<HTMLHeadingElement>(null)
   const actionSheet = useRef<HTMLDialogElement>(null)
+  const railIndicator = useSlidingIndicator(section)
+  const bottomIndicator = useSlidingIndicator(section)
 
   function openAddActions(trigger: HTMLButtonElement) {
     const dialog = actionSheet.current
@@ -141,7 +137,7 @@ export default function App() {
   const data = loaded?.data ?? emptyData
   const groups = useMemo(() => data.groups ?? [], [data.groups])
   const groupAssets = useMemo(() => groups.flatMap(group => [...group.positions, ...group.operations]), [groups])
-  const start = firstTrackingDate(data)
+  const start = useMemo(() => firstTrackingDate(data), [data])
   const needsFx = useMemo(() => data.marks.some(mark => mark.currency === 'EUR' || mark.currency === 'USD')
     || data.positions.some(position => position.valuation?.manual && position.valuation.manual.currency !== 'CHF'), [data.marks, data.positions])
   const { display, loading: fxLoading, choose: chooseCurrency, rateToCHF } = useCurrency(start, needsFx || editor !== null || groupPosition !== null || groups.some(group => group.currency !== 'CHF'))
@@ -183,8 +179,10 @@ export default function App() {
     }
     return [...byAsset.values()].map(({ category, reference, name, listing, isin, market }) => ({ category, reference, name, listing, isin, market }))
   }, [loaded, groupAssets])
-  const liveTargets = new Set(allHoldings.map(quoteTarget))
-  const liveSymbols = symbols.filter(asset => liveTargets.has(quoteTarget(asset)))
+  const liveSymbols = useMemo(() => {
+    const liveTargets = new Set(allHoldings.map(quoteTarget))
+    return symbols.filter(asset => liveTargets.has(quoteTarget(asset)))
+  }, [allHoldings, symbols])
   const dailyPrices = useDailyPrices(demoMode || !autoRefresh ? [] : symbols, quoteKey.coingecko)
   const historySources = useMemo(() => {
     const series = new Map(dailyPrices.map(item => [item.target, item]))
@@ -202,8 +200,8 @@ export default function App() {
   }, [loaded, start, historySources])
   const latest = useRef({ liveSymbols, symbols, quoteKey, marketByAsset })
   latest.current = { liveSymbols, symbols, quoteKey, marketByAsset }
-  const trackedAssets = symbols.map(asset => quoteTarget(asset) + '/' + (asset.listing ?? '') + '/' + (asset.market?.code ?? '')).sort().join('|')
-  const activeTargets = liveSymbols.map(quoteTarget).sort().join('|')
+  const trackedAssets = useMemo(() => symbols.map(asset => quoteTarget(asset) + '/' + (asset.listing ?? '') + '/' + (asset.market?.code ?? '')).sort().join('|'), [symbols])
+  const activeTargets = useMemo(() => liveSymbols.map(quoteTarget).sort().join('|'), [liveSymbols])
   const previousTargets = useRef('')
   const firstCheck = useRef(true)
 
@@ -281,20 +279,40 @@ export default function App() {
   }, [trackedAssets, activeTargets, quoteKey.eodhd, quoteKey.finnhub, quoteKey.coingecko, autoRefresh])
 
   useEffect(() => {
+    let transition: ViewTransition | undefined
+    let request = 0
     const sync = () => {
-      actionSheet.current?.close()
-      setEditor(null); setTradeEditor(null); setToDelete(null)
+      transition?.skipTransition()
+      const version = ++request
       const next = readRoute()
-      setRoute(next)
-      window.scrollTo({ top: 0 })
-      if (!next.anchor) requestAnimationFrame(() => heading.current?.focus())
+      const mobile = window.matchMedia('(max-width: 900px)').matches
+      const apply = () => {
+        if (version !== request) return
+        actionSheet.current?.close()
+        setEditor(null); setTradeEditor(null); setToDelete(null)
+        setRoute(next)
+        if (!mobile) window.scrollTo({ top: 0 })
+        if (!next.anchor) requestAnimationFrame(() => {
+          if (version === request) heading.current?.focus({ preventScroll: mobile })
+        })
+      }
+      if (!mobile && document.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        transition = document.startViewTransition(() => flushSync(apply))
+        void transition.ready.catch(() => undefined)
+      } else apply()
     }
     window.addEventListener('hashchange', sync)
-    return () => window.removeEventListener('hashchange', sync)
+    return () => {
+      request++
+      transition?.skipTransition()
+      window.removeEventListener('hashchange', sync)
+    }
   }, [])
 
   const ready = Boolean(loaded && !loaded.failed)
+  const page = usePageReveal(route.section + '/' + (route.asset ?? ''), ready)
   useEffect(() => {
+    document.querySelector('.workspace')?.scrollTo({ top: 0 })
     if (route.section !== 'data' || !route.anchor || !ready) return
     const frame = requestAnimationFrame(() => {
       const target = document.getElementById(route.anchor!)
@@ -305,23 +323,10 @@ export default function App() {
   }, [route, ready])
 
   useEffect(() => {
-    const media = window.matchMedia('(prefers-color-scheme: dark)')
-    const apply = () => { document.documentElement.dataset.theme = theme === 'system' ? (media.matches ? 'dark' : 'light') : theme }
-    apply()
-    media.addEventListener('change', apply)
-    return () => media.removeEventListener('change', apply)
-  }, [theme])
-
-  useEffect(() => {
     if (!message) return
     const timer = window.setTimeout(() => setMessage(''), 4500)
     return () => window.clearTimeout(timer)
   }, [message])
-
-  function chooseTheme(next: Theme) {
-    setTheme(next)
-    try { localStorage.setItem('portefeuille.theme', next) } catch { /* Use in-memory preference. */ }
-  }
 
   function navigate(destination: Section, detail?: string) {
     actionSheet.current?.close()
@@ -372,16 +377,16 @@ export default function App() {
   return <div className="app-layout">
     <aside className="sidebar">
       <button className="brand" onClick={() => navigate('overview')} aria-label="IntraWallet, accueil">
-        <img className="brand-mark" src={import.meta.env.BASE_URL + 'app-icons/intrawallet-wallet-192.png'} alt="" /><span>IntraWallet<small>PORTEFEUILLE LOCAL</small></span>
+        <img className="brand-mark" src={import.meta.env.BASE_URL + 'app-icons/intrawallet-wallet-192.png'} alt="" />
       </button>
-      <nav aria-label="Navigation principale">
+      <nav aria-label="Navigation principale" className="sliding-nav" ref={railIndicator}>
         {(Object.keys(sections) as Section[]).map(item => <button type="button" key={item} className={section === item ? 'selected' : ''}
           aria-current={section === item ? 'page' : undefined} aria-label={sections[item]} onClick={() => navigate(item)}><Icon name={item} />
-          <span>{sections[item]}</span></button>)}
+          <span className="rail-tooltip" aria-hidden="true">{sections[item]}</span></button>)}
       </nav>
-      <div className="sidebar-footer"><Icon name="lock" /><div><strong>Stockage local</strong><small>Sur cet appareil</small></div></div>
+      <button type="button" className="sidebar-footer" aria-label="Sauvegarde locale" onClick={() => navigate('data', 'backup')}><Icon name="lock" /><span className="rail-tooltip" aria-hidden="true">Sauvegarde locale</span></button>
     </aside>
-    <nav className="mobile-nav" aria-label="Navigation mobile">
+    <nav className="mobile-nav sliding-nav" aria-label="Navigation mobile" ref={bottomIndicator}>
       <button type="button" aria-current={section === 'overview' ? 'page' : undefined} onClick={() => navigate('overview')}><Icon name="overview" /><span>Accueil</span></button>
       <button type="button" aria-current={section === 'positions' ? 'page' : undefined} onClick={() => navigate('positions')}><Icon name="positions" /><span>Portefeuille</span></button>
       <button type="button" className="mobile-add" aria-label="Ouvrir les actions d’ajout" aria-haspopup="dialog"
@@ -391,14 +396,15 @@ export default function App() {
         onClick={() => navigate('space')}><Icon name="space" /><span>Espace</span></button>
     </nav>
     <dialog id="action-sheet" className="add-actions-dialog" ref={actionSheet} aria-labelledby="action-title"
+      onCancel={event => { event.preventDefault(); void closeAnimatedDialog(event.currentTarget) }}
       onClick={event => {
         if (event.target !== event.currentTarget) return
         const { left, top, right, bottom } = event.currentTarget.getBoundingClientRect()
-        if (event.clientX < left || event.clientX > right || event.clientY < top || event.clientY > bottom) event.currentTarget.close()
+        if (event.clientX < left || event.clientX > right || event.clientY < top || event.clientY > bottom) void closeAnimatedDialog(event.currentTarget)
       }}>
       <div className="sheet-content">
         <div className="section-heading"><h2 id="action-title">Ajouter</h2><button className="icon-button" aria-label="Fermer les actions"
-          onClick={() => actionSheet.current?.close()}><Icon name="close" /></button></div>
+          onClick={() => { if (actionSheet.current) void closeAnimatedDialog(actionSheet.current) }}><Icon name="close" /></button></div>
         {([
           ['positions', 'Ajouter un investissement', () => setEditor('new')],
           ['group', 'Créer un portefeuille groupé', createGroup],
@@ -413,7 +419,7 @@ export default function App() {
         <button className="brand mobile-brand" onClick={() => navigate('overview')} aria-label="IntraWallet, accueil">
           <img className="brand-mark" src={import.meta.env.BASE_URL + 'app-icons/intrawallet-wallet-192.png'} alt="" /><span>IntraWallet</span>
         </button>
-        <span className="topbar-location"><Icon name={section} /><span>Espace privé</span><Icon name="next" />{sections[section]}</span>
+        <span className="topbar-location"><strong>IntraWallet</strong><span>Portefeuille local</span></span>
         <div className="topbar-actions">
           <label className="currency-picker"><span className="sr-only">Devise d’affichage</span><select aria-label="Devise d’affichage" value={display.currency}
             onChange={event => chooseCurrency(event.target.value as Currency)}>{currencies.map(currency => <option key={currency}>{currency}</option>)}</select></label>
@@ -422,7 +428,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="workspace-content">
+      <main className="workspace-content" ref={page}>
         {androidUpdate.update && <section className="panel preference-panel" aria-label="Mise à jour Android">
           <p role="status">IntraWallet {androidUpdate.update.version} est disponible.</p>
           <a className="secondary" href={androidUpdate.update.url}>Ouvrir la release GitHub</a>
@@ -434,7 +440,7 @@ export default function App() {
         </aside>}
         <div className="page-title"><div>
           <h1 ref={heading} tabIndex={-1}>{title}</h1>
-          <p>{selectedAsset ? 'Cours de marché, positions détenues et transactions.' : descriptions[section]}</p></div></div>
+          {section !== 'overview' && <p>{selectedAsset ? 'Cours de marché, positions détenues et transactions.' : descriptions[section]}</p>}</div></div>
         {display.currency !== 'CHF' && <p className="hint fx-note" role="status">{fxLoading && !fx ? 'Chargement des taux de change…'
           : fx ? `Taux ${demoMode ? 'simulé' : 'de référence BCE'} CHF → ${display.currency} du ${fx.date}`
             : 'Taux de change indisponible. Tu peux revenir au CHF.'}</p>}
@@ -453,14 +459,11 @@ export default function App() {
         </div>
           : loaded.failed ? <div className="panel blank"><h2>Stockage local indisponible</h2><p>Autorise le stockage du site dans ton navigateur, puis recharge la page.</p></div>
           : section === 'data' ? <>
-            <InstallHelp androidUpdate={androidUpdate} online={online} />
+            <Appearance appearance={appearance} />
             <section className="panel preference-panel">
-              <h2 id="appearance" tabIndex={-1}>Apparence</h2><div className="filter-bar">
-                <label>Thème<select value={theme} onChange={event => chooseTheme(event.target.value as Theme)}><option value="light">Clair</option><option value="dark">Sombre</option><option value="system">Système</option></select></label>
+              <h2>Devise et cotations</h2><div className="filter-bar">
                 <label>Devise du portefeuille<select value={display.currency} onChange={event => chooseCurrency(event.target.value as Currency)}>
                   {currencies.map(currency => <option key={currency}>{currency}</option>)}</select></label>
-              </div>
-              <h2>Cotations</h2><div className="filter-bar">
                 <label>Actualisation des cours<select value={autoRefresh ? 'auto' : 'manual'} disabled={demoMode} onChange={event => {
                   const enabled = event.target.value === 'auto'
                   setAutoRefresh(enabled)
@@ -469,6 +472,7 @@ export default function App() {
               </div>
               <button className="text-button" onClick={() => navigate('platforms')}>Gérer mes plateformes <Icon name="next" /></button>
             </section>
+            <InstallHelp androidUpdate={androidUpdate} online={online} />
             <DataSettings quoteKey={quoteKey} onKey={updateQuoteKey} onRefresh={() => void refreshQuotes(true)} refreshing={refreshing}
               refreshStatus={refreshStatus} lastChecked={lastChecked} onRestored={() => {
                 setRefreshStatus(''); setMessage('Portefeuille restauré.'); lastAuto.current = 0; firstCheck.current = true
@@ -511,11 +515,12 @@ export default function App() {
               {!demoMode && <a className="secondary" href={demoLink(true)}>Ouvrir la démo</a>}</div>
           </section>
           : <><Dashboard assets={consolidatedAssets} holdings={allHoldings} platforms={activePlatforms} history={history} groupCount={groups.length} declaredCapital={declaredCapital}
+            recent={journal.slice(0, 5)} onJournal={() => navigate('journal')}
             declaredGroups={declaredGroups} emptyExactGroups={emptyExactGroups}
             intraday={loaded.view.intraday} display={display} quotes={marketByAsset} realized={loaded.view.realized} unknownSales={loaded.view.unknownSales}
             lastChecked={lastChecked} refreshing={refreshing} refreshStatus={refreshStatus} demo={demoMode}
-            onRefresh={() => void refreshQuotes(true)} onOpen={openAsset} onPortfolio={() => navigate('positions')} />
-            {groups.length > 0 && <Suspense fallback={null}><GroupList groups={groups} {...groupDisplay} onCreate={createGroup} onOpen={openGroup} /></Suspense>}</>}
+            onRefresh={() => void refreshQuotes(true)} onOpen={openAsset} onPortfolio={() => navigate('positions')}
+            groupsContent={groups.length > 0 ? <Suspense fallback={null}><GroupList groups={groups} {...groupDisplay} onCreate={createGroup} onOpen={openGroup} /></Suspense> : undefined} /></>}
       </main>
     </div>
     {groupEditor !== null && <Suspense fallback={null}><GroupEditor current={groupEditor === 'new' ? undefined : groupEditor} platforms={platforms}

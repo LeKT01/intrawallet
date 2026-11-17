@@ -109,6 +109,20 @@ export function summarize(positions: (Position & { partiallyValued?: boolean })[
   }
 }
 
+export function sharedUnitPrice(positions: readonly (Pick<Position, 'listing' | 'market'> & {
+  unitPrice: Decimal | null
+  averageUnitPrice: boolean
+})[]) {
+  const first = positions[0]
+  const mixed = positions.some(position => position.averageUnitPrice || position.listing !== first.listing
+    || position.market?.code !== first.market?.code || position.market?.currency !== first.market?.currency
+    || (position.unitPrice !== null && first.unitPrice !== null && !position.unitPrice.eq(first.unitPrice)))
+  return {
+    mixed,
+    price: !mixed && positions.every(position => position.unitPrice !== null) ? first?.unitPrice ?? null : null,
+  }
+}
+
 export function consolidate<T extends Position>(positions: T[]) {
   const byAsset = new Map<string, T[]>()
   for (const position of positions) {

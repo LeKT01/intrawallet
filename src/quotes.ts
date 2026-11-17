@@ -73,7 +73,8 @@ export function instrumentCode(asset: QuoteAsset) {
 
 function listing(asset: QuoteAsset) {
   const value = asset.listing || catalogEntry(asset.category, asset.reference)?.listing || asset.reference
-  const [mic, symbol] = value.split(':')
+  const [mic, symbol, extra] = value.split(':')
+  if (extra !== undefined) return null
   return symbol && symbolPattern.test(symbol) && Object.hasOwn(venueCodes, mic) ? { mic, symbol, venue: venueCodes[mic] } : null
 }
 
@@ -83,9 +84,10 @@ export function hasAutomaticSixQuote(asset: QuoteAsset) {
 
 export function hasAutomaticNqseQuote(asset: QuoteAsset) {
   const known = catalogEntry(asset.category, asset.reference)
+  const exchange = listing(asset)
   return Boolean(marketRelay()) && asset.category === 'etf' && (asset.isin ?? known?.isin ?? asset.reference) === nqseIsin
-    && listing(asset)?.mic === 'XETR' && instrumentCode(asset) === 'NQSE.XETRA'
-    && (asset.market?.currency ?? 'EUR') === 'EUR'
+    && exchange?.mic === 'XETR' && exchange.symbol === 'NQSE'
+    && instrumentCode(asset) === 'NQSE.XETRA' && (asset.market?.currency ?? known?.market?.currency ?? 'EUR') === 'EUR'
 }
 
 export function hasAutomaticTradegateQuote(asset: QuoteAsset) {
@@ -401,7 +403,7 @@ let finnhubOffset = 0
 export const cryptoInterval = (key: string) => key ? 300000 : 60000
 
 function nqseQuote(asset: QuoteAsset, force: boolean) {
-  return cachedRequest('xetra/' + nqseIsin, 60000, async () => {
+  return cachedRequest('xetra/' + quoteTarget(asset), 60000, async () => {
     const quote = parseNqseQuote(await json(marketUrl(nqseRoute), 'Deutsche Börse · Xetra', 21000))
     const sourceAt = Date.parse(quote.timestampLastPrice)
     const { rate } = await rateToCHF('EUR', dayKey(sourceAt))
@@ -415,7 +417,7 @@ function vusaTradegateQuote(asset: QuoteAsset, force: boolean) {
     const quote = await json(marketUrl(tradegateRoute), 'Tradegate', 55000)
     const price = positive(quote?.price)
     const at = quote?.receivedAt
-    const sourceAt = quote?.sourceAt ?? at
+    const sourceAt = quote?.sourceAt === undefined ? at : quote.sourceAt
     if (!price || !validTime(at) || !validTime(sourceAt)) throw new Error('Relevé Tradegate invalide pour VUSA.')
     const { rate } = await rateToCHF('EUR', dayKey(sourceAt))
     const source = quote?.sourceAt === undefined ? 'Tradegate · relevé' : 'Tradegate · transactions'
@@ -530,7 +532,7 @@ export function providerIsConfigured(provider: DiagnosticProvider, keys: QuoteKe
 }
 
 // Fixed public instruments keep the probe independent of personal holdings.
-export async function probeQuoteProvider(provider: DiagnosticProvider, keys: QuoteKeys): Promise<number | null> {
+export async function probeQuoteProvider(provider: DiagnosticProvider, keys: QuoteKeys): Promise<number | 'undated' | null> {
   const day = dayKey(Date.now())
   switch (provider) {
     case 'CoinGecko': {
@@ -568,8 +570,9 @@ export async function probeQuoteProvider(provider: DiagnosticProvider, keys: Quo
     }
     case 'Tradegate': {
       const data = await json(marketUrl(tradegateRoute), provider, 38000)
-      const time = data?.sourceAt ?? data?.receivedAt
-      return positive(data?.price) && validTime(time) ? time : null
+      if (!positive(data?.price) || !validTime(data?.receivedAt)) return null
+      if (data?.sourceAt === undefined) return 'undated'
+      return validTime(data.sourceAt) ? data.sourceAt : null
     }
   }
 }

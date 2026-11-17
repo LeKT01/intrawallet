@@ -6,6 +6,7 @@ const viewports = [[320, 568], [360, 800], [375, 812], [390, 844], [414, 896], [
 for (const [width, height] of viewports) {
   test(`géométrie du menu et du formulaire à ${width} × ${height}`, async ({ page }) => {
     await page.setViewportSize({ width, height })
+    await page.emulateMedia({ reducedMotion: 'reduce' })
     await page.goto('/#positions')
     const trigger = width <= 900 ? page.getByRole('button', { name: 'Ouvrir les actions d’ajout' }) : page.locator('.header-add')
     await trigger.click()
@@ -60,7 +61,7 @@ for (const [width, height] of [[390, 844], [1440, 900]]) {
   for (const theme of ['light', 'dark'] as const) {
     test(`captures des pages et actions en mode ${theme} à ${width}px`, async ({ page }, info) => {
       await page.setViewportSize({ width, height })
-      await page.emulateMedia({ colorScheme: theme })
+      await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' })
       for (const [route, title] of [['overview', 'Vue d’ensemble'], ['journal', 'Transactions'], ['analytics', 'Analyses'],
         ['space', 'Espace'], ['data', 'Paramètres'], ['platforms', 'Plateformes'], ['diagnostic', 'Diagnostic']]) {
         await page.goto('/?demo=1#' + route)

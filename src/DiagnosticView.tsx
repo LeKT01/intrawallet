@@ -61,7 +61,7 @@ export default function DiagnosticView({ quoteKeys }: { quoteKeys: QuoteKeys }) 
         const start = performance.now()
         const venue = sessions[name]
         const closed = venue && marketOpen(venue, now) === false ? ' · Marché fermé (calendrier local)' : ''
-        const cached = data?.marks.filter(mark => mark.kind === 'market' && mark.source.startsWith(name) && mark.price !== null)
+        const cached = data?.marks.filter(mark => mark.kind === 'market' && mark.source.startsWith(name) && mark.source !== 'Tradegate · relevé' && mark.price !== null)
           .reduce<number | undefined>((latest, mark) => Math.max(latest ?? 0, mark.sourceAt), undefined)
         const previous = lastSuccess.get(name)
         const context = (successful?: number) => ' · ' + Math.round(performance.now() - start) + ' ms' + closed
@@ -70,11 +70,12 @@ export default function DiagnosticView({ quoteKeys }: { quoteKeys: QuoteKeys }) 
         try {
           const sourceAt = await probeQuoteProvider(name, quoteKeys)
           lastSuccess.set(name, Date.now())
+          if (sourceAt === 'undated') return { name, status: 'warning', detail: 'Source accessible · dernier prix fourni sans heure de transaction' + context(lastSuccess.get(name)) }
           if (!sourceAt) return { name, status: 'warning', detail: 'Source accessible · aucune cotation exploitable pour l’instrument de test' + context(lastSuccess.get(name)) }
           const stale = (name === 'SIX' || name === 'EODHD') && venue
             ? dayKey(sourceAt) < latestClosingDay(venue, now)
             : quoteIsStale({ source: name, sourceAt } as Parameters<typeof quoteIsStale>[0], now)
-          const time = name === 'Tradegate' ? 'Relevé ou transaction du ' : 'Cotation témoin du '
+          const time = name === 'Tradegate' ? 'Transaction du ' : 'Cotation témoin du '
           return { name, status: stale ? 'warning' : 'ok', detail: 'Source accessible · ' + (stale ? 'Cotation périmée · ' : '')
             + time + timestamp.format(sourceAt) + ' (' + age(sourceAt) + ')' + context(lastSuccess.get(name)) }
         } catch (error) {

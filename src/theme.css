@@ -1,0 +1,172 @@
+:root {
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color-scheme: light;
+  font-synthesis: none;
+  --bg: #f5f0e9;
+  --surface: #fffdf9;
+  --glass: #fffdf9;
+  --glass-warm: #f4ece4;
+  --glass-edge: #e8ddd3;
+  --subtle: #f6ebe4;
+  --ink: #302420;
+  --muted: #67524b;
+  --line: #79554829;
+  --accent: #a1392e;
+  --accent-hover: #812a22;
+  --accent-pale: #f7ded4;
+  --accent-line: #bd7466;
+  --primary-ink: #fff9f4;
+  --positive: #246047;
+  --negative: #962940;
+  --negative-bg: #fce8e7;
+  --warning: #79500f;
+  --focus: #8e3329;
+  --sidebar: #242326;
+  --sidebar-ink: #fff8f3;
+  --sidebar-muted: #fff0e9;
+  --sidebar-active: #f2a694;
+  --sidebar-selected-ink: #301c1a;
+  --sidebar-rule: #fff4eb3b;
+  --shadow: 0 2px 8px #3c2b2110;
+  --float-shadow: 0 5px 14px #5b302b17, 0 22px 54px #5b302b26;
+  --series-0: #a7473b;
+  --series-1: #72584d;
+  --series-2: #9b652d;
+  --series-3: #775070;
+  --series-4: #466961;
+  --radius: 19px;
+  --chart-inset: #fffdf9;
+  --reflection: #fff6ec64;
+  --radius-control: 13px;
+  --pill: 999px;
+  --text-body: .9375rem;
+  --text-small: .8125rem;
+  --touch: 44px;
+  --nav-height: 4.65rem;
+  --space: .75rem;
+  --motion: 180ms cubic-bezier(.2, .75, .2, 1);
+  color: var(--ink);
+  background: var(--bg);
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #14171c;
+  --surface: #20252d;
+  --glass: #20252d;
+  --glass-warm: #20252de8;
+  --glass-edge: #353e49;
+  --subtle: #263240;
+  --ink: #f5f7fa;
+  --muted: #acb8c5;
+  --line: #52627570;
+  --accent: #ff9583;
+  --accent-hover: #ffb4a1;
+  --accent-pale: #482d31;
+  --accent-line: #a16a5d;
+  --primary-ink: #231a1c;
+  --positive: #a6dab6;
+  --negative: #ffadbc;
+  --negative-bg: #552e35;
+  --warning: #efc385;
+  --focus: #ffad99;
+  --sidebar: #111317;
+  --sidebar-ink: #f5f7fa;
+  --sidebar-muted: #c6d0dc;
+  --sidebar-active: #f5c3b3;
+  --sidebar-selected-ink: #341d18;
+  --sidebar-rule: #9aaec538;
+  --shadow: 0 2px 8px #05090d40;
+  --float-shadow: 0 16px 44px #070b126e;
+  --series-0: #ff9583;
+  --series-1: #d9b0a0;
+  --series-2: #efc385;
+  --series-3: #dfadd2;
+  --series-4: #9fcabf;
+  --chart-inset: #131a22;
+  --reflection: #d6e4f432;
+}
+/* Narrow the palette to a canvas, a surface, and a single action accent. */
+:root {
+  --section-gap: 1.2rem;
+  --card-pad: clamp(.95rem, 2vw, 1.4rem);
+  --row-pad: .65rem;
+  --hero: radial-gradient(ellipse at 104% -12%, #e5977e 0%, transparent 56%), linear-gradient(115deg, #782c28, #9d4439 61%, #bb6854);
+  --hero-ink: #fffaf6;
+  --hero-soft: #fff2eb;
+  /* Opaque reading surfaces; translucency is reserved for navigation and overlays. */
+  --panel-fill: linear-gradient(145deg, var(--surface), color-mix(in srgb, var(--surface) 90%, var(--subtle)));
+  --panel-edge: var(--glass-edge);
+  --panel-shadow: 0 6px 24px #452b1e08, inset 0 1px 0 #ffffffc7;
+  --widget-fill: var(--surface);
+  --chart-fill: linear-gradient(180deg, var(--subtle), var(--chart-inset) 60%);
+  --chart-grid: color-mix(in srgb, var(--line) 70%, transparent);
+  --canvas-light: color-mix(in srgb, var(--accent-pale) 72%, transparent);
+  --canvas-glow: color-mix(in srgb, var(--accent-pale) 38%, transparent);
+  --mist: color-mix(in srgb, var(--surface) 88%, transparent);
+  --mist-edge: color-mix(in srgb, white 65%, var(--line));
+  --mist-shadow: 0 16px 42px #41271d1c, inset 0 1px 0 #ffffffa8;
+  --rail-mist: #242326ed;
+  --radius-widget: 16px;
+  --radius-hero: 24px;
+  --wallet-edge: #ffe2d5a8;
+  --wallet-light: #ffdfc3;
+}
+
+:root[data-density="compact"] {
+  --section-gap: .65rem;
+  --card-pad: .95rem;
+  --row-pad: .45rem;
+}
+:root[data-variant="champagne"] {
+  --bg: #f0ece4;
+  --surface: #fffefa;
+  --glass: var(--surface);
+  --glass-warm: #f6f2eb;
+  --glass-edge: #e0d9cd;
+  --subtle: #f3eee6;
+  --line: #dfd6c9;
+  --chart-inset: #fbf8f2;
+  --shadow: 0 1px 3px #3523140c;
+  --panel-fill: var(--surface);
+  --panel-shadow: 0 1px 3px #3523140c;
+  --chart-fill: var(--chart-inset);
+  --canvas-light: transparent;
+  --canvas-glow: transparent;
+  --mist: color-mix(in srgb, var(--surface) 96%, transparent);
+}
+
+:root[data-theme="dark"] {
+  --panel-fill: linear-gradient(135deg, color-mix(in srgb, var(--surface) 90%, var(--subtle)), var(--surface) 55%, color-mix(in srgb, var(--surface) 86%, var(--bg)));
+  --panel-shadow: 0 12px 32px #05090d36, inset 0 1px 0 #dce8fa12;
+  --widget-fill: linear-gradient(140deg, var(--surface), color-mix(in srgb, var(--surface) 90%, var(--bg)));
+  --canvas-light: #758ba91e;
+  --canvas-glow: #aa59450d;
+  --mist: color-mix(in srgb, var(--surface) 89%, transparent);
+  --mist-edge: #c6d6ee2b;
+  --mist-shadow: 0 16px 42px #03050965, inset 0 1px 0 #e4edff16;
+  --rail-mist: #111317ed;
+}
+:root[data-variant="oled"] {
+  --bg: #060607;
+  --surface: #111114;
+  --glass: var(--surface);
+  --glass-warm: #19191e;
+  --glass-edge: #2c2c34;
+  --subtle: #1d1d23;
+  --line: #30303b;
+  --chart-inset: #0c0c0e;
+  --muted: #b9b7c2;
+  --sidebar: #101013;
+  --shadow: none;
+  --panel-fill: linear-gradient(145deg, #18181d, var(--surface) 65%);
+  --panel-shadow: inset 0 1px 0 #ffffff0e;
+  --chart-fill: linear-gradient(180deg, #16161b, var(--chart-inset) 65%);
+  --canvas-light: transparent;
+  --canvas-glow: transparent;
+  --rail-mist: #0e0e10f4;
+  --mist-shadow: 0 12px 36px #0009, inset 0 1px 0 #ffffff12;
+}
+
+:root[data-theme="dark"] {
+  --hero: radial-gradient(ellipse at 105% -12%, #c87761 0%, transparent 55%), linear-gradient(116deg, #682a28, #8a3c35 61%, #a85748);
+}

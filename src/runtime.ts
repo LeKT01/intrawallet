@@ -2,6 +2,7 @@ import { Capacitor } from '@capacitor/core'
 
 export const nativeApp = Capacitor.isNativePlatform()
 const configuredRelay = import.meta.env?.VITE_MARKET_RELAY_URL?.trim()
+  || (nativeApp ? 'https://intrawallet.nova-studios.ch' : undefined)
 const hostedRelay = configuredRelay && URL.canParse(configuredRelay) ? new URL(configuredRelay) : null
 export const localMarketRelay = () => !nativeApp && typeof location !== 'undefined'
   && ['localhost', '127.0.0.1', 'terminal.local'].includes(location.hostname)

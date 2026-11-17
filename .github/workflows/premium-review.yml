@@ -1,0 +1,75 @@
+name: Revue premium (sans déploiement)
+on:
+  push:
+    branches: [refonte-premium-intrawallet]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'package*.json'
+      - '.github/workflows/premium-review.yml'
+permissions:
+  contents: read
+concurrency:
+  group: intrawallet-premium-review
+  cancel-in-progress: true
+jobs:
+  review:
+    name: Revue ${{ matrix.revision }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        revision: [v7, candidate]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Installer la référence V7 pour comparaison
+        if: matrix.revision == 'v7'
+        run: |
+          git show "$GITHUB_SHA:tests/browser/signature-capture.spec.ts" > "$RUNNER_TEMP/signature-capture.spec.ts"
+          git show "$GITHUB_SHA:tests/browser/signature-fixtures.ts" > "$RUNNER_TEMP/signature-fixtures.ts"
+          git checkout --detach dbf7133da087d511702b5542052a6c96a6f1508e
+          cp "$RUNNER_TEMP/signature-capture.spec.ts" tests/browser/signature-capture.spec.ts
+          cp "$RUNNER_TEMP/signature-fixtures.ts" tests/browser/signature-fixtures.ts
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run check
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Tests fonctionnels
+        run: npm run test:browser
+      - name: Captures de revue
+        if: ${{ !cancelled() }}
+        env:
+          INTRAWALLET_CAPTURE: '1'
+        run: npx playwright test signature-capture.spec.ts --workers=1 --reporter=line --output=review-captures
+      - name: Comparer aux références visuelles existantes
+        id: visual
+        # V7 is an immutable historical comparison; V8 remains a blocking check.
+        continue-on-error: ${{ matrix.revision == 'v7' }}
+        if: ${{ !cancelled() }}
+        run: npm run test:visual -- --output=visual-comparison
+      - name: Exporter les différences pour inspection manuelle
+        if: ${{ !cancelled() && matrix.revision == 'candidate' && steps.visual.outcome == 'failure' }}
+        run: node scripts/export-review-snapshots.mjs
+      - name: Résumer la comparaison
+        if: ${{ !cancelled() }}
+        env:
+          VISUAL_OUTCOME: ${{ steps.visual.outcome }}
+        run: |
+          echo "Références visuelles existantes : $VISUAL_OUTCOME. Les différences sont à inspecter, aucune référence n'est remplacée." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: revue-premium-${{ matrix.revision }}
+          path: |
+            review-captures/
+            visual-comparison/
+            test-results/
+          retention-days: 14
