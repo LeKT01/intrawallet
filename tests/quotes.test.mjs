@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { fetchEodSeries, fetchQuotes, quoteAccess, searchMarket } from '../src/quotes.ts'
 import { searchCatalog } from '../src/catalog.ts'
 import { quoteTarget } from '../src/ledger.ts'
-import { closeTimestamp, latestClosingDay, marketOpen } from '../src/marketCalendar.ts'
+import { closeTimestamp, latestClosingDay, marketOpen, missingWeekendIntervals } from '../src/marketCalendar.ts'
 
 const eodhd = { code: 'VUAA.XETRA', currency: 'EUR' }
 const etf = { category: 'etf', reference: 'IE00BFMXXD54', name: 'Vanguard S&P 500 UCITS ETF', listing: 'XETR:VUAA' }
@@ -166,4 +166,24 @@ test('le cache crypto permet de relancer après une erreur et de forcer une vér
   status = 429
   assert.match((await fetchQuotes([bitcoin], options, { force: true })).issues[0], /limité les requêtes/)
   assert.equal(valid.marks[0].price, '63000')
+})
+
+test('les repères du week-end préservent les trous de semaine et les relevés crypto', () => {
+  const points = [
+    { date: '2026-11-11', value: 1945 },
+    { date: '2026-11-13', value: 1920 },
+    { date: '2026-11-16', value: 1850 },
+    { date: '2026-11-17', value: 1925 },
+  ]
+  const at = date => Date.parse(date + 'T00:00:00Z')
+  const saturday = at('2026-11-14')
+  const sunday = at('2026-11-15')
+  const monday = at('2026-11-16')
+  assert.deepEqual(missingWeekendIntervals(points), [
+    { start: saturday, end: monday, reference: '2026-11-13' },
+  ])
+  points.splice(2, 0, { date: '2026-11-14', value: 1900 })
+  assert.deepEqual(missingWeekendIntervals(points), [
+    { start: sunday, end: monday, reference: '2026-11-14' },
+  ])
 })

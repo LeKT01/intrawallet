@@ -1,6 +1,7 @@
 import { useId, useState, type PointerEvent } from 'react'
 import { Decimal } from 'decimal.js'
 import { dayKey, daysBefore } from './currency'
+import { missingWeekendIntervals } from './marketCalendar'
 import { useSlidingIndicator } from './motion'
 
 export const periods = [{ label: '24 h', days: 1 }, { label: '7 j', days: 7 }, { label: '1 mois', days: 30 },
@@ -37,11 +38,12 @@ export function PeriodButtons({ range, choose, minimumDays = 1 }: { range: numbe
   </label></>
 }
 
-export default function DailyChart({ points, label, format, empty }: {
+export default function DailyChart({ points, label, format, empty, showClosedMarkets = false }: {
   points: ChartPoint[]
   label: string
   format: (value: Decimal) => string
   empty: string
+  showClosedMarkets?: boolean
 }) {
   const fillId = useId()
   const [selectedTime, setSelectedTime] = useState<number>()
@@ -65,6 +67,9 @@ export default function DailyChart({ points, label, format, empty }: {
     point, x: duration === 0 ? 350 : 24 + 652 * (timeOf(point) - start) / duration,
     y: spread.eq(0) ? 85 : 150 - 128 * point.value.minus(min).div(spread).toNumber(),
   })
+  const weekendLines = showClosedMarkets && duration > 0 ? missingWeekendIntervals(points) : []
+  const yByDate = new Map(coords.flatMap(item => item ? [[item.point.date, item.y] as const] : []))
+  const xAt = (at: number) => 24 + 652 * (at - start) / duration
   const activeCoord = coords.find(item => item?.point === active)
   const segments: NonNullable<typeof coords[number]>[][] = []
   coords.forEach((item, index) => {
@@ -111,6 +116,11 @@ export default function DailyChart({ points, label, format, empty }: {
       })}
       <path d={paths.join(' ')} className="chart-glow" aria-hidden="true" />
       <path d={paths.join(' ')} className="chart-line" />
+      {weekendLines.map(line => <line key={line.start} className="chart-crosshair"
+        x1={xAt(line.start)} x2={xAt(line.end)} y1={yByDate.get(line.reference)} y2={yByDate.get(line.reference)}
+        strokeDasharray="5 4">
+        <title>Marchés actions et ETF fermés · dernier relevé du {formatDay(line.reference)}</title>
+      </line>)}
       {activeCoord && <line className="chart-crosshair" x1={activeCoord.x}
         x2={activeCoord.x} y1="22" y2="150" />}
       {coords.map(item => item && <circle key={timeOf(item.point)} cx={item.x} cy={item.y} r={active === item.point ? 5 : 3} className={active === item.point ? 'active-point' : 'chart-point'}
@@ -126,5 +136,6 @@ export default function DailyChart({ points, label, format, empty }: {
         <title>{labelOf(item.point) + ' · ' + format(item.point.value!)}</title></circle>)}
     </svg></div>
     <div className="history-axis"><span>{labelOf(first)}</span><span>{first !== last && labelOf(last)}</span></div>
+    {weekendLines.length > 0 && <p className="hint">Marchés actions et ETF fermés le week-end. Les pointillés prolongent le dernier relevé disponible.</p>}
   </>
 }

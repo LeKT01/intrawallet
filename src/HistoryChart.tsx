@@ -14,8 +14,9 @@ export function portfolioPeriod(history: HistoryPoint[], intraday: HistoryPoint[
   return { points, first, last, change }
 }
 
-export default function HistoryChart({ history, selection, display, range, chooseRange, individualOnly }: {
+export default function HistoryChart({ history, selection, display, range, chooseRange, individualOnly, showClosedMarkets }: {
   individualOnly?: boolean
+  showClosedMarkets?: boolean
   history: HistoryPoint[]; selection: ReturnType<typeof portfolioPeriod>
   display: CurrencyDisplay; range: number; chooseRange: (range: number) => void
 }) {
@@ -55,7 +56,7 @@ export default function HistoryChart({ history, selection, display, range, choos
       </div>
     </div>
     {(!first || !last || first === last) && <p className="hint history-coverage">Deux relevés comparables sont nécessaires pour mesurer le résultat sur la période.</p>}
-    <DailyChart key={range + '/' + metric} points={graph} label={(metric === 'value' ? 'Courbe de valeur en ' : 'Courbe du résultat cumulé en ') + display.currency}
+    <DailyChart showClosedMarkets={range !== 1 && showClosedMarkets} key={range + '/' + metric} points={graph} label={(metric === 'value' ? 'Courbe de valeur en ' : 'Courbe du résultat cumulé en ') + display.currency}
       format={value => (metric === 'result' && value.gt(0) ? '+' : '') + money(value, 2, display.currency)}
       empty={range === 1 ? 'Aucun relevé complet dans les dernières 24 heures.' : metric === 'value' ? 'La courbe apparaîtra avec une valorisation complète et un taux disponible.'
         : 'Le calcul nécessite une valorisation complète et des montants investis connus.'} />

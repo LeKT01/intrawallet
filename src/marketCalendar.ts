@@ -63,3 +63,29 @@ export function closeTimestamp(venue: string, day: string) {
   const noon = Date.parse(day + 'T12:00:00Z')
   return noon + (closeMinute(venue, day) - clock(noon, schedules[venue]?.[0] ?? 'Europe/Zurich').minute) * 60000
 }
+
+/** Visual reference intervals only: these are not portfolio valuations. */
+export function missingWeekendIntervals(points: readonly { date: string; value: unknown }[]) {
+  const first = points[0]?.date
+  const last = points.at(-1)?.date
+  if (!first || !last || first === last) return []
+  const dayMs = 86400000
+  const at = (date: string) => Date.parse(date + 'T00:00:00Z')
+  const available = points.filter(point => point.value !== null)
+  const timestamps = new Set(available.map(point => at(point.date)))
+  const intervals: { start: number; end: number; reference: string }[] = []
+  const firstTime = at(first)
+  const lastTime = at(last)
+  let index = 0
+  for (let start = firstTime; start < lastTime; start += dayMs) {
+    while (index + 1 < available.length && at(available[index + 1].date) <= start) index++
+    const reference = available[index]?.date
+    const weekday = new Date(start).getUTCDay()
+    if (!reference || at(reference) >= start || timestamps.has(start) || (weekday !== 0 && weekday !== 6)) continue
+    const end = Math.min(start + dayMs, lastTime)
+    const previous = intervals.at(-1)
+    if (previous?.end === start && previous.reference === reference) previous.end = end
+    else intervals.push({ start, end, reference })
+  }
+  return intervals
+}
