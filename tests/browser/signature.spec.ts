@@ -4,7 +4,15 @@ import { reviewTime, seedStressPortfolio } from './signature-fixtures'
 
 test.use({ screenshot: 'only-on-failure' })
 
+// Geometry is measured at rest; motion has its own dedicated test suite.
+test.beforeEach(async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+})
+
 async function layoutErrors(page: Page) {
+  await expect.poll(() => page.evaluate(() => document.getAnimations().filter(animation =>
+    animation.playState === 'running' && animation.effect?.getTiming().iterations !== Infinity,
+  ).length)).toBe(0)
   return page.evaluate(() => {
     const errors: string[] = []
     const workspace = document.querySelector('.workspace')!
@@ -35,9 +43,12 @@ for (const [width, height] of [[320, 568], [360, 800], [390, 844], [440, 956], [
     await expect(page.locator('.dashboard-metrics .metric')).toHaveCount(2)
     expect(await layoutErrors(page)).toEqual([])
     if (width >= 1280) {
-      const [hero, allocation, chart, positions, metrics] = await Promise.all(
+      const [hero, allocation, chart, positions, metrics] = await page.evaluate(() =>
         ['.valuation-panel', '.allocation-panel', '.history-panel', '.dashboard-positions', '.dashboard-metrics']
-          .map(selector => page.locator(selector).boundingBox()))
+          .map(selector => {
+            const rect = document.querySelector(selector)!.getBoundingClientRect()
+            return { y: rect.y, width: rect.width, height: rect.height }
+          }))
       expect(Math.abs(hero!.y - allocation!.y)).toBeLessThan(2)
       expect(Math.abs(chart!.y - positions!.y)).toBeLessThan(2)
       expect(metrics!.y).toBeGreaterThan(chart!.y + chart!.height)
