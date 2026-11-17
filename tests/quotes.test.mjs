@@ -177,13 +177,16 @@ test('les repères du week-end préservent les trous de semaine et les relevés 
   ]
   const at = date => Date.parse(date + 'T00:00:00Z')
   const saturday = at('2026-11-14')
-  const sunday = at('2026-11-15')
   const monday = at('2026-11-16')
   assert.deepEqual(missingWeekendIntervals(points), [
-    { start: saturday, end: monday, reference: '2026-11-13' },
+    { start: at('2026-11-13'), end: monday, reference: '2026-11-13' },
   ])
   points.splice(2, 0, { date: '2026-11-14', value: 1900 })
   assert.deepEqual(missingWeekendIntervals(points), [
-    { start: sunday, end: monday, reference: '2026-11-14' },
+    { start: saturday, end: monday, reference: '2026-11-14' },
+  ])
+  points.splice(1, 2)
+  assert.deepEqual(missingWeekendIntervals(points), [
+    { start: saturday, end: monday, reference: '2026-11-11' },
   ])
 })

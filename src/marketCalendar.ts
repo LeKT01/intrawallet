@@ -85,7 +85,11 @@ export function missingWeekendIntervals(points: readonly { date: string; value: 
     const end = Math.min(start + dayMs, lastTime)
     const previous = intervals.at(-1)
     if (previous?.end === start && previous.reference === reference) previous.end = end
-    else intervals.push({ start, end, reference })
+    else intervals.push({
+      start: at(reference) === start - dayMs ? at(reference) : start,
+      end,
+      reference,
+    })
   }
   return intervals
 }

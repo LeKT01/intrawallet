@@ -116,11 +116,15 @@ export default function DailyChart({ points, label, format, empty, showClosedMar
       })}
       <path d={paths.join(' ')} className="chart-glow" aria-hidden="true" />
       <path d={paths.join(' ')} className="chart-line" />
-      {weekendLines.map(line => <line key={line.start} className="chart-crosshair"
-        x1={xAt(line.start)} x2={xAt(line.end)} y1={yByDate.get(line.reference)} y2={yByDate.get(line.reference)}
-        strokeDasharray="5 4">
-        <title>Marchés actions et ETF fermés · dernier relevé du {formatDay(line.reference)}</title>
-      </line>)}
+      {weekendLines.map(line => {
+        const y = yByDate.get(line.reference)!
+        const endX = xAt(line.end)
+        const resumed = yByDate.get(new Date(line.end).toISOString().slice(0, 10))
+        const path = `M${xAt(line.start)} ${y} H${endX}` + (resumed === undefined ? '' : ` V${resumed}`)
+        return <path key={line.start} className="chart-crosshair" d={path} fill="none">
+          <title>Marchés actions et ETF fermés · dernier relevé du {formatDay(line.reference)}</title>
+        </path>
+      })}
       {activeCoord && <line className="chart-crosshair" x1={activeCoord.x}
         x2={activeCoord.x} y1="22" y2="150" />}
       {coords.map(item => item && <circle key={timeOf(item.point)} cx={item.x} cy={item.y} r={active === item.point ? 5 : 3} className={active === item.point ? 'active-point' : 'chart-point'}
@@ -136,6 +140,6 @@ export default function DailyChart({ points, label, format, empty, showClosedMar
         <title>{labelOf(item.point) + ' · ' + format(item.point.value!)}</title></circle>)}
     </svg></div>
     <div className="history-axis"><span>{labelOf(first)}</span><span>{first !== last && labelOf(last)}</span></div>
-    {weekendLines.length > 0 && <p className="hint">Marchés actions et ETF fermés le week-end. Les pointillés prolongent le dernier relevé disponible.</p>}
+    {weekendLines.length > 0 && <p className="hint">Marchés actions et ETF fermés le week-end. Le palier en pointillés indique le dernier relevé connu jusqu’à la reprise.</p>}
   </>
 }
