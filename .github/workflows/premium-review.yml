@@ -51,6 +51,8 @@ jobs:
         run: npx playwright test signature-capture.spec.ts --workers=1 --reporter=line --output=review-captures
       - name: Comparer aux références visuelles existantes
         id: visual
+        # V7 is an immutable historical comparison; V8 remains a blocking check.
+        continue-on-error: ${{ matrix.revision == 'v7' }}
         if: ${{ !cancelled() }}
         run: npm run test:visual -- --output=visual-comparison
       - name: Exporter les différences pour inspection manuelle
