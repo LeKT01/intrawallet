@@ -122,7 +122,7 @@ export default function App() {
     if (!dialog || dialog.open) return
     const bounds = trigger.getBoundingClientRect()
     dialog.style.setProperty('--add-top', Math.ceil(bounds.bottom + 8) + 'px')
-    dialog.style.setProperty('--add-right', Math.max(12, Math.round(window.innerWidth - bounds.right)) + 'px')
+    dialog.style.setProperty('--add-right', Math.max(12, Math.round(document.documentElement.clientWidth - bounds.right)) + 'px')
     trigger.focus({ preventScroll: true })
     dialog.showModal()
   }

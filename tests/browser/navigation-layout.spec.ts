@@ -34,15 +34,19 @@ for (const width of [320, 440]) {
     await page.goto('/?demo=1#journal')
     const row = page.getByRole('list', { name: 'Transactions' }).getByRole('listitem').first()
     await expect(row).toBeVisible()
-    const edit = row.getByRole('button', { name: 'Modifier', exact: true })
     const remove = row.getByRole('button', { name: 'Supprimer', exact: true })
-    const [left, right] = [(await edit.boundingBox())!, (await remove.boundingBox())!]
+    const { left, right, asset, amount } = await row.evaluate(element => {
+      function rect(selector: string) { return element.querySelector(selector)!.getBoundingClientRect().toJSON() }
+      return {
+        left: rect('button[aria-label="Modifier"]'), right: rect('button[aria-label="Supprimer"]'),
+        asset: rect('.journal-asset'), amount: rect('.journal-amount'),
+      }
+    })
     expect(left.width).toBeGreaterThanOrEqual(44)
     expect(left.height).toBeGreaterThanOrEqual(44)
     expect(left.y).toBe(right.y)
-    expect(left.x + left.width).toBeLessThan(right.x)
-    const [asset, amount] = await Promise.all([row.locator('.journal-asset').boundingBox(), row.locator('.journal-amount').boundingBox()])
-    expect(asset!.y).toBe(amount!.y)
+    expect(left.right).toBeLessThan(right.x)
+    expect(asset.y).toBe(amount.y)
     await remove.click()
     const confirm = page.getByRole('dialog', { name: 'Supprimer cette entrée ?' })
     await expect(confirm).toBeVisible()
