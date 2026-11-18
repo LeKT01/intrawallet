@@ -24,6 +24,31 @@ test('les variantes, le mode système et la densité restent mémorisés', async
   await expect(root).toHaveAttribute('data-variant', 'graphite')
 })
 
+test('les logos suivent la variante active sur desktop et mobile', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' })
+  await page.goto('/?demo=1#data/appearance')
+  const root = page.locator('html')
+  const sidebar = page.locator('.sidebar .brand-mark')
+  await page.getByLabel('Champagne').check()
+  await expect(sidebar).toHaveAttribute('src', /intrawallet-champagne-192[.]png$/)
+
+  await page.getByLabel('Bleu Glacier').check()
+  await expect(sidebar).toHaveAttribute('src', /intrawallet-champagne-192[.]png$/)
+  await page.emulateMedia({ colorScheme: 'dark' })
+  await expect(root).toHaveAttribute('data-variant', 'bleu')
+  await expect(sidebar).toHaveAttribute('src', /intrawallet-bleu-192[.]png$/)
+
+  await page.setViewportSize({ width: 320, height: 720 })
+  await page.getByLabel('Émeraude').check()
+  await page.reload()
+  await expect(root).toHaveAttribute('data-variant', 'emeraude')
+  const mobileLogo = page.locator('.mobile-brand .brand-mark')
+  await expect(mobileLogo).toHaveAttribute('src', /intrawallet-emeraude-192[.]png$/)
+  await expect.poll(() => mobileLogo.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(192)
+  await page.emulateMedia({ colorScheme: 'light' })
+  await expect(mobileLogo).toHaveAttribute('src', /intrawallet-champagne-192[.]png$/)
+})
+
 test('les vues Cartes et Tableau partagent les filtres et le choix est mémorisé', async ({ page }) => {
   await page.goto('/?demo=1#positions')
   const search = page.getByRole('searchbox', { name: 'Rechercher un actif' })
@@ -50,7 +75,7 @@ test('les indicateurs précèdent le graphique sur mobile et garde ses commandes
   await expect(result).toHaveAttribute('aria-pressed', 'true')
 })
 
-for (const variant of ['coral', 'champagne', 'graphite', 'oled']) {
+for (const variant of ['coral', 'champagne', 'graphite', 'oled', 'bleu', 'emeraude']) {
   test(`contraste du dashboard et des préférences · ${variant}`, async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' })
     await page.addInitScript(scheme => {

@@ -3,8 +3,19 @@ import { useLayoutEffect, useState } from 'react'
 const modes = ['light', 'dark', 'system'] as const
 const densities = ['comfortable', 'compact'] as const
 const lightVariants = ['coral', 'champagne'] as const
-const darkVariants = ['graphite', 'oled'] as const
-const themeLabels = { coral: 'Signature', champagne: 'Champagne', graphite: 'Graphite', oled: 'Noir OLED' }
+const darkVariants = ['graphite', 'oled', 'bleu', 'emeraude'] as const
+const themeLabels = {
+  coral: 'Signature', champagne: 'Champagne', graphite: 'Graphite', oled: 'Noir OLED',
+  bleu: 'Bleu Glacier', emeraude: 'Émeraude',
+}
+const themeLogos: Partial<Record<keyof typeof themeLabels, string>> = {
+  champagne: 'intrawallet-champagne-192.png',
+  bleu: 'intrawallet-bleu-192.png',
+  emeraude: 'intrawallet-emeraude-192.png',
+}
+function themeLogo(variant: keyof typeof themeLabels) {
+  return import.meta.env.BASE_URL + 'app-icons/' + (themeLogos[variant] ?? 'intrawallet-wallet-192.png')
+}
 const prefix = 'portefeuille.'
 
 export function readAppearancePreference<T extends string>(key: string, options: readonly T[], fallback: T) {
@@ -25,30 +36,32 @@ export function useAppearance() {
   const [dark, setDark] = useState(() => readAppearancePreference('theme.dark', darkVariants, 'graphite'))
   const [density, setDensity] = useState(() => readAppearancePreference('density', densities, 'comfortable'))
 
+  const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
+  const theme = mode === 'system' ? (systemDark ? 'dark' : 'light') : mode
+  const variant = theme === 'dark' ? dark : light
+
   useLayoutEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
-    const root = document.documentElement
-    let timer: number | undefined
-    function apply() {
-      const theme = mode === 'system' ? (media.matches ? 'dark' : 'light') : mode
-      const variant = theme === 'dark' ? dark : light
-      if (root.dataset.theme !== theme || root.dataset.variant !== variant) {
-        root.dataset.themeTransition = ''
-        window.clearTimeout(timer)
-        timer = window.setTimeout(() => { delete root.dataset.themeTransition }, 240)
-      }
-      Object.assign(root.dataset, { theme, variant, density })
-    }
-    apply()
-    media.addEventListener('change', apply)
-    return () => {
-      media.removeEventListener('change', apply)
-      window.clearTimeout(timer)
-      delete root.dataset.themeTransition
-    }
-  }, [mode, light, dark, density])
+    const sync = () => setSystemDark(media.matches)
+    sync()
+    media.addEventListener('change', sync)
+    return () => media.removeEventListener('change', sync)
+  }, [])
 
-  return { mode, setMode, light, setLight, dark, setDark, density, setDensity }
+  useLayoutEffect(() => {
+    const { dataset } = document.documentElement
+    const changed = dataset.theme !== theme || dataset.variant !== variant
+    Object.assign(dataset, { theme, variant, density })
+    if (!changed) return
+    dataset.themeTransition = ''
+    const timer = window.setTimeout(() => { delete dataset.themeTransition }, 240)
+    return () => {
+      window.clearTimeout(timer)
+      delete dataset.themeTransition
+    }
+  }, [theme, variant, density])
+
+  return { mode, setMode, light, setLight, dark, setDark, density, setDensity, logo: themeLogo(variant) }
 }
 
 export default function Appearance({ appearance }: { appearance: ReturnType<typeof useAppearance> }) {
@@ -98,6 +111,7 @@ function ThemeOptions<T extends keyof typeof themeLabels>({ label, variants, sel
         <span className="preview-widget"><i /><i /></span><span className="preview-accent">+</span>
       </span>
       <span className="theme-option-label">
+        <img src={themeLogo(variant)} alt="" width="22" height="22" />
         <strong>{themeLabels[variant]}</strong>
         <input type="radio" name={label} checked={selected === variant} onChange={() => onSelect(variant)} />
       </span>

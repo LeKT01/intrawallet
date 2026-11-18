@@ -16,7 +16,7 @@
         const variant = read('theme.' + theme)
         Object.assign(document.documentElement.dataset, {
           theme,
-          variant: theme === 'dark' ? variant === 'oled' ? 'oled' : 'graphite' : variant === 'champagne' ? 'champagne' : 'coral',
+          variant: theme === 'dark' ? ['oled', 'bleu', 'emeraude'].includes(variant) ? variant : 'graphite' : variant === 'champagne' ? 'champagne' : 'coral',
           density: read('density') === 'compact' ? 'compact' : 'comfortable',
         })
       })()

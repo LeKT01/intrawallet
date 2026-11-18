@@ -396,7 +396,7 @@ export default function App() {
           saveAppearancePreference('sidebar', next)
         }}>
         <span className="sidebar-brand-mark">
-          <img className="brand-mark" src={import.meta.env.BASE_URL + 'app-icons/intrawallet-wallet-192.png'} alt="" />
+          <img className="brand-mark" src={appearance.logo} alt="" />
           <span className="sidebar-toggle-mark"><Icon name={sidebarExpanded ? 'back' : 'next'} /></span>
         </span>
         <span className="rail-label" aria-hidden="true">IntraWallet</span>
@@ -441,7 +441,7 @@ export default function App() {
     <div className="workspace">
       <header className="topbar">
         <button className="brand mobile-brand" onClick={() => navigate('overview')} aria-label="IntraWallet, accueil">
-          <img className="brand-mark" src={import.meta.env.BASE_URL + 'app-icons/intrawallet-wallet-192.png'} alt="" /><span>IntraWallet</span>
+          <img className="brand-mark" src={appearance.logo} alt="" /><span>IntraWallet</span>
         </button>
         <span className="topbar-location"><strong>IntraWallet</strong><span>Portefeuille local</span></span>
         <div className="topbar-actions">
