@@ -366,7 +366,7 @@ fieldset[aria-busy="true"] { cursor: progress; }
 .portfolio-add { min-height: var(--touch); }
 .preference-panel h2:not(:first-child) { margin-top: .8rem; }
 .add-actions-dialog { width: min(calc(100% - 1.5rem), 24rem); max-width: none;
-  position: fixed; inset: var(--add-top, 5rem) var(--add-right, 1rem) auto auto; margin: 0;
+  position: fixed; inset: var(--add-top, 5rem) auto auto var(--add-anchor-right, 100%); translate: -100% 0; margin: 0;
   max-height: max(8rem, calc(100dvh - var(--add-top, 5rem) - 12px)); }
 .add-actions-dialog[open] { animation: none; }
 .add-actions-dialog::backdrop { background: #1c14142e; backdrop-filter: none; }
@@ -376,7 +376,7 @@ fieldset[aria-busy="true"] { cursor: progress; }
   padding: .55rem .7rem; border: 0; border-radius: var(--radius-control); background: var(--subtle); color: var(--ink); text-align: left; }
 .sheet-link[aria-current], .sheet-link:hover { background: var(--accent-pale); color: var(--accent); }
 @media (max-width: 900px) {
-  .add-actions-dialog { inset: auto 0 calc(var(--nav-height) + env(safe-area-inset-bottom)) 0; margin-inline: auto;
+  .add-actions-dialog { inset: auto 0 calc(var(--nav-height) + env(safe-area-inset-bottom)) 0; translate: none; margin-inline: auto;
     width: min(calc(100% - 1.2rem), 32rem); max-height: calc(100dvh - var(--nav-height) - env(safe-area-inset-bottom) - 12px); }
 
   :root { scroll-padding-bottom: calc(var(--nav-height) + env(safe-area-inset-bottom)); }
