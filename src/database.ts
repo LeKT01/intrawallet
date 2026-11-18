@@ -49,6 +49,11 @@ export function saveDailyPrices(series: DailySeries) {
   })
 }
 
+export function onPortfolioOpenBlocked(listener: () => void) {
+  db.on('blocked', listener)
+  return () => { db.on('blocked').unsubscribe(listener) }
+}
+
 export async function loadPortfolio(): Promise<PortfolioData> {
   return db.transaction('r', [db.positions, db.operations, db.marks, db.platforms, db.groups], async () => {
     const [positions, operations, marks, platforms, groups] = await Promise.all([
