@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-test('la vue d’ensemble relie les relevés espacés en 1 mois et en 24 h', async ({ page }) => {
+test('la vue d’ensemble affiche une courbe pleine pour les relevés espacés', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.clock.setFixedTime(new Date('2026-11-18T10:00:00Z'))
   await page.addInitScript(() => localStorage.setItem('portefeuille.auto-refresh', 'off'))
@@ -40,10 +40,22 @@ test('la vue d’ensemble relie les relevés espacés en 1 mois et en 24 h', asy
   })
   await page.reload()
   const chart = page.locator('.history-panel')
-  await expect(chart.locator('.chart-missing')).toHaveAttribute('d', /^M.+ L.+/)
-  await expect(chart.getByText('Liaisons en pointillés · aucun relevé intermédiaire.')).toBeVisible()
+  const line = chart.locator('.chart-line')
+  const continuous = /^M[^M]+$/
+  await expect(line).toHaveAttribute('d', continuous)
+  await expect(line).toHaveAttribute('d', / L/)
+  await expect(chart.locator('.chart-area')).toHaveCount(1)
+  await expect(chart.getByText('Aucun relevé intermédiaire sur certains intervalles.')).toBeVisible()
   await expect(chart.getByText(/Marchés actions et ETF fermés le week-end/)).toBeVisible()
+  await chart.getByRole('button', { name: '7 j', exact: true }).click()
+  await expect(line).toHaveAttribute('d', continuous)
+  await expect(chart.locator('svg circle').filter({ has: page.locator('title', { hasText: 'Marchés actions et ETF fermés' }) })).toHaveCount(2)
   await chart.getByRole('button', { name: '24 h', exact: true }).click()
-  await expect(chart.locator('.chart-missing')).toHaveAttribute('d', /^M.+ L.+/)
+  await expect(line).toHaveAttribute('d', /^M.+ L[^M]+$/)
+  await expect(chart.locator('.chart-area')).toHaveCount(1)
   await expect(chart.locator('svg circle')).toHaveCount(2)
+  await expect(chart.getByText('Aucun relevé intermédiaire sur certains intervalles.')).toBeVisible()
+  await chart.getByRole('button', { name: '6 mois', exact: true }).click()
+  await expect(line).toHaveAttribute('d', continuous)
+  await expect(chart.locator('.history-axis').getByText('11 nov. 2026')).toBeVisible()
 })

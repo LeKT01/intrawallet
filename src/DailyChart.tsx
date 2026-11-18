@@ -85,11 +85,20 @@ export default function DailyChart({ points, label, format, empty, connectGaps =
     }, 'M' + start.x.toFixed(2) + ' ' + start.y.toFixed(2))
   })
 
-  const missingSegments = connectGaps ? segments.slice(1).map((segment, index) => {
-    const before = segments[index].at(-1)!
-    const after = segment[0]
-    return `M${before.x} ${before.y} L${after.x} ${after.y}`
-  }) : []
+  const hasGaps = connectGaps && segments.length > 1
+  // Join the existing endpoints without adding selectable readings.
+  const traces = hasGaps ? [{
+    path: paths.map((path, index) => index === 0 ? path : 'L' + path.slice(1)).join(' '),
+    start: segments[0][0].x,
+    end: segments.at(-1)!.at(-1)!.x,
+    hasArea: true,
+  }] : segments.map((segment, index) => ({
+    path: paths[index],
+    start: segment[0].x,
+    end: segment.at(-1)!.x,
+    hasArea: segment.length > 1,
+  }))
+  const line = traces.map(trace => trace.path).join(' ')
 
   function selectNearest(event: PointerEvent<SVGSVGElement>) {
     const bounds = event.currentTarget.getBoundingClientRect()
@@ -111,14 +120,11 @@ export default function DailyChart({ points, label, format, empty, connectGaps =
       <defs><linearGradient id={fillId} x2="0" y2="100%"><stop offset="0%" stopColor="var(--accent)" stopOpacity=".22" />
         <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" /></linearGradient></defs>
       {[22, 85, 150].map(y => <line key={y} x1="24" x2="676" y1={y} y2={y} />)}
-      {segments.map((segment, index) => {
-        if (segment.length < 2) return null
-        const area = paths[index] + ' L' + segment.at(-1)!.x + ' 150 L' + segment[0].x + ' 150 Z'
-        return <path className="chart-area" key={segment[0].x} d={area} style={{ fill: 'url(#' + fillId + ')' }} />
-      })}
-      {missingSegments.length > 0 && <path d={missingSegments.join(' ')} className="chart-missing" aria-hidden="true" />}
-      <path d={paths.join(' ')} className="chart-glow" aria-hidden="true" />
-      <path d={paths.join(' ')} className="chart-line" />
+      {traces.map(({ path, start, end, hasArea }, index) => hasArea
+        ? <path className="chart-area" key={index} d={path + ' L' + end + ' 150 L' + start + ' 150 Z'} style={{ fill: 'url(#' + fillId + ')' }} />
+        : null)}
+      <path d={line} className="chart-glow" aria-hidden="true" />
+      <path d={line} className="chart-line" />
       {activeCoord && <line className="chart-crosshair" x1={activeCoord.x}
         x2={activeCoord.x} y1="22" y2="150" />}
       {coords.map(item => item && <circle key={timeOf(item.point)} cx={item.x} cy={item.y} r={active === item.point ? 5 : 3} className={active === item.point ? 'active-point' : 'chart-point'}
@@ -134,6 +140,6 @@ export default function DailyChart({ points, label, format, empty, connectGaps =
         <title>{labelOf(item.point) + ' · ' + format(item.point.value!)}{item.point.detail && ' · ' + item.point.detail}</title></circle>)}
     </svg></div>
     <div className="history-axis"><span>{labelOf(first)}</span><span>{first !== last && labelOf(last)}</span></div>
-    {missingSegments.length > 0 && <p className="hint">Liaisons en pointillés · aucun relevé intermédiaire.</p>}
+    {hasGaps && <p className="hint">Aucun relevé intermédiaire sur certains intervalles.</p>}
   </>
 }
