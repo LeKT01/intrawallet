@@ -389,20 +389,19 @@ export default function App() {
 
   return <div className="app-layout" data-sidebar={sidebarMode}>
     <aside className="sidebar">
-      <div className="sidebar-header">
-        <button type="button" className="brand" onClick={() => navigate('overview')} aria-label="IntraWallet, accueil">
+      <button type="button" className="brand sidebar-toggle" aria-label={`IntraWallet · ${sidebarAction}`}
+        aria-expanded={sidebarExpanded} aria-controls="desktop-navigation" onClick={() => {
+          const next = sidebarExpanded ? 'compact' : 'expanded'
+          setSidebarMode(next)
+          saveAppearancePreference('sidebar', next)
+        }}>
+        <span className="sidebar-brand-mark">
           <img className="brand-mark" src={import.meta.env.BASE_URL + 'app-icons/intrawallet-wallet-192.png'} alt="" />
-          <span className="rail-label" aria-hidden="true">IntraWallet</span>
-        </button>
-        <button type="button" className="sidebar-toggle" aria-label={sidebarAction} aria-expanded={sidebarExpanded}
-          aria-controls="desktop-navigation" onClick={() => {
-            const next = sidebarExpanded ? 'compact' : 'expanded'
-            setSidebarMode(next)
-            saveAppearancePreference('sidebar', next)
-          }}><Icon name={sidebarExpanded ? 'sidebarCollapse' : 'sidebarExpand'} />
-          <span className="rail-tooltip toggle-tooltip" aria-hidden="true">{sidebarAction}</span>
-        </button>
-      </div>
+          <span className="sidebar-toggle-mark"><Icon name={sidebarExpanded ? 'back' : 'next'} /></span>
+        </span>
+        <span className="rail-label" aria-hidden="true">IntraWallet</span>
+        <span className="rail-tooltip toggle-tooltip" aria-hidden="true">{sidebarAction}</span>
+      </button>
       <nav id="desktop-navigation" aria-label="Navigation principale" className="sliding-nav" ref={railIndicator}>
         {(Object.keys(sections) as Section[]).map(item => <button type="button" key={item} className={section === item ? 'selected' : ''}
           aria-current={section === item ? 'page' : undefined} aria-label={sections[item]} onClick={() => navigate(item)}><Icon name={item} />

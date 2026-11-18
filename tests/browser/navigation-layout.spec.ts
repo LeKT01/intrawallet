@@ -1,19 +1,25 @@
 import { expect, test } from '@playwright/test'
 
 test('la barre latérale conserve sa position et mémorise sa largeur', async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 800 })
-  await page.goto('/?demo=1#overview')
+  await page.setViewportSize({ width: 1920, height: 800 })
+  await page.goto('/?demo=1#journal')
   const sidebar = page.locator('.sidebar')
   const navigation = page.getByRole('navigation', { name: 'Navigation principale' })
   const toggle = sidebar.getByRole('button', { name: /la barre latérale/ })
   await expect(toggle).toHaveAttribute('aria-expanded', 'false')
   const compact = (await sidebar.boundingBox())!
-  await toggle.press('Enter')
+  expect(compact).toEqual({ x: 0, y: 0, width: 64, height: 800 })
+  await toggle.locator('.brand-mark').click()
   await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  await expect(page).toHaveURL(/#journal$/)
   await expect(navigation.getByText('Transactions', { exact: true }).first()).toBeVisible()
   const expanded = (await sidebar.boundingBox())!
   expect(expanded.width).toBeGreaterThan(compact.width)
   expect(expanded.x).toBe(compact.x)
+  expect(expanded.y).toBe(compact.y)
+  expect(expanded.height).toBe(compact.height)
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+  expect(await sidebar.boundingBox()).toEqual(expanded)
   for (const [name, route] of [['Transactions', 'journal'], ['Paramètres', 'data'], ['Vue d’ensemble', 'overview']]) {
     const item = navigation.getByRole('button', { name, exact: true })
     await item.click()
@@ -23,7 +29,7 @@ test('la barre latérale conserve sa position et mémorise sa largeur', async ({
   }
   await page.reload()
   await expect(toggle).toHaveAttribute('aria-expanded', 'true')
-  await toggle.click()
+  await toggle.press('Enter')
   await expect(toggle).toHaveAttribute('aria-expanded', 'false')
   expect(await sidebar.boundingBox()).toEqual(compact)
 })

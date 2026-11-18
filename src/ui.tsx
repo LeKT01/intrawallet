@@ -11,8 +11,6 @@ const paths = {
   plus: 'M12 5v14 M5 12h14', lock: 'M5 11h14v10H5z M8 11V7a4 4 0 0 1 8 0v4',
   next: 'm9 6 6 6-6 6', back: 'm15 6-6 6 6 6', refresh: 'M20 7v5h-5 M4 17v-5h5 M5 9a8 8 0 0 1 14-2 M19 15a8 8 0 0 1-14 2',
   space: 'M4 4h16v16H4z M4 9h16 M9 9v11', diagnostic: 'M3 12h4l3-6 4 12 3-6h4',
-  sidebarExpand: 'M3 5h18v14H3z M9 5v14 M13 9l3 3-3 3',
-  sidebarCollapse: 'M3 5h18v14H3z M9 5v14 M16 9l-3 3 3 3',
   edit: 'm4 16-1 5 5-1L20 8l-4-4L4 16z M14 6l4 4',
   trash: 'M4 6h16 M9 6V3h6v3 M6 6l1 14h10l1-14 M10 10v6 M14 10v6',
   more: 'M5 12h.01 M12 12h.01 M19 12h.01', close: 'm6 6 12 12 M18 6 6 18',
