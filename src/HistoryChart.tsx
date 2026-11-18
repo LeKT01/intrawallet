@@ -4,7 +4,7 @@ import type { HistoryPoint } from './ledger'
 import { dayKey, daysBefore, type CurrencyDisplay } from './currency'
 import { carryWeekendChartPoints, marketClosedDay, weekendCarryLabel } from './marketCalendar'
 import { money } from './portfolio'
-import DailyChart, { formatDay, inPeriod, PeriodButtons, type ChartPoint } from './DailyChart'
+import DailyChart, { formatDay, hourlyChartPoints, inPeriod, PeriodButtons, type ChartPoint } from './DailyChart'
 
 export function portfolioPeriod(history: HistoryPoint[], intraday: HistoryPoint[], range: number) {
   const points = range === 1 ? intraday.filter(point => point.at >= Date.now() - 86400000) : inPeriod(history, range)
@@ -16,24 +16,6 @@ export function portfolioPeriod(history: HistoryPoint[], intraday: HistoryPoint[
 }
 
 const hour = 3_600_000
-const hourlyCarryLabel = 'Dernier relevé disponible · aucun nouveau relevé'
-type TimedPoint = ChartPoint & { at: number }
-
-function hourlyChartPoints(readings: TimedPoint[], now: number, showClosedMarkets: boolean) {
-  const graph: TimedPoint[] = []
-  let index = 0
-  const start = Math.ceil((now - 24 * hour) / hour) * hour
-  for (let at = start; at <= now; at += hour) {
-    while (index < readings.length && readings[index].at <= at) graph.push(readings[index++])
-    const previous = readings[index - 1]
-    if (!previous || previous.at === at || previous.value === null) continue
-    const date = dayKey(at)
-    graph.push({ date, at, value: previous.value, carried: true,
-      detail: showClosedMarkets && marketClosedDay('', date) ? weekendCarryLabel : hourlyCarryLabel })
-  }
-  return graph.concat(readings.slice(index))
-}
-
 export default function HistoryChart({ history, selection, display, range, chooseRange, individualOnly, showClosedMarkets }: {
   individualOnly?: boolean
   showClosedMarkets?: boolean
@@ -59,6 +41,7 @@ export default function HistoryChart({ history, selection, display, range, choos
 
   let graph: ChartPoint[]
   if (range === 1) {
+    const closedLabel = (date: string) => showClosedMarkets && marketClosedDay('', date) ? weekendCarryLabel : undefined
     const readings = recordedGraph.filter(point => point.at <= now)
     const closed = (showClosedMarkets && marketClosedDay('', today))
       || (recent?.closedMarketCarry && recent.date === today)
@@ -70,10 +53,9 @@ export default function HistoryChart({ history, selection, display, range, choos
     if (snapshot && value) {
       const at = Math.max(snapshot.at, now - 24 * hour)
       const kept = readings.filter(point => point.at > at)
-      graph = hourlyChartPoints([{ date: dayKey(at), at, value, carried: true,
-        detail: snapshot.closedMarketCarry ? weekendCarryLabel : hourlyCarryLabel }, ...kept], now, Boolean(showClosedMarkets))
+      graph = hourlyChartPoints([{ date: dayKey(at), at, value, carried: true }, ...kept], now, closedLabel)
     } else {
-      graph = hourlyChartPoints(readings, now, Boolean(showClosedMarkets))
+      graph = hourlyChartPoints(readings, now, closedLabel)
     }
   } else {
     const dailyGraph = recordedGraph.map(point => ({ date: point.date, value: point.value, detail: point.detail }))
@@ -99,15 +81,15 @@ export default function HistoryChart({ history, selection, display, range, choos
         <button type="button" className="secondary segment-button" aria-pressed={metric === 'result'} onClick={() => setMetric('result')}>Résultat cumulé</button>
       </div>
     </div>
-    {(!first || !last || first === last) && <p className="hint history-coverage">Deux relevés comparables sont nécessaires pour mesurer le résultat sur la période.</p>}
+    {metric === 'result' && (!first || !last || first === last) && <p className="hint history-coverage">Deux relevés comparables sont nécessaires pour mesurer le résultat sur la période.</p>}
     <DailyChart connectGaps key={range + '/' + metric} points={graph} label={(metric === 'value' ? 'Courbe de valeur en ' : 'Courbe du résultat cumulé en ') + display.currency}
       format={value => (metric === 'result' && value.gt(0) ? '+' : '') + money(value, 2, display.currency)}
       empty={range === 1 ? 'Aucun relevé complet dans les dernières 24 heures.' : metric === 'value' ? 'La courbe apparaîtra avec une valorisation complète et un taux disponible.'
         : 'Le calcul nécessite une valorisation complète et des montants investis connus.'} />
-    {range === 1 && graph.some(point => point.carried) && <p className="hint">Les points horaires creux reprennent le dernier relevé disponible.</p>}
+    {range === 1 && graph.some(point => point.value !== null) && <p className="hint history-sampling">Un point par heure écoulée.{graph.some(point => point.carried) && ' Un point creux reprend le dernier relevé disponible.'}</p>}
     {hasWeekendCarry && <p className="hint">Marchés actions et ETF fermés le week-end. Le palier reprend le dernier relevé du portefeuille.</p>}
     <details className="history-details"><summary>Détails du calcul</summary>
-    <p className="hint">{range === 1 ? 'Relevés horodatés des dernières 24 heures.' : 'Relevés quotidiens et estimations selon les cours disponibles.'}
+    <p className="hint">{range === 1 ? 'Chaque point utilise le dernier relevé disponible à l’heure indiquée. Les relevés de l’heure en cours seront inclus au prochain point.' : 'Relevés quotidiens et estimations selon les cours disponibles.'}
       {' '}Le résultat est calculé hors flux d’achat, de vente et d’ouverture.
       {first && last && first !== last && range !== 1 && ' Période mesurée du ' + formatDay(first.date) + ' au ' + formatDay(last.date) + '.'}</p>
     <div className="history-stats">

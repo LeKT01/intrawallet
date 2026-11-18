@@ -19,6 +19,32 @@ export interface ChartPoint {
   carried?: boolean
 }
 
+const hour = 3_600_000
+const hourlyCarryLabel = 'Dernier relevé disponible'
+const readingTime = new Intl.DateTimeFormat('fr-CH', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Zurich' })
+type TimedPoint = ChartPoint & { at: number }
+
+export function hourlyChartPoints(readings: TimedPoint[], now: number, closedLabel: (date: string) => string | undefined) {
+  const graph: TimedPoint[] = []
+  let index = 0
+  const end = Math.floor(now / hour) * hour
+  for (let at = end - 23 * hour; at <= end; at += hour) {
+    while (index < readings.length && readings[index].at <= at) index++
+    const previous = readings[index - 1]
+    const date = dayKey(at)
+    if (!previous || previous.value === null) {
+      graph.push({ date, at, value: null })
+      continue
+    }
+    const carried = Boolean(previous.carried) || previous.at <= at - hour
+    const origin = previous.carried ? null : 'Relevé de ' + (previous.date === date ? readingTime : intradayLabel).format(previous.at)
+    const detail = [carried ? closedLabel(date) ?? hourlyCarryLabel : null, origin,
+      carried ? null : previous.detail].filter(Boolean).join(' · ')
+    graph.push({ date, at, value: previous.value, carried, detail })
+  }
+  return graph
+}
+
 export function inPeriod<T extends { date: string }>(points: T[], days: number) {
   if (!Number.isFinite(days)) return points
   const cutoff = daysBefore(dayKey(Date.now()), days - 1)
@@ -137,7 +163,7 @@ export default function DailyChart({ points, label, format, empty, connectGaps =
           const circles = [...event.currentTarget.ownerSVGElement!.querySelectorAll('circle')]
           const next = circles[circles.indexOf(event.currentTarget) + (event.key === 'ArrowLeft' ? -1 : 1)]
           next?.focus()
-        }} aria-label={labelOf(item.point) + ' · ' + format(item.point.value!)}>
+        }} aria-label={labelOf(item.point) + ' · ' + format(item.point.value!) + (item.point.detail ? ' · ' + item.point.detail : '')}>
         <title>{labelOf(item.point) + ' · ' + format(item.point.value!) + (item.point.detail ? ' · ' + item.point.detail : '')}</title></circle>)}
     </svg></div>
     <div className="history-axis"><span>{labelOf(first)}</span><span>{first !== last && labelOf(last)}</span></div>

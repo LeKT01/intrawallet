@@ -174,6 +174,12 @@
 
 .portfolio-view-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .45rem; padding: .1rem var(--card-pad) .75rem; font-size: var(--text-small); }
 .portfolio-view-bar .segments { margin: 0; }
+.portfolio-view-bar .segment-button > span { min-height: 0; padding: 0; border: 0; color: inherit; font: inherit; }
+.portfolio-view-bar .segment-button > .portfolio-view-list { display: none; }
+@media (max-width: 900px) {
+  .portfolio-view-bar .segment-button > .portfolio-view-table { display: none; }
+  .portfolio-view-bar .segment-button > .portfolio-view-list { display: inline; }
+}
 .asset-card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));

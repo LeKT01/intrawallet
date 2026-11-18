@@ -8,7 +8,7 @@ import { unitPrice } from './portfolio'
 import { demoMode } from './demo'
 import { catalogEntry } from './catalog'
 import { fetchIntradayPrices, type QuoteAsset } from './quotes'
-import DailyChart, { formatDay, inPeriod, PeriodButtons, type ChartPoint } from './DailyChart'
+import DailyChart, { formatDay, hourlyChartPoints, inPeriod, PeriodButtons, type ChartPoint } from './DailyChart'
 
 const percent = new Intl.NumberFormat('fr-CH', { style: 'percent', maximumFractionDigits: 2, signDisplay: 'exceptZero' })
 
@@ -37,11 +37,12 @@ export default function AssetHistory({ marks, display, name, official, asset, cr
     const previous = dates.get(day)
     if (!previous || mark.sourceAt > previous.sourceAt || (mark.sourceAt === previous.sourceAt && mark.at > previous.at)) dates.set(day, mark)
   }
-  const today = dayKey(Date.now())
+  const now = Date.now()
+  const today = dayKey(now)
   const venue = market?.code.split('.').at(-1) ?? (listing || catalogEntry(category, reference)?.listing)?.split(':')[0] ?? ''
   const lastSession = category !== 'crypto' && official && !demoMode ? closingSessionForClosedDay(venue, today) : null
   const lastClose = lastSession ? dates.get(lastSession) : undefined
-  const recent = new Map([...intraday, ...marks].filter(mark => mark.sourceAt >= Date.now() - 86400000)
+  const recent = new Map([...intraday, ...marks].filter(mark => mark.sourceAt >= now - 86400000 && mark.sourceAt <= now)
     .sort((a, b) => a.sourceAt - b.sourceAt || a.at - b.at).map(mark => [mark.sourceAt, mark]))
   const series = [...dates].sort(([a], [b]) => a.localeCompare(b)).flatMap(([date, mark], index, entries) => {
     const point = { date, value: mark.price === null ? null : display.convert(mark.price, date), detail: mark.source }
@@ -54,16 +55,22 @@ export default function AssetHistory({ marks, display, name, official, asset, cr
     }
     return points
   })
-  const points: ChartPoint[] = range === 1 ? [...recent].map(([at, mark]) => ({
-    at, date: dayKey(at), value: mark.price === null ? null : display.convert(mark.price, dayKey(at)), detail: mark.source,
-  })) : inPeriod(series, range)
-  if (range === 1 && !points.length && lastClose?.timing === 'close' && lastClose.price !== null) {
-    points.push({ at: lastClose.sourceAt, date: lastSession!, value: display.convert(lastClose.price, lastSession!),
-      detail: 'Marché fermé · dernière clôture' })
+  let points: ChartPoint[]
+  if (range === 1) {
+    const readings = [...recent].map(([at, mark]) => ({
+      at, date: dayKey(at), value: mark.price === null ? null : display.convert(mark.price, dayKey(at)), detail: mark.source,
+    }))
+    if (!readings.length && lastClose?.timing === 'close' && lastClose.price !== null) {
+      readings.push({ at: lastClose.sourceAt, date: lastSession!, value: display.convert(lastClose.price, lastSession!), detail: lastClose.source })
+    }
+    points = hourlyChartPoints(readings, now, date => category !== 'crypto' && official && !demoMode
+      && closingSessionForClosedDay(venue, date) ? 'Marché fermé · dernière clôture disponible' : undefined)
+  } else {
+    points = inPeriod(series, range)
   }
   const first = points.find(point => point.value !== null)?.value
   const last = [...points].reverse().find(point => point.value !== null)?.value
-  const change = first?.gt(0) && last !== undefined && last !== null && points.filter(point => point.value !== null).length > 1
+  const change = (range !== 1 || points.some(point => point.value !== null && !point.carried)) && first?.gt(0) && last !== undefined && last !== null && points.filter(point => point.value !== null).length > 1
     ? last.div(first).minus(1) : null
   let previous: Decimal | null = null
   const rows = points.map(point => {
@@ -77,11 +84,11 @@ export default function AssetHistory({ marks, display, name, official, asset, cr
     ? latest.dailyChange : null
   return <section className="asset-history" aria-labelledby={id}>
     <div className="section-heading"><div><h3 id={id}>Cours de {name}</h3>
-      <p className="hint">{range === 1 ? lastSession ? 'Marché fermé. La dernière clôture disponible est conservée.' : 'Cours horodatés disponibles sur 24 heures.' : demoMode ? 'Cours fictifs par jour.' : official ? 'Prix de marché par jour. Le dernier point peut être la cotation du jour.' : 'Cours et prix d’opération enregistrés dans l’app.'}</p></div>
+      <p className="hint">{range === 1 ? lastSession ? 'Marché fermé. La dernière clôture disponible est conservée.' : 'Un point par heure écoulée. Un point creux reprend le dernier cours disponible.' : demoMode ? 'Cours fictifs par jour.' : official ? 'Prix de marché par jour. Le dernier point peut être la cotation du jour.' : 'Cours et prix d’opération enregistrés dans l’app.'}</p></div>
       <PeriodButtons range={range} choose={setRange} />
     </div>
     <DailyChart points={points} label={'Courbe du cours de ' + name + ' en ' + display.currency}
-      format={value => unitPrice(value, display.currency)} empty={series.length && !points.length ? 'Aucun cours sur cette période.'
+      format={value => unitPrice(value, display.currency)} empty={series.length && points.every(point => point.value === null) ? 'Aucun cours sur cette période.'
         : 'Les points apparaîtront avec les cours disponibles et un taux de change pour la devise choisie.'} />
     {range === 1 && status && <p className="hint" role="status">{status}</p>}
     {range !== 1 && todayChange !== null && <p className="hint">Variation depuis hier <strong>{percent.format(todayChange.toNumber())}</strong></p>}

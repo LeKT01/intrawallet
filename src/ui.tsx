@@ -30,6 +30,8 @@ export function Icon({ name }: { name: IconName }) {
 
 export const timestamp = new Intl.DateTimeFormat('fr-CH', { dateStyle: 'medium', timeStyle: 'short' })
 const percent = new Intl.NumberFormat('fr-CH', { style: 'percent', maximumFractionDigits: 2, signDisplay: 'exceptZero' })
+const share = new Intl.NumberFormat('fr-CH', { style: 'percent', maximumFractionDigits: 1 })
+export const shareLabel = (value: Decimal) => share.format(value.toNumber())
 export const percentLabel = (value: Decimal | null) => value === null ? '—' : percent.format(value.toNumber())
 
 export function Change({ value, children }: { value: Decimal | null; children: ReactNode }) {

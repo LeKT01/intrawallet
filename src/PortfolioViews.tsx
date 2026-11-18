@@ -149,13 +149,13 @@ export function PortfolioView({ holdings, platforms, display, quotes, onOpen, on
       </div>
     </div>
     <div className="portfolio-view-bar">
-      <span className="muted">{matching.length} actif{matching.length !== 1 ? 's' : ''}</span>
+      <span className="muted" role="status">{matching.length} actif{matching.length !== 1 ? 's' : ''}</span>
       <div className="segments motion-segments sliding-nav" role="group" aria-label="Vue du portefeuille" ref={viewIndicator}>
         {(['cards', 'table'] as const).map(view => <button className="secondary segment-button" key={view} type="button"
           aria-pressed={layout === view} onClick={() => {
             setLayout(view)
             saveAppearancePreference('portfolio.layout', view)
-          }}>{view === 'cards' ? 'Cartes' : 'Tableau'}</button>)}
+          }}>{view === 'cards' ? 'Cartes' : <><span className="portfolio-view-table">Tableau</span><span className="portfolio-view-list">Liste</span></>}</button>)}
       </div>
     </div>
     {layout === 'table' || !matching.length
