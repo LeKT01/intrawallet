@@ -5,13 +5,13 @@ body {
     radial-gradient(ellipse 48rem 36rem at 100% 46%, var(--canvas-glow), transparent 80%),
     var(--bg);
 }
-.floating-glass, .mobile-nav, dialog[open] {
+.floating-glass, dialog[open] {
   background: var(--surface);
   border-color: var(--line);
   box-shadow: var(--mist-shadow);
 }
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .floating-glass, .mobile-nav, dialog[open] {
+  .floating-glass, dialog[open] {
     background: var(--mist);
     border-color: var(--mist-edge);
     -webkit-backdrop-filter: blur(14px) saturate(115%);
@@ -267,8 +267,60 @@ body {
   :root:has(dialog[open]) .workspace { overflow: hidden; }
   .workspace-content { padding-bottom: 1rem; }
   .mobile-nav {
-    grid-row: 2; position: relative; inset: auto; transform: none; justify-self: center;
-    width: min(calc(100% - 1.2rem), 32rem); margin: .45rem 0 max(.55rem, env(safe-area-inset-bottom));
+    --dock-gutter: max(.6rem, env(safe-area-inset-left), env(safe-area-inset-right));
+    grid-row: 2; display: flex; gap: .5rem; align-items: center; justify-self: center;
+    width: min(calc(100% - 2 * var(--dock-gutter)), 32rem);
+    margin: .45rem 0 max(.55rem, env(safe-area-inset-bottom));
+  }
+  .mobile-nav-tabs, .mobile-add {
+    --dock-fill: var(--surface);
+    border: 1px solid color-mix(in srgb, var(--mist-edge) 76%, var(--line));
+    border-radius: var(--pill);
+    background:
+      linear-gradient(165deg, color-mix(in srgb, white 13%, transparent), transparent 42%),
+      var(--dock-fill);
+    box-shadow: inset 0 1px 1px var(--reflection), inset 0 -1px 1px var(--line), 0 5px 16px color-mix(in srgb, var(--ink) 11%, transparent);
+  }
+  .mobile-nav-tabs {
+    position: relative; flex: 1; min-width: 0; display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.38fr) minmax(0, 1.05fr) minmax(0, 1fr);
+    padding: .25rem;
+  }
+  .mobile-nav-tabs button {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .2rem;
+    min-width: 0; min-height: 50px; padding: .15rem 0; border: 0; border-radius: var(--pill);
+    background: transparent; color: var(--muted); font-size: clamp(.625rem, 2.7vw, .75rem);
+    font-weight: 700; line-height: 1.15;
+  }
+  .mobile-nav-tabs button svg { width: 20px; height: 20px; }
+  .mobile-nav-tabs :is([aria-current], .selected) { color: var(--accent); background: var(--accent-pale); }
+  .mobile-nav .mobile-nav-tabs[data-indicator="ready"]::before {
+    border-radius: var(--pill);
+    background: linear-gradient(160deg, var(--reflection), transparent 58%), var(--accent-pale);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent);
+  }
+  .mobile-add {
+    --dock-fill: var(--accent);
+    flex: none; display: grid; place-items: center; padding: 0; width: 60px; height: 60px;
+    border-color: color-mix(in srgb, var(--accent) 62%, white);
+    background:
+      radial-gradient(ellipse at 29% 6%, color-mix(in srgb, white 24%, transparent), transparent 64%),
+      var(--dock-fill);
+    color: var(--primary-ink);
+  }
+  .mobile-add svg { width: 27px; height: 27px; }
+  .mobile-add:active:not(:disabled) { filter: brightness(.9); }
+  @media (hover: hover) {
+    .mobile-nav-tabs button:hover { color: var(--accent); }
+    .mobile-add:hover:not(:disabled) { filter: brightness(1.08); }
+  }
+  @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .mobile-nav-tabs, .mobile-add {
+      -webkit-backdrop-filter: blur(22px) saturate(165%);
+      backdrop-filter: blur(22px) saturate(165%);
+    }
+    .mobile-nav-tabs { --dock-fill: color-mix(in srgb, var(--surface) 72%, transparent); }
+    .mobile-add { --dock-fill: color-mix(in srgb, var(--accent) 94%, transparent); }
   }
   .topbar { min-height: 48px; }
   .page-title { margin-bottom: .9rem; }

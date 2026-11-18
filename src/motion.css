@@ -41,7 +41,7 @@ dialog[open].add-actions-dialog[data-closing]::backdrop { animation: glass-fade 
 @keyframes iw-dialog-enter { from { opacity: 0; transform: translateY(var(--sheet-travel, 9px)); } to { opacity: 1; transform: none; } }
 @keyframes iw-dialog-exit { to { opacity: 0; transform: translateY(var(--sheet-travel, 9px)); } }
 @media (max-width: 900px) { .add-actions-dialog { --sheet-travel: 24px; } }
-:root[data-theme-transition] :is(body, .panel, .metric, .sidebar, .mobile-nav, .asset-card, .chart-plot) {
+:root[data-theme-transition] :is(body, .panel, .metric, .sidebar, .mobile-nav-tabs, .mobile-add, .asset-card, .chart-plot) {
   transition: background-color var(--motion-base) ease, color var(--motion-base) ease, border-color var(--motion-base) ease, box-shadow var(--motion-base) ease;
 }
 @media (prefers-reduced-motion: reduce) {
