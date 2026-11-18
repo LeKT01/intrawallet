@@ -1,6 +1,6 @@
 import { flushSync } from 'react-dom'
 import { closeAnimatedDialog, usePageReveal, useSlidingIndicator } from './motion'
-import Appearance, { useAppearance } from './Appearance'
+import Appearance, { readAppearancePreference, saveAppearancePreference, useAppearance } from './Appearance'
 import { nativeApp } from './runtime'
 import useAndroidUpdate from './useAndroidUpdate'
 import InstallHelp from './InstallHelp'
@@ -80,6 +80,10 @@ export default function App() {
   const [route, setRoute] = useState(readRoute)
   const { section } = route
   const appearance = useAppearance()
+  const [sidebarMode, setSidebarMode] = useState(() =>
+    readAppearancePreference('sidebar', ['compact', 'expanded'] as const, 'compact'))
+  const sidebarExpanded = sidebarMode === 'expanded'
+  const sidebarAction = sidebarExpanded ? 'Réduire la barre latérale' : 'Développer la barre latérale'
   const [autoRefresh, setAutoRefresh] = useState(initialAutoRefresh)
   const [consolidatedView, setConsolidatedView] = useState(false)
   const [groupEditor, setGroupEditor] = useState<InvestmentGroup | 'new' | null>(null)
@@ -110,7 +114,7 @@ export default function App() {
   const [lastChecked, setLastChecked] = useState<number | null>(null)
   const heading = useRef<HTMLHeadingElement>(null)
   const actionSheet = useRef<HTMLDialogElement>(null)
-  const railIndicator = useSlidingIndicator(section)
+  const railIndicator = useSlidingIndicator(section + '/' + sidebarMode)
   const bottomIndicator = useSlidingIndicator(section)
 
   function openAddActions(trigger: HTMLButtonElement) {
@@ -118,7 +122,7 @@ export default function App() {
     if (!dialog || dialog.open) return
     const bounds = trigger.getBoundingClientRect()
     dialog.style.setProperty('--add-top', Math.ceil(bounds.bottom + 8) + 'px')
-    dialog.style.setProperty('--add-right', Math.max(12, Math.round(window.innerWidth - bounds.right)) + 'px')
+    dialog.style.setProperty('--add-anchor-right', bounds.right + 'px')
     trigger.focus({ preventScroll: true })
     dialog.showModal()
   }
@@ -383,17 +387,28 @@ export default function App() {
     onDelete: (item: JournalItem) => setToDelete({ id: item.value.id, name: item.value.name, type: item.type }),
   }
 
-  return <div className="app-layout">
+  return <div className="app-layout" data-sidebar={sidebarMode}>
     <aside className="sidebar">
-      <button className="brand" onClick={() => navigate('overview')} aria-label="IntraWallet, accueil">
-        <img className="brand-mark" src={import.meta.env.BASE_URL + 'app-icons/intrawallet-wallet-192.png'} alt="" />
+      <button type="button" className="brand sidebar-toggle" aria-label={`IntraWallet · ${sidebarAction}`}
+        aria-expanded={sidebarExpanded} aria-controls="desktop-navigation" onClick={() => {
+          const next = sidebarExpanded ? 'compact' : 'expanded'
+          setSidebarMode(next)
+          saveAppearancePreference('sidebar', next)
+        }}>
+        <span className="sidebar-brand-mark">
+          <img className="brand-mark" src={import.meta.env.BASE_URL + 'app-icons/intrawallet-wallet-192.png'} alt="" />
+          <span className="sidebar-toggle-mark"><Icon name={sidebarExpanded ? 'back' : 'next'} /></span>
+        </span>
+        <span className="rail-label" aria-hidden="true">IntraWallet</span>
+        <span className="rail-tooltip toggle-tooltip" aria-hidden="true">{sidebarAction}</span>
       </button>
-      <nav aria-label="Navigation principale" className="sliding-nav" ref={railIndicator}>
+      <nav id="desktop-navigation" aria-label="Navigation principale" className="sliding-nav" ref={railIndicator}>
         {(Object.keys(sections) as Section[]).map(item => <button type="button" key={item} className={section === item ? 'selected' : ''}
           aria-current={section === item ? 'page' : undefined} aria-label={sections[item]} onClick={() => navigate(item)}><Icon name={item} />
+          <span className="rail-label" aria-hidden="true">{sections[item]}</span>
           <span className="rail-tooltip" aria-hidden="true">{sections[item]}</span></button>)}
       </nav>
-      <button type="button" className="sidebar-footer" aria-label="Sauvegarde locale" onClick={() => navigate('data', 'backup')}><Icon name="lock" /><span className="rail-tooltip" aria-hidden="true">Sauvegarde locale</span></button>
+      <button type="button" className="sidebar-footer" aria-label="Sauvegarde locale" onClick={() => navigate('data', 'backup')}><Icon name="lock" /><span className="rail-label" aria-hidden="true">Sauvegarde locale</span><span className="rail-tooltip" aria-hidden="true">Sauvegarde locale</span></button>
     </aside>
     <nav className="mobile-nav sliding-nav" aria-label="Navigation mobile" ref={bottomIndicator}>
       <button type="button" aria-current={section === 'overview' ? 'page' : undefined} onClick={() => navigate('overview')}><Icon name="overview" /><span>Accueil</span></button>

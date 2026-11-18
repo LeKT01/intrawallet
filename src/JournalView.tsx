@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { formatDay } from './DailyChart'
 import { dayKey, type CurrencyDisplay } from './currency'
 import { operationNames, quoteTarget, type Operation, type PortfolioData } from './ledger'
 import { platformKey, quantity, unitPrice } from './portfolio'
@@ -53,7 +54,7 @@ export default function JournalView({ items, platforms, display, sales, onEdit, 
             <span>{label}</span><strong>{count}</strong>
           </button>)}
       </div>
-      <div className="filter-bar">
+      <div className="filter-bar journal-filter-fields">
       <label>Recherche<input type="search" placeholder="Actif ou plateforme" value={query} onChange={event => { setQuery(event.target.value); setPage(0) }} /></label>
       <label>Type<select value={type} onChange={event => { setType(event.target.value); setPage(0) }}>
         <option value="">Tous</option><option value="position">Acquisition initiale</option>
@@ -78,10 +79,10 @@ export default function JournalView({ items, platforms, display, sales, onEdit, 
         return <li key={item.type + '/' + value.id}>
           <span className="journal-asset">
             <span className={'journal-icon ' + (operation?.kind ?? 'initial')}><Icon name={operation?.kind ?? 'wallet'} /></span>
-            <span><strong>{value.name}</strong><small>{operation ? operationNames[operation.kind] : 'Acquisition initiale'} · {position?.acquiredOn ?? timestamp.format(item.at)}</small></span>
+            <span><strong>{value.name}</strong><small>{operation ? operationNames[operation.kind] : 'Acquisition initiale'} · {position?.acquiredOn ? formatDay(position.acquiredOn) : timestamp.format(item.at)}</small></span>
           </span>
-          <span><strong>{value.platform}{operation?.destination ? ' → ' + operation.destination : ''}</strong><small>{quantity(value.quantity)} unité(s)</small></span>
-          <span>
+          <span className="journal-platform"><strong>{value.platform}{operation?.destination ? ' → ' + operation.destination : ''}</strong><small>{quantity(value.quantity)} unité(s)</small></span>
+          <span className="journal-amount">
             {operation && operation.kind !== 'transfer' && <strong>{operation.original ? unitPrice(operation.original.gross, operation.original.currency)
               : display.format(operation.gross, { day })}</strong>}
             {position?.purchase && <strong>{unitPrice(position.purchase.total, position.purchase.currency)}</strong>}
@@ -94,8 +95,10 @@ export default function JournalView({ items, platforms, display, sales, onEdit, 
             {operation?.feeUnits && operation.feeUnits !== '0' && <small>Frais {quantity(operation.feeUnits)} unité(s)</small>}
             {gain !== undefined && <small>Gain réalisé {gain === null ? 'indéterminé' : display.format(gain, { day, signed: true })}</small>}
           </span>
-          <span className="entry-actions"><button className="text-button" onClick={() => onEdit(item)}>Modifier</button>
-            <button className="text-button danger" onClick={() => onDelete(item)}>Supprimer</button></span>
+          <span className="entry-actions">
+            <button type="button" className="icon-button" aria-label="Modifier" title="Modifier" onClick={() => onEdit(item)}><Icon name="edit" /></button>
+            <button type="button" className="icon-button danger" aria-label="Supprimer" title="Supprimer" onClick={() => onDelete(item)}><Icon name="trash" /></button>
+          </span>
         </li>
       })}
     </ul>

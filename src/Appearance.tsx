@@ -89,7 +89,6 @@ function ThemeOptions<T extends keyof typeof themeLabels>({ label, variants, sel
   return <fieldset className="theme-options">
     <legend>{label}</legend>
     {variants.map(variant => <label className="theme-option" key={variant}>
-      <input type="radio" name={label} checked={selected === variant} onChange={() => onSelect(variant)} />
       <span className="theme-preview" data-variant={variant} aria-hidden="true">
         <span className="preview-rail"><i /><i /><i /></span>
         <span className="preview-hero"><small>Patrimoine</small><b>— CHF</b></span>
@@ -98,7 +97,10 @@ function ThemeOptions<T extends keyof typeof themeLabels>({ label, variants, sel
         </span>
         <span className="preview-widget"><i /><i /></span><span className="preview-accent">+</span>
       </span>
-      <strong>{themeLabels[variant]}</strong>
+      <span className="theme-option-label">
+        <strong>{themeLabels[variant]}</strong>
+        <input type="radio" name={label} checked={selected === variant} onChange={() => onSelect(variant)} />
+      </span>
     </label>)}
   </fieldset>
 }
