@@ -31,6 +31,13 @@ export function marketClosedDay(venue: string, date: string) {
   return weekday === 0 || weekday === 6 || Boolean(holidays[venueFor(venue)]?.includes(date))
 }
 
+/** The session preceding a closed calendar day, or null on a trading day. */
+export function closingSessionForClosedDay(venue: string, date: string) {
+  if (!marketClosedDay(venue, date)) return null
+  do { date = daysBefore(date, 1) } while (marketClosedDay(venue, date))
+  return date
+}
+
 function closeMinute(venue: string, date: string) {
   return venue === 'US' && earlyUS.has(date) ? 780 : (schedules[venue]?.[2] ?? 1050)
 }
@@ -55,4 +62,31 @@ export function closeTimestamp(venue: string, day: string) {
   venue = venueFor(venue)
   const noon = Date.parse(day + 'T12:00:00Z')
   return noon + (closeMinute(venue, day) - clock(noon, schedules[venue]?.[0] ?? 'Europe/Zurich').minute) * 60000
+}
+
+export const weekendCarryLabel = 'Marchés actions et ETF fermés · dernier relevé du portefeuille'
+
+/** Adds display points during weekend closures without changing recorded history. */
+export function carryWeekendChartPoints<T>(
+  points: readonly { date: string; value: T | null; detail?: string }[], today: string,
+) {
+  const display: (typeof points)[number][] = []
+  let previous: (typeof points)[number] | undefined
+  for (const next of [...points, undefined]) {
+    const limit = next ? daysBefore(next.date, 1) : today
+    if (previous && previous.value !== null) {
+      for (let date = daysBefore(previous.date, -1); date <= limit && marketClosedDay('', date); date = daysBefore(date, -1)) {
+        display.push({ date, value: previous.value, detail: weekendCarryLabel })
+      }
+    }
+    if (next) {
+      const last = display.at(-1)
+      previous = next.value === null && last?.value != null
+        && last.date === daysBefore(next.date, 1) && marketClosedDay('', next.date)
+        ? { date: next.date, value: last.value, detail: weekendCarryLabel }
+        : next
+      display.push(previous)
+    }
+  }
+  return display
 }

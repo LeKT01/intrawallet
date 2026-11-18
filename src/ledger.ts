@@ -1,7 +1,7 @@
 import { Decimal } from 'decimal.js'
 import { assetKey, platformKey, type Category, type Position } from './portfolio.ts'
 import { dayKey, daysBefore } from './currency.ts'
-import { marketClosedDay } from './marketCalendar.ts'
+import { closingSessionForClosedDay, marketClosedDay } from './marketCalendar.ts'
 import type { InvestmentGroup } from './groups.ts'
 import { catalogEntry } from './catalog.ts'
 
@@ -68,6 +68,7 @@ export interface HistoryPoint {
   netFlows: Decimal | null
   result: Decimal | null
   reconstructed?: boolean
+  closedMarketCarry?: boolean
   usedOlderPrices?: boolean
   usesNonMarketPrices?: boolean
   transferFees?: Decimal
@@ -109,7 +110,7 @@ export const isMarketMark = (mark: Mark) =>
   mark.kind === 'market' && mark.price !== null && mark.source !== 'Cours manuel' && D(mark.price).gt(0)
 
 export function replay(data: PortfolioData, historical: Mark[] = [],
-  currentRate?: (code: string) => Decimal | null, marketOnly = false) {
+  currentRate?: (code: string) => Decimal | null, marketOnly = false, closedDaysThrough?: string) {
   const pools = new Map<string, Bucket[]>()
   const manualMarks = new Map<string, Mark>()
   const marketMarks = new Map<string, Mark>()
@@ -159,7 +160,7 @@ export function replay(data: PortfolioData, historical: Mark[] = [],
     }
   }
 
-  function record(at: number, endOfDay: boolean) {
+  function record(at: number, endOfDay: boolean, closedMarketCarry = false) {
     if (historical.length && pools.size === 0) return
     const date = dayKey(at)
     let value = D(0)
@@ -173,6 +174,12 @@ export function replay(data: PortfolioData, historical: Mark[] = [],
         if (!mark || mark.price === null) {
           complete = false
           continue
+        }
+        if (closedMarketCarry) {
+          const venue = bucket.asset.market?.code.split('.').at(-1)
+            ?? (bucket.asset.listing || catalogEntry(bucket.asset.category, bucket.asset.reference)?.listing)?.split(':')[0]
+          if (bucket.asset.category === 'crypto' || mark.timing !== 'close' || !isMarketMark(mark)
+            || dayKey(mark.sourceAt) !== closingSessionForClosedDay(venue ?? '', date)) return
         }
         if (!isMarketMark(mark)) usesNonMarketPrices = true
         if (dayKey(mark.sourceAt) !== date) {
@@ -193,11 +200,12 @@ export function replay(data: PortfolioData, historical: Mark[] = [],
         allocation[category] = (allocation[category] ?? D(0)).plus(amount)
       }
     }
+    if (closedMarketCarry && (!complete || !pools.size)) return
     const flows = unknownFlows || pendingOpenings.size > 0 ? null : netFlows
-    const point = { date, at, value: complete ? value : null, usedOlderPrices, usesNonMarketPrices, transferFees, allocation: complete ? allocation : undefined,
+    const point = { date, at, value: complete ? value : null, usedOlderPrices, usesNonMarketPrices, ...(closedMarketCarry ? { closedMarketCarry: true } : {}), transferFees, allocation: complete ? allocation : undefined,
       netFlows: flows, result: complete && flows ? value.minus(flows).minus(transferFees) : null }
     if (endOfDay) history.set(date, point)
-    if (!historical.length && at >= intradayStart) {
+    if (!closedMarketCarry && !historical.length && at >= intradayStart) {
       if (intraday.at(-1)?.at === at) intraday[intraday.length - 1] = point
       else intraday.push(point)
     }
@@ -312,6 +320,13 @@ export function replay(data: PortfolioData, historical: Mark[] = [],
     const next = events[i + 1]
     const endOfDay = !next || dayKey(next.at) !== dayKey(event.at)
     if (endOfDay || (!historical.length && event.at >= intradayStart)) record(event.at, endOfDay)
+    if (endOfDay && closedDaysThrough) {
+      for (let date = daysBefore(dayKey(event.at), -1);
+        date <= closedDaysThrough && (!next || date < dayKey(next.at)) && marketClosedDay('', date);
+        date = daysBefore(date, -1)) {
+        record(Date.parse(date + 'T12:00:00Z'), true, true)
+      }
+    }
   }
 
   const holdings: Holding[] = []
@@ -366,11 +381,13 @@ export function quoteTarget(asset: Pick<Position, 'category' | 'reference'>) {
 export function dailyPortfolioHistory(data: PortfolioData, recorded: HistoryPoint[], historical: Mark[]) {
   const start = firstTrackingDate(data)
   const usable = historical.filter(mark => mark.at >= start)
-  if (!usable.length) return recorded
+  const hasClosings = [...data.marks, ...usable].some(mark => mark.timing === 'close' && isMarketMark(mark))
+  if (!usable.length && !hasClosings) return recorded
   const combined = new Map(recorded.map(point => [point.date, point]))
   let previous: HistoryPoint | undefined
   let index = 0
-  for (const point of replay(data, usable).history) {
+  for (const point of replay(data, usable, undefined, false, hasClosings ? dayKey(Date.now()) : undefined).history) {
+    if (!usable.length && !point.closedMarketCarry) continue
     while (index < recorded.length && recorded[index].date <= point.date) previous = recorded[index++]
     const existing = combined.get(point.date)
     if (point.value === null || (existing?.value != null && !existing.usedOlderPrices)) continue

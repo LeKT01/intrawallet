@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { fetchEodSeries, fetchQuotes, quoteAccess, searchMarket } from '../src/quotes.ts'
 import { searchCatalog } from '../src/catalog.ts'
 import { quoteTarget } from '../src/ledger.ts'
-import { closeTimestamp, latestClosingDay, marketOpen } from '../src/marketCalendar.ts'
+import { closeTimestamp, latestClosingDay, marketOpen, carryWeekendChartPoints } from '../src/marketCalendar.ts'
 
 const eodhd = { code: 'VUAA.XETRA', currency: 'EUR' }
 const etf = { category: 'etf', reference: 'IE00BFMXXD54', name: 'Vanguard S&P 500 UCITS ETF', listing: 'XETR:VUAA' }
@@ -166,4 +166,27 @@ test('le cache crypto permet de relancer après une erreur et de forcer une vér
   status = 429
   assert.match((await fetchQuotes([bitcoin], options, { force: true })).issues[0], /limité les requêtes/)
   assert.equal(valid.marks[0].price, '63000')
+})
+
+test('le graphique global affiche un palier sélectionnable sans combler les jours ouvrés', () => {
+  const points = [
+    { date: '2026-11-11', value: 1945 },
+    { date: '2026-11-13', value: 1920 },
+    { date: '2026-11-16', value: 1850 },
+  ]
+  const chart = carryWeekendChartPoints(points, '2026-11-17')
+  assert.deepEqual(chart.map(({ date, value }) => [date, value]), [
+    ['2026-11-11', 1945], ['2026-11-13', 1920], ['2026-11-14', 1920],
+    ['2026-11-15', 1920], ['2026-11-16', 1850],
+  ])
+  assert.match(chart[2].detail, /fermés/)
+  assert.equal(points.length, 3)
+  const saturday = { date: '2026-11-14', value: 1900 }
+  const mixed = carryWeekendChartPoints([points[1], saturday], '2026-11-15')
+  assert.equal(mixed[1], saturday)
+  assert.equal(mixed[2].value, 1900)
+  const explicitGap = carryWeekendChartPoints([
+    points[1], { date: '2026-11-14', value: null }, { date: '2026-11-16', value: null },
+  ], '2026-11-17')
+  assert.deepEqual(explicitGap.map(point => point.value), [1920, 1920, 1920, null])
 })

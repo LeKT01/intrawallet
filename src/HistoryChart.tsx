@@ -1,9 +1,10 @@
 import { useSlidingIndicator } from './motion'
 import { useId, useState } from 'react'
 import type { HistoryPoint } from './ledger'
-import { daysBefore, type CurrencyDisplay } from './currency'
+import { dayKey, daysBefore, type CurrencyDisplay } from './currency'
+import { carryWeekendChartPoints, marketClosedDay, weekendCarryLabel } from './marketCalendar'
 import { money } from './portfolio'
-import DailyChart, { formatDay, inPeriod, PeriodButtons } from './DailyChart'
+import DailyChart, { formatDay, inPeriod, PeriodButtons, type ChartPoint } from './DailyChart'
 
 export function portfolioPeriod(history: HistoryPoint[], intraday: HistoryPoint[], range: number) {
   const points = range === 1 ? intraday.filter(point => point.at >= Date.now() - 86400000) : inPeriod(history, range)
@@ -14,8 +15,28 @@ export function portfolioPeriod(history: HistoryPoint[], intraday: HistoryPoint[
   return { points, first, last, change }
 }
 
-export default function HistoryChart({ history, selection, display, range, chooseRange, individualOnly }: {
+const hour = 3_600_000
+const hourlyCarryLabel = 'Dernier relevé disponible · aucun nouveau relevé'
+type TimedPoint = ChartPoint & { at: number }
+
+function hourlyChartPoints(readings: TimedPoint[], now: number, showClosedMarkets: boolean) {
+  const graph: TimedPoint[] = []
+  let index = 0
+  const start = Math.ceil((now - 24 * hour) / hour) * hour
+  for (let at = start; at <= now; at += hour) {
+    while (index < readings.length && readings[index].at <= at) graph.push(readings[index++])
+    const previous = readings[index - 1]
+    if (!previous || previous.at === at || previous.value === null) continue
+    const date = dayKey(at)
+    graph.push({ date, at, value: previous.value, carried: true,
+      detail: showClosedMarkets && marketClosedDay('', date) ? weekendCarryLabel : hourlyCarryLabel })
+  }
+  return graph.concat(readings.slice(index))
+}
+
+export default function HistoryChart({ history, selection, display, range, chooseRange, individualOnly, showClosedMarkets }: {
   individualOnly?: boolean
+  showClosedMarkets?: boolean
   history: HistoryPoint[]; selection: ReturnType<typeof portfolioPeriod>
   display: CurrencyDisplay; range: number; chooseRange: (range: number) => void
 }) {
@@ -26,13 +47,39 @@ export default function HistoryChart({ history, selection, display, range, choos
   const { points, first, last } = selection
   const result = recent?.result ?? null
   const flow = recent?.netFlows ?? null
-  const graph = points.map(point => ({
+  const now = Date.now()
+  const today = dayKey(now)
+  const recordedGraph = points.map(point => ({
     date: point.date,
-    at: range === 1 ? point.at : undefined,
+    at: point.at,
     value: point[metric] === null ? null : display.convert(point[metric], point.date),
-    detail: point.usesNonMarketPrices ? 'Prix déclarés ou d’opération inclus' : point.reconstructed ? 'Estimation sur cours historiques'
+    detail: point.closedMarketCarry ? 'Marchés fermés · dernières clôtures' : point.usesNonMarketPrices ? 'Prix déclarés ou d’opération inclus' : point.reconstructed ? 'Estimation sur cours historiques'
       : point.usedOlderPrices ? 'Relevé avec cours antérieurs' : undefined,
   }))
+
+  let graph: ChartPoint[]
+  if (range === 1) {
+    const readings = recordedGraph.filter(point => point.at <= now)
+    const closed = (showClosedMarkets && marketClosedDay('', today))
+      || (recent?.closedMarketCarry && recent.date === today)
+    // A recent daily snapshot can anchor a weekend with no usable intraday readings.
+    const snapshot = closed && !readings.some(point => point.value !== null)
+      ? history.filter(point => point.at <= now && point.at >= now - 72 * hour && point[metric] !== null).at(-1)
+      : undefined
+    const value = snapshot && display.convert(snapshot[metric]!, snapshot.date)
+    if (snapshot && value) {
+      const at = Math.max(snapshot.at, now - 24 * hour)
+      const kept = readings.filter(point => point.at > at)
+      graph = hourlyChartPoints([{ date: dayKey(at), at, value, carried: true,
+        detail: snapshot.closedMarketCarry ? weekendCarryLabel : hourlyCarryLabel }, ...kept], now, Boolean(showClosedMarkets))
+    } else {
+      graph = hourlyChartPoints(readings, now, Boolean(showClosedMarkets))
+    }
+  } else {
+    const dailyGraph = recordedGraph.map(point => ({ date: point.date, value: point.value, detail: point.detail }))
+    graph = showClosedMarkets ? carryWeekendChartPoints(dailyGraph, today) : dailyGraph
+  }
+  const hasWeekendCarry = range !== 1 && graph.some(point => point.detail === weekendCarryLabel)
 
   const daily = new Map(history.map((point, index) => {
     const previous = history[index - 1]
@@ -53,10 +100,12 @@ export default function HistoryChart({ history, selection, display, range, choos
       </div>
     </div>
     {(!first || !last || first === last) && <p className="hint history-coverage">Deux relevés comparables sont nécessaires pour mesurer le résultat sur la période.</p>}
-    <DailyChart key={range + '/' + metric} points={graph} label={(metric === 'value' ? 'Courbe de valeur en ' : 'Courbe du résultat cumulé en ') + display.currency}
+    <DailyChart connectGaps key={range + '/' + metric} points={graph} label={(metric === 'value' ? 'Courbe de valeur en ' : 'Courbe du résultat cumulé en ') + display.currency}
       format={value => (metric === 'result' && value.gt(0) ? '+' : '') + money(value, 2, display.currency)}
       empty={range === 1 ? 'Aucun relevé complet dans les dernières 24 heures.' : metric === 'value' ? 'La courbe apparaîtra avec une valorisation complète et un taux disponible.'
         : 'Le calcul nécessite une valorisation complète et des montants investis connus.'} />
+    {range === 1 && graph.some(point => point.carried) && <p className="hint">Les points horaires creux reprennent le dernier relevé disponible.</p>}
+    {hasWeekendCarry && <p className="hint">Marchés actions et ETF fermés le week-end. Le palier reprend le dernier relevé du portefeuille.</p>}
     <details className="history-details"><summary>Détails du calcul</summary>
     <p className="hint">{range === 1 ? 'Relevés horodatés des dernières 24 heures.' : 'Relevés quotidiens et estimations selon les cours disponibles.'}
       {' '}Le résultat est calculé hors flux d’achat, de vente et d’ouverture.
@@ -67,7 +116,7 @@ export default function HistoryChart({ history, selection, display, range, choos
     </div>
     {display.currency !== 'CHF' && <p className="hint">Le résultat en CHF est converti au taux de référence du jour affiché.</p>}
     {range !== 1 && graph.some((point, index) => point.value === null
-      || (index > 0 && graph[index - 1].date !== daysBefore(point.date, 1))) && <p className="hint">Les jours aux données incomplètes sont laissés vides.</p>}
+      || (index > 0 && graph[index - 1].date !== daysBefore(point.date, 1))) && <p className="hint">Les jours aux données incomplètes restent sans valeur dans le tableau.</p>}
     {points.some(point => point.usesNonMarketPrices) && <p className="hint">Certains relevés historiques utilisent des prix déclarés ou d’opération. Les cours de marché sont prioritaires pour la valorisation actuelle.</p>}
     </details>
     {range !== 1 && points.length > 0 && <details className="daily-table"><summary>Voir les chiffres par jour</summary>
@@ -79,7 +128,7 @@ export default function HistoryChart({ history, selection, display, range, choos
             <td>{point.value === null ? '—' : display.format(point.value, { day: point.date })}</td>
             <td>{change == null ? '—' : display.format(change, { day: point.date, signed: true })}</td>
             <td>{point.result === null ? '—' : display.format(point.result, { day: point.date, signed: true })}</td>
-            <td>{point.usesNonMarketPrices ? 'Prix déclarés ou d’opération' : point.reconstructed ? 'Estimé' : point.usedOlderPrices ? 'Cours antérieurs inclus' : 'Relevé'}</td></tr>
+            <td>{point.closedMarketCarry ? 'Marchés fermés · dernières clôtures' : point.usesNonMarketPrices ? 'Prix déclarés ou d’opération' : point.reconstructed ? 'Estimé' : point.usedOlderPrices ? 'Cours antérieurs inclus' : 'Relevé'}</td></tr>
         })}</tbody>
       </table></div></details>}
   </section>

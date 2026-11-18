@@ -7,7 +7,7 @@ import InstallHelp from './InstallHelp'
 import { Decimal } from 'decimal.js'
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { deleteInvestmentGroup, saveInvestmentGroup, deleteOperation, deletePosition, loadPortfolio, saveMarks, saveOperation, savePosition } from './database'
+import { deleteInvestmentGroup, saveInvestmentGroup, deleteOperation, deletePosition, loadPortfolio, onPortfolioOpenBlocked, saveMarks, saveOperation, savePosition } from './database'
 import { consolidate, platformKey, type Position } from './portfolio'
 import { compareMarketMarks, dailyPortfolioHistory, firstTrackingDate, isMarketMark, quoteTarget, replay, type Mark, type Operation, type PortfolioData } from './ledger'
 import PositionForm from './PositionForm'
@@ -134,6 +134,15 @@ export default function App() {
       return { data: emptyData, view: replay(emptyData), failed: true } as const
     }
   })
+  const isOpening = loaded === undefined
+  const [openingIssue, setOpeningIssue] = useState<'blocked' | 'slow' | null>(null)
+  useEffect(() => {
+    if (!isOpening) return
+    const unsubscribe = onPortfolioOpenBlocked(() => setOpeningIssue('blocked'))
+    const timer = window.setTimeout(() => setOpeningIssue(issue => issue ?? 'slow'), 8000)
+    return () => { unsubscribe(); window.clearTimeout(timer) }
+  }, [isOpening])
+
   const data = loaded?.data ?? emptyData
   const groups = useMemo(() => data.groups ?? [], [data.groups])
   const groupAssets = useMemo(() => groups.flatMap(group => [...group.positions, ...group.operations]), [groups])
@@ -454,6 +463,13 @@ export default function App() {
               <span className="platform-icon"><Icon name={(link.anchor === 'backup' ? 'lock' : link.section) as IconName} /></span>
               <span><strong>{link.label}</strong><small>{link.description}</small></span><Icon name="next" />
             </a>)}</section>)}</div>
+          : !loaded && openingIssue ? <div className="panel blank" role="status">
+            <h2>{openingIssue === 'blocked' ? 'Stockage local bloqué' : 'Ouverture du portefeuille en attente'}</h2>
+            <p>{openingIssue === 'blocked'
+              ? 'Un autre onglet empêche la mise à jour du stockage. Ferme les autres onglets IntraWallet pour reprendre automatiquement.'
+              : 'Le navigateur tarde à ouvrir le stockage. Ferme les autres onglets IntraWallet ou réessaie.'}</p>
+            <button type="button" className="secondary" onClick={() => window.location.reload()}>Réessayer</button>
+          </div>
           : !loaded ? <div className="panel blank loading-panel" role="status" aria-busy="true">
           <span className="loading-line" aria-hidden="true" /><p>Ouverture du portefeuille…</p>
         </div>

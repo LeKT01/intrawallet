@@ -97,7 +97,7 @@ export default function Dashboard({ assets, holdings, display, quotes, history, 
       <footer className="panel-link-footer"><a className="text-button" href="#analytics">Explorer les analyses <Icon name="next" /></a></footer>
     </section>
 
-    <HistoryChart history={history} selection={selection} display={display} range={range} chooseRange={setRange} individualOnly={groupCount > 0} />
+    <HistoryChart showClosedMarkets={!demo && holdings.some(holding => holding.category !== 'crypto')} history={history} selection={selection} display={display} range={range} chooseRange={setRange} individualOnly={groupCount > 0} />
 
     <section className="panel table-panel dashboard-positions" data-reveal>
       <PanelHeading title="Positions principales">
