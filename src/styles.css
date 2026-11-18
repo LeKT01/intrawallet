@@ -266,6 +266,8 @@ input::placeholder { color: var(--muted); opacity: 1; }
 .history-chart .active-point { filter: drop-shadow(0 0 3px color-mix(in srgb, var(--accent) 45%, transparent)); }
 .history-chart circle { fill: currentColor; stroke: var(--surface); stroke-width: 1.4; cursor: crosshair; }
 .history-chart .chart-point { opacity: .42; }
+.history-chart .chart-hourly-carry { fill: var(--surface); stroke: currentColor; opacity: .7; }
+.history-chart .active-point.chart-hourly-carry { opacity: 1; }
 .history-chart circle:focus-visible { outline: none; stroke: var(--ink); stroke-width: 3; }
 .history-axis, .history-stats { display: flex; justify-content: space-between; gap: .4rem .75rem; flex-wrap: wrap; color: var(--muted); font-size: .75rem; }
 .history-axis { margin: .2rem .1rem .65rem; }

@@ -16,6 +16,7 @@ export interface ChartPoint {
   at?: number
   value: Decimal | null
   detail?: string
+  carried?: boolean
 }
 
 export function inPeriod<T extends { date: string }>(points: T[], days: number) {
@@ -127,7 +128,7 @@ export default function DailyChart({ points, label, format, empty, connectGaps =
       <path d={line} className="chart-line" />
       {activeCoord && <line className="chart-crosshair" x1={activeCoord.x}
         x2={activeCoord.x} y1="22" y2="150" />}
-      {coords.map(item => item && <circle key={timeOf(item.point)} cx={item.x} cy={item.y} r={active === item.point ? 5 : 3} className={active === item.point ? 'active-point' : 'chart-point'}
+      {coords.map(item => item && <circle key={timeOf(item.point)} cx={item.x} cy={item.y} r={active === item.point ? 5 : 3} className={(active === item.point ? 'active-point' : 'chart-point') + (item.point.carried ? ' chart-hourly-carry' : '')}
         tabIndex={active === item.point ? 0 : -1} onFocus={() => setSelectedTime(timeOf(item.point))}
         onPointerEnter={() => setSelectedTime(timeOf(item.point))} onClick={() => setSelectedTime(timeOf(item.point))}
         onKeyDown={event => {
@@ -137,7 +138,7 @@ export default function DailyChart({ points, label, format, empty, connectGaps =
           const next = circles[circles.indexOf(event.currentTarget) + (event.key === 'ArrowLeft' ? -1 : 1)]
           next?.focus()
         }} aria-label={labelOf(item.point) + ' · ' + format(item.point.value!)}>
-        <title>{labelOf(item.point) + ' · ' + format(item.point.value!)}{item.point.detail && ' · ' + item.point.detail}</title></circle>)}
+        <title>{labelOf(item.point) + ' · ' + format(item.point.value!) + (item.point.detail ? ' · ' + item.point.detail : '')}</title></circle>)}
     </svg></div>
     <div className="history-axis"><span>{labelOf(first)}</span><span>{first !== last && labelOf(last)}</span></div>
     {hasGaps && <p className="hint">Aucun relevé intermédiaire sur certains intervalles.</p>}
