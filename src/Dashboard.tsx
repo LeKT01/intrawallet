@@ -78,6 +78,7 @@ export default function Dashboard({ assets, holdings, display, quotes, history, 
           {demo ? <span><Icon name="clock" /> Cotations simulées</span> : <>
             <button type="button" className="secondary dashboard-refresh" aria-busy={refreshing}
               onClick={onRefresh} disabled={refreshing}><Icon name="refresh" />{refreshing ? 'Actualisation…' : 'Actualiser les cours'}</button>
+            <span className="sr-only" role="status">{refreshStatus}</span>
             <small>{lastChecked === null ? 'Cours à vérifier' : 'Vérifié le ' + timestamp.format(lastChecked)}</small>
           </>}
         </div>
@@ -147,7 +148,6 @@ export default function Dashboard({ assets, holdings, display, quotes, history, 
       </dl>
       {lastChecked !== null && !demo && <p className="hint">Dernière vérification · {timestamp.format(lastChecked)}</p>}
       {latest && !demo && <p className="hint">Dernier cours daté · {timestamp.format(latest.sourceAt)} · {latest.source}</p>}
-      <p className="sr-only" role="status">{refreshStatus}</p>
     </details>
 
     <details className="panel dashboard-insights"><summary>Résultats et classement</summary>

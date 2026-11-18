@@ -55,7 +55,7 @@ export default function JournalView({ items, platforms, display, sales, onEdit, 
           </button>)}
       </div>
       <div className="filter-bar journal-filter-fields">
-      <label>Recherche<input type="search" placeholder="Actif ou plateforme" value={query} onChange={event => { setQuery(event.target.value); setPage(0) }} /></label>
+      <label>Recherche<input type="search" aria-label="Rechercher une transaction par actif ou plateforme" placeholder="Rechercher…" value={query} onChange={event => { setQuery(event.target.value); setPage(0) }} /></label>
       <label>Type<select value={type} onChange={event => { setType(event.target.value); setPage(0) }}>
         <option value="">Tous</option><option value="position">Acquisition initiale</option>
         {Object.entries(operationNames).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
@@ -68,7 +68,12 @@ export default function JournalView({ items, platforms, display, sales, onEdit, 
       </select></label>
       </div>
     </div>}
-    {!filtered.length && <p className="inline-empty">Aucune transaction pour cette sélection.</p>}
+    {!filtered.length && <div className="inline-empty">
+      <p role="status">{items.length ? 'Aucune transaction pour cette sélection.' : 'Aucune transaction enregistrée.'}</p>
+      {items.length > 0 && <button type="button" className="text-button" onClick={() => {
+        setQuery(''); setType(''); setPlatform(''); setAsset(''); setPage(0)
+      }}>Réinitialiser les filtres</button>}
+    </div>}
     <ul className="journal-list filter-reveal" aria-label="Transactions" key={JSON.stringify([type, query, platform, asset, index])}>
       {filtered.slice(index * pageSize, (index + 1) * pageSize).map(item => {
         const value = item.value

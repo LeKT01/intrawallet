@@ -6,7 +6,7 @@ import type { CurrencyDisplay } from './currency'
 import type { HistoryPoint, Holding, Mark } from './ledger'
 import { categories, consolidate, platformKey, summarize, type Category } from './portfolio'
 import { Allocation, AssetTable, assetSymbol, type AllocationRow } from './PortfolioViews'
-import { Change, Icon, Metric, MoneyText, PanelHeading, percentLabel } from './ui'
+import { Change, Icon, Metric, MoneyText, PanelHeading, percentLabel, shareLabel } from './ui'
 
 const categoryEntries = Object.entries(categories) as [Category, string][]
 
@@ -64,7 +64,7 @@ export function AnalyticsView({ holdings, history, display, individualHistory }:
       <div className="metric-grid embedded">
         <Metric label="Valeur de la sélection">{total.priced ? display.format(total.amount) : '—'}</Metric>
         <Metric label="Actifs dans la sélection">{assets.length}</Metric>
-        <Metric label="Concentration des 3 premiers actifs">{total.amount.gt(0) ? percentLabel(top.div(total.amount)) : '—'}</Metric>
+        <Metric label="Concentration des 3 premiers actifs">{total.amount.gt(0) ? shareLabel(top.div(total.amount)) : '—'}</Metric>
         <Metric label="Gain latent de la sélection"><Change value={total.gain}>{total.gain === null ? '—' : display.format(total.gain, { signed: true })}</Change></Metric>
       </div>
     </section>
@@ -95,7 +95,7 @@ export function AnalyticsView({ holdings, history, display, individualHistory }:
       <div className="filter-bar"><label>Catégorie historique<select value={historyCategory} onChange={event => setHistoryCategory(event.target.value as Category)}>
         {categoryEntries.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
         <PeriodButtons range={range} choose={setRange} minimumDays={7} /></div>
-      <DailyChart points={series} label="Évolution du poids de la catégorie" format={value => value.times(100).toFixed(1) + ' %'}
+      <DailyChart points={series} label="Évolution du poids de la catégorie" format={shareLabel}
         empty="Des relevés complets sont nécessaires pour calculer le poids historique." />
     </section>
   </div>
