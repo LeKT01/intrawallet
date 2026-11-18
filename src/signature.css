@@ -193,7 +193,7 @@ body {
 .space-link { min-height: 4.4rem; padding: .8rem .6rem; }
 .platform-panel summary:hover { background: var(--subtle); }
 .platform-icon { background: var(--subtle); color: var(--muted); }
-.journal-overview button { border-radius: var(--radius-control); min-height: 4.5rem; border-color: var(--panel-edge); background: var(--widget-fill); }
+.journal-overview button { border-radius: var(--radius-control); min-height: 3.25rem; border-color: var(--panel-edge); background: var(--widget-fill); }
 .group-summary { background: var(--panel-fill); }
 .group-summary .metric { border-color: var(--line); }
 .diagnostic-results { font-variant-numeric: tabular-nums; }
@@ -319,9 +319,11 @@ body {
   .platform-panel summary > span:nth-child(3) { grid-column: 2; grid-row: 2; }
   .platform-panel summary > span:nth-child(3) > strong { font-size: 1.2rem; font-variant-numeric: tabular-nums; }
   .platform-panel summary > svg { grid-column: 3; grid-row: 1 / span 2; }
-  .theme-preview { min-height: 6.4rem; }
+  .theme-preview { min-height: 0; }
 }
 @media (max-width: 360px) {
+  .theme-preview { grid-template-columns: .45rem minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: .18rem; padding: .25rem; }
+  .theme-preview .preview-widget, .theme-preview .preview-accent { display: none; }
   .valuation-panel { gap: .4rem; grid-template-columns: minmax(0, 1fr) 4rem; padding: .9rem; }
   .valuation-amount { font-size: 1.8rem; }
   .history-toolbar .period-select { flex: 1; }

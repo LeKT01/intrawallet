@@ -1,21 +1,39 @@
 /* Workspace composition */
 @media (min-width: 901px) {
+  :root { scrollbar-gutter: stable; }
   .app-layout {
     grid-template-columns: 64px minmax(0, 1fr);
     gap: clamp(1.2rem, 2.5vw, 2.5rem);
     padding: 1.15rem clamp(1rem, 2.8vw, 2.75rem) 0;
   }
+  .app-layout[data-sidebar="expanded"] { grid-template-columns: clamp(11rem, 19vw, 14rem) minmax(0, 1fr); }
   .sidebar {
     align-items: center;
     height: calc(100dvh - 2.3rem);
     max-height: 62rem;
-    min-height: 31rem;
+    min-height: 33rem;
     padding: .65rem .42rem;
     border: 0;
     border-radius: 22px;
     box-shadow: none;
   }
-  .sidebar .brand { margin: .2rem 0 1.05rem; padding: 3px; }
+  .sidebar-header { display: grid; justify-items: center; gap: .2rem; width: 100%; margin-bottom: .65rem; }
+  .sidebar .brand { margin: 0; padding: 3px; min-height: 44px; }
+  .sidebar-toggle {
+    position: relative; display: grid; place-items: center; width: 44px; min-height: 44px;
+    padding: 0; border: 0; border-radius: var(--radius-control);
+    color: var(--sidebar-muted); background: transparent;
+  }
+  .sidebar-toggle:hover { color: var(--sidebar-ink); background: var(--sidebar-rule); }
+  .rail-label { display: none; }
+  [data-sidebar="expanded"] .sidebar-header { grid-template-columns: minmax(0, 1fr) auto; padding-inline: .35rem; }
+  [data-sidebar="expanded"] .sidebar .brand { justify-self: start; gap: .45rem; }
+  [data-sidebar="expanded"] .rail-label { display: inline; }
+  [data-sidebar="expanded"] .sidebar nav button, [data-sidebar="expanded"] .sidebar-footer {
+    justify-content: flex-start; width: 100%; padding-inline: .7rem;
+  }
+  [data-sidebar="expanded"] .rail-tooltip:not(.toggle-tooltip) { display: none; }
+  [data-sidebar="expanded"] .sidebar-footer { align-self: stretch; }
   .sidebar nav { width: 100%; justify-items: center; gap: .2rem; }
   .sidebar nav button, .sidebar-footer {
     position: relative;
@@ -91,11 +109,12 @@
 
 /* Preferences and secondary views */
 .appearance-panel { display: grid; gap: var(--section-gap); }
-.appearance-controls { display: flex; flex-wrap: wrap; gap: .65rem 1rem; }
-.appearance-controls label { display: grid; min-width: min(100%, 10rem); gap: .35rem; color: var(--muted); font-size: var(--text-small); }
+.appearance-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem; }
+.appearance-controls label { display: grid; min-width: 0; gap: .35rem; color: var(--muted); font-size: .82rem; font-weight: 650; }
+.appearance-controls select { width: 100%; }
 .variant-grid, .platform-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--section-gap); align-items: start; }
 .theme-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; margin: 0; padding: 0; min-width: 0; border: 0; }
-.theme-options legend { font-size: var(--text-small); color: var(--muted); padding: 0; margin-bottom: .55rem; }
+.theme-options legend { font-size: .84rem; font-weight: 650; color: var(--ink); padding: 0; margin-bottom: .55rem; }
 .theme-option {
   display: grid;
   position: relative;
@@ -110,7 +129,9 @@
 }
 .theme-option:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .theme-option:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
-.theme-option input { position: absolute; inset: .65rem .65rem auto auto; z-index: 1; margin: 0; accent-color: var(--accent); }
+.theme-option-label { display: flex; align-items: center; justify-content: space-between; gap: .4rem; min-height: 2rem; padding-inline: .25rem; }
+.theme-option-label strong { overflow-wrap: anywhere; }
+.theme-option input { flex: none; margin: 0; accent-color: var(--accent); }
 .preview-rail { background: #242326; }
 .preview-card { display: grid; align-content: center; gap: .2rem; padding-inline: .3rem; background: var(--preview-surface); }
 .preview-card i { width: 68%; height: 2px; border-radius: 2px; background: var(--preview-ink); opacity: .54; }
@@ -151,12 +172,23 @@
 .asset-card-value > strong { font-size: 1.16rem; letter-spacing: -.035em; }
 
 .journal-overview { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .55rem; padding: 0 var(--card-pad) .85rem; }
-.journal-overview button { display: grid; justify-items: start; gap: .16rem; padding: .65rem; text-align: start; }
-.journal-overview button span { font-size: var(--text-small); }
+.journal-overview button { display: flex; justify-content: space-between; gap: .4rem; padding: .65rem .85rem; text-align: start; }
+.journal-overview button span { font-size: .83rem; overflow-wrap: anywhere; }
 .journal-overview button strong { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
 .journal-overview button[aria-pressed="true"] { background: var(--accent-pale); color: var(--accent); border-color: var(--accent-line); }
 .journal-list { gap: 0; padding-inline: var(--card-pad); }
 .journal-list li { border-width: 1px 0 0; border-radius: 0; background: transparent; }
+.journal-filters > .journal-filter-fields {
+  display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 1fr);
+  padding-inline: var(--card-pad);
+}
+.journal-filter-fields label { min-width: 0; }
+.journal-filter-fields :is(input, select) { width: 100%; max-width: none; }
+.journal-amount { text-align: end; font-variant-numeric: tabular-nums; }
+.journal-list .entry-actions { justify-content: end; gap: .35rem; }
+.journal-list .entry-actions .icon-button { min-height: 44px; }
+.journal-list .entry-actions .danger { color: var(--negative); }
+.journal-list .entry-actions .danger:hover { background: var(--negative-bg); }
 .platform-workspace { display: grid; gap: var(--section-gap); }
 .platform-cards > :open { grid-column: 1 / -1; }
 .space-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -167,6 +199,13 @@
 @media (max-width: 670px) {
   .variant-grid, .platform-cards, .space-grid { grid-template-columns: minmax(0, 1fr); }
   .journal-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .journal-filters > .journal-filter-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .journal-list li { grid-template-columns: minmax(0, 3fr) minmax(5.85rem, 2fr); column-gap: .6rem; row-gap: .35rem; padding-inline: 0; align-items: start; }
+  .journal-list .journal-amount { grid-column: 2; grid-row: 1; }
+  .journal-list .journal-platform { grid-column: 1; grid-row: 2; padding-inline-start: calc(35px + .58rem); align-self: center; }
+  .journal-list .entry-actions { grid-column: 2; grid-row: 2; }
+  .theme-options + .theme-options { border-top: 1px solid var(--line); padding-top: .2rem; }
+  .theme-options + .theme-options legend { padding-inline-end: .5rem; }
 }
 @media (max-width: 480px) {
   .asset-card-grid { grid-template-columns: minmax(0, 1fr); }
