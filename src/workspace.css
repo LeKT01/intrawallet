@@ -145,8 +145,11 @@
 .appearance-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem; }
 .appearance-controls label { display: grid; min-width: 0; gap: .35rem; color: var(--muted); font-size: .82rem; font-weight: 650; }
 .appearance-controls select { width: 100%; }
-.variant-grid, .platform-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--section-gap); align-items: start; }
+.platform-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--section-gap); align-items: start; }
 .theme-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; margin: 0; padding: 0; min-width: 0; border: 0; }
+@media (min-width: 901px) {
+  .theme-options { grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); }
+}
 .theme-options legend { font-size: .84rem; font-weight: 650; color: var(--ink); padding: 0; margin-bottom: .55rem; }
 .theme-option {
   display: grid;
@@ -237,15 +240,13 @@
 .settings-panel, .preference-panel, .space-panel { padding: var(--card-pad); }
 .add-actions-dialog[open] { animation: glass-enter var(--motion) both; }
 @media (max-width: 670px) {
-  .variant-grid, .platform-cards, .space-grid { grid-template-columns: minmax(0, 1fr); }
+  .platform-cards, .space-grid { grid-template-columns: minmax(0, 1fr); }
   .journal-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .journal-filters > .journal-filter-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .journal-list li { grid-template-columns: minmax(0, 3fr) minmax(5.85rem, 2fr); column-gap: .6rem; row-gap: .35rem; padding-inline: 0; align-items: start; }
   .journal-list .journal-amount { grid-column: 2; grid-row: 1; }
   .journal-list .journal-platform { grid-column: 1; grid-row: 2; padding-inline-start: calc(35px + .58rem); align-self: center; }
   .journal-list .entry-actions { grid-column: 2; grid-row: 2; }
-  .theme-options + .theme-options { border-top: 1px solid var(--line); padding-top: .2rem; }
-  .theme-options + .theme-options legend { padding-inline-end: .5rem; }
 }
 @media (max-width: 480px) {
   .asset-card-grid { grid-template-columns: minmax(0, 1fr); }

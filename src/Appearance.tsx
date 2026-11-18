@@ -61,7 +61,7 @@ export function useAppearance() {
     }
   }, [theme, variant, density])
 
-  return { mode, setMode, light, setLight, dark, setDark, density, setDensity, logo: themeLogo(variant) }
+  return { mode, setMode, theme, light, setLight, dark, setDark, density, setDensity, logo: themeLogo(variant) }
 }
 
 export default function Appearance({ appearance }: { appearance: ReturnType<typeof useAppearance> }) {
@@ -83,16 +83,15 @@ export default function Appearance({ appearance }: { appearance: ReturnType<type
         <option value="comfortable">Confortable</option><option value="compact">Compacte</option>
       </select></label>
     </div>
-    <div className="variant-grid">
-      <ThemeOptions label="Variantes claires" variants={lightVariants} selected={appearance.light} onSelect={variant => {
-        saveAppearancePreference('theme.light', variant)
-        appearance.setLight(variant)
-      }} />
-      <ThemeOptions label="Variantes sombres" variants={darkVariants} selected={appearance.dark} onSelect={variant => {
+    {appearance.theme === 'dark'
+      ? <ThemeOptions label="Variantes sombres" variants={darkVariants} selected={appearance.dark} onSelect={variant => {
         saveAppearancePreference('theme.dark', variant)
         appearance.setDark(variant)
       }} />
-    </div>
+      : <ThemeOptions label="Variantes claires" variants={lightVariants} selected={appearance.light} onSelect={variant => {
+        saveAppearancePreference('theme.light', variant)
+        appearance.setLight(variant)
+      }} />}
   </section>
 }
 
