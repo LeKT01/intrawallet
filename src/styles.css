@@ -261,6 +261,7 @@ input::placeholder { color: var(--muted); opacity: 1; }
 .history-chart { width: 100%; height: clamp(145px, 19vw, 255px); grid-column: 1; grid-row: 2; display: block; color: var(--accent); touch-action: pan-y; }
 .history-chart line { stroke: var(--chart-grid); stroke-width: 1; }
 .history-chart .chart-crosshair { stroke: currentColor; stroke-width: 1.2; stroke-dasharray: 4 4; }
+.history-chart .chart-missing { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-dasharray: 3 3; opacity: .65; vector-effect: non-scaling-stroke; }
 .chart-line, .chart-glow { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .chart-glow { stroke-width: 7; opacity: .12; pointer-events: none; }
 .history-chart .active-point { filter: drop-shadow(0 0 3px color-mix(in srgb, var(--accent) 45%, transparent)); }

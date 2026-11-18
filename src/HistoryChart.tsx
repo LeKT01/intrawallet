@@ -62,7 +62,7 @@ export default function HistoryChart({ history, selection, display, range, choos
       </div>
     </div>
     {(!first || !last || first === last) && <p className="hint history-coverage">Deux relevés comparables sont nécessaires pour mesurer le résultat sur la période.</p>}
-    <DailyChart key={range + '/' + metric} points={graph} label={(metric === 'value' ? 'Courbe de valeur en ' : 'Courbe du résultat cumulé en ') + display.currency}
+    <DailyChart connectGaps key={range + '/' + metric} points={graph} label={(metric === 'value' ? 'Courbe de valeur en ' : 'Courbe du résultat cumulé en ') + display.currency}
       format={value => (metric === 'result' && value.gt(0) ? '+' : '') + money(value, 2, display.currency)}
       empty={range === 1 ? 'Aucun relevé complet dans les dernières 24 heures.' : metric === 'value' ? 'La courbe apparaîtra avec une valorisation complète et un taux disponible.'
         : 'Le calcul nécessite une valorisation complète et des montants investis connus.'} />
@@ -77,7 +77,7 @@ export default function HistoryChart({ history, selection, display, range, choos
     </div>
     {display.currency !== 'CHF' && <p className="hint">Le résultat en CHF est converti au taux de référence du jour affiché.</p>}
     {range !== 1 && graph.some((point, index) => point.value === null
-      || (index > 0 && graph[index - 1].date !== daysBefore(point.date, 1))) && <p className="hint">Les jours aux données incomplètes sont laissés vides.</p>}
+      || (index > 0 && graph[index - 1].date !== daysBefore(point.date, 1))) && <p className="hint">Les jours aux données incomplètes restent sans valeur dans le tableau.</p>}
     {points.some(point => point.usesNonMarketPrices) && <p className="hint">Certains relevés historiques utilisent des prix déclarés ou d’opération. Les cours de marché sont prioritaires pour la valorisation actuelle.</p>}
     </details>
     {range !== 1 && points.length > 0 && <details className="daily-table"><summary>Voir les chiffres par jour</summary>

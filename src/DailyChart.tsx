@@ -37,11 +37,12 @@ export function PeriodButtons({ range, choose, minimumDays = 1 }: { range: numbe
   </label></>
 }
 
-export default function DailyChart({ points, label, format, empty }: {
+export default function DailyChart({ points, label, format, empty, connectGaps = false }: {
   points: ChartPoint[]
   label: string
   format: (value: Decimal) => string
   empty: string
+  connectGaps?: boolean
 }) {
   const fillId = useId()
   const [selectedTime, setSelectedTime] = useState<number>()
@@ -84,6 +85,12 @@ export default function DailyChart({ points, label, format, empty }: {
     }, 'M' + start.x.toFixed(2) + ' ' + start.y.toFixed(2))
   })
 
+  const missingSegments = connectGaps ? segments.slice(1).map((segment, index) => {
+    const before = segments[index].at(-1)!
+    const after = segment[0]
+    return `M${before.x} ${before.y} L${after.x} ${after.y}`
+  }) : []
+
   function selectNearest(event: PointerEvent<SVGSVGElement>) {
     const bounds = event.currentTarget.getBoundingClientRect()
     if (!bounds.width) return
@@ -109,6 +116,7 @@ export default function DailyChart({ points, label, format, empty }: {
         const area = paths[index] + ' L' + segment.at(-1)!.x + ' 150 L' + segment[0].x + ' 150 Z'
         return <path className="chart-area" key={segment[0].x} d={area} style={{ fill: 'url(#' + fillId + ')' }} />
       })}
+      {missingSegments.length > 0 && <path d={missingSegments.join(' ')} className="chart-missing" aria-hidden="true" />}
       <path d={paths.join(' ')} className="chart-glow" aria-hidden="true" />
       <path d={paths.join(' ')} className="chart-line" />
       {activeCoord && <line className="chart-crosshair" x1={activeCoord.x}
@@ -126,5 +134,6 @@ export default function DailyChart({ points, label, format, empty }: {
         <title>{labelOf(item.point) + ' · ' + format(item.point.value!)}{item.point.detail && ' · ' + item.point.detail}</title></circle>)}
     </svg></div>
     <div className="history-axis"><span>{labelOf(first)}</span><span>{first !== last && labelOf(last)}</span></div>
+    {missingSegments.length > 0 && <p className="hint">Liaisons en pointillés · aucun relevé intermédiaire.</p>}
   </>
 }
