@@ -54,10 +54,20 @@ dialog[open].add-actions-dialog[data-closing]::backdrop { animation: glass-fade 
 .filter-reveal { animation: iw-card-in 210ms var(--ease-premium) both; }
 
 @media (prefers-reduced-motion: no-preference) {
+  .mobile-add svg { transition: scale 100ms ease-out; }
+  .mobile-add:active:not(:disabled) svg { scale: .88; }
+  .mobile-nav:has(+ .add-actions-dialog[open]) .mobile-add svg {
+    animation: iw-add-pop 220ms var(--ease-premium);
+  }
   :root { view-transition-name: none; }
   .workspace-content { view-transition-name: iw-workspace; }
   ::view-transition { pointer-events: none; }
   ::view-transition-group(iw-workspace) { animation-duration: var(--motion-fast); }
   ::view-transition-old(iw-workspace) { animation: glass-fade var(--motion-fast) ease-out reverse both; }
   ::view-transition-new(iw-workspace) { animation: none; }
+}
+@keyframes iw-add-pop {
+  from { scale: .88; }
+  58% { scale: 1.14; }
+  to { scale: 1; }
 }

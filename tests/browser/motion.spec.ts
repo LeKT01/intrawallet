@@ -44,11 +44,15 @@ test('la feuille mobile se révèle, se ferme et rend le focus au bouton Ajouter
   await add.click()
   const sheet = page.getByRole('dialog', { name: 'Ajouter' })
   await expect(sheet).toBeVisible()
+  await expect(page.locator('.mobile-add svg')).toHaveCSS('animation-name', 'iw-add-pop')
   expect(await sheet.evaluate(node => getComputedStyle(node).animationName)).toBe('iw-dialog-enter')
   expect(await sheet.evaluate(node => getComputedStyle(node).getPropertyValue('--sheet-travel').trim())).toBe('24px')
   await page.keyboard.press('Escape')
   await expect(sheet).not.toBeVisible()
   await expect(add).toBeFocused()
+  await add.press('Enter')
+  await expect(sheet).toBeVisible()
+  await expect(page.locator('.mobile-add svg')).toHaveCSS('animation-name', 'iw-add-pop')
 })
 
 test('le mouvement réduit affiche le dashboard et ouvre les actions sans mouvement', async ({ page }) => {
@@ -60,6 +64,7 @@ test('le mouvement réduit affiche le dashboard et ouvre les actions sans mouvem
   await page.getByRole('button', { name: 'Ouvrir les actions d’ajout' }).click()
   const sheet = page.getByRole('dialog', { name: 'Ajouter' })
   expect(await sheet.evaluate(node => getComputedStyle(node).animationName)).toBe('none')
+  await expect(page.locator('.mobile-add svg')).toHaveCSS('animation-name', 'none')
   await sheet.getByRole('button', { name: 'Ajouter un investissement' }).click()
   const form = page.getByRole('dialog', { name: 'Ajouter une position' })
   await expect(form).toBeVisible()
