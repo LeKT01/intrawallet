@@ -115,7 +115,7 @@ export default function App() {
   const heading = useRef<HTMLHeadingElement>(null)
   const actionSheet = useRef<HTMLDialogElement>(null)
   const railIndicator = useSlidingIndicator(section + '/' + sidebarMode)
-  const bottomIndicator = useSlidingIndicator(section)
+  const bottomIndicator = useSlidingIndicator<HTMLDivElement>(section)
 
   function openAddActions(trigger: HTMLButtonElement) {
     const dialog = actionSheet.current
@@ -396,7 +396,7 @@ export default function App() {
           saveAppearancePreference('sidebar', next)
         }}>
         <span className="sidebar-brand-mark">
-          <img className="brand-mark" src={import.meta.env.BASE_URL + 'app-icons/intrawallet-wallet-192.png'} alt="" />
+          <img className="brand-mark" src={appearance.logo} alt="" />
           <span className="sidebar-toggle-mark"><Icon name={sidebarExpanded ? 'back' : 'next'} /></span>
         </span>
         <span className="rail-label" aria-hidden="true">IntraWallet</span>
@@ -410,14 +410,16 @@ export default function App() {
       </nav>
       <button type="button" className="sidebar-footer" aria-label="Sauvegarde locale" onClick={() => navigate('data', 'backup')}><Icon name="lock" /><span className="rail-label" aria-hidden="true">Sauvegarde locale</span><span className="rail-tooltip" aria-hidden="true">Sauvegarde locale</span></button>
     </aside>
-    <nav className="mobile-nav sliding-nav" aria-label="Navigation mobile" ref={bottomIndicator}>
-      <button type="button" aria-current={section === 'overview' ? 'page' : undefined} onClick={() => navigate('overview')}><Icon name="overview" /><span>Accueil</span></button>
-      <button type="button" aria-current={section === 'positions' ? 'page' : undefined} onClick={() => navigate('positions')}><Icon name="positions" /><span>Portefeuille</span></button>
+    <nav className="mobile-nav" aria-label="Navigation mobile">
+      <div className="mobile-nav-tabs sliding-nav" ref={bottomIndicator}>
+        <button type="button" aria-current={section === 'overview' ? 'page' : undefined} onClick={() => navigate('overview')}><Icon name="overview" /><span>Accueil</span></button>
+        <button type="button" aria-current={section === 'positions' ? 'page' : undefined} onClick={() => navigate('positions')}><Icon name="positions" /><span>Portefeuille</span></button>
+        <button type="button" aria-current={section === 'analytics' ? 'page' : undefined} onClick={() => navigate('analytics')}><Icon name="analytics" /><span>Analyses</span></button>
+        <button type="button" aria-current={section === 'space' ? 'page' : undefined} className={spaceSections.includes(section) ? 'selected' : undefined}
+          onClick={() => navigate('space')}><Icon name="space" /><span>Espace</span></button>
+      </div>
       <button type="button" className="mobile-add" aria-label="Ouvrir les actions d’ajout" aria-haspopup="dialog"
         aria-controls="action-sheet" disabled={!ready} onClick={event => openAddActions(event.currentTarget)}><Icon name="plus" /></button>
-      <button type="button" aria-current={section === 'analytics' ? 'page' : undefined} onClick={() => navigate('analytics')}><Icon name="analytics" /><span>Analyses</span></button>
-      <button type="button" aria-current={section === 'space' ? 'page' : undefined} className={spaceSections.includes(section) ? 'selected' : undefined}
-        onClick={() => navigate('space')}><Icon name="space" /><span>Espace</span></button>
     </nav>
     <dialog id="action-sheet" className="add-actions-dialog" ref={actionSheet} aria-labelledby="action-title"
       onCancel={event => { event.preventDefault(); void closeAnimatedDialog(event.currentTarget) }}
@@ -441,7 +443,7 @@ export default function App() {
     <div className="workspace">
       <header className="topbar">
         <button className="brand mobile-brand" onClick={() => navigate('overview')} aria-label="IntraWallet, accueil">
-          <img className="brand-mark" src={import.meta.env.BASE_URL + 'app-icons/intrawallet-wallet-192.png'} alt="" /><span>IntraWallet</span>
+          <img className="brand-mark" src={appearance.logo} alt="" /><span>IntraWallet</span>
         </button>
         <span className="topbar-location"><strong>IntraWallet</strong><span>Portefeuille local</span></span>
         <div className="topbar-actions">

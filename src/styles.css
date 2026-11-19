@@ -58,7 +58,7 @@ input::placeholder { color: var(--muted); opacity: 1; }
 .brand { display: inline-flex; align-items: center; gap: .7rem; padding: 0; border: 0; background: none; font-size: 1rem; font-weight: 820; letter-spacing: -.035em; color: inherit; text-align: left; }
 .sidebar .brand { margin: .2rem .38rem 1.75rem; }
 .brand small { display: block; color: var(--sidebar-muted); letter-spacing: .18em; font-size: .58rem; margin-top: .18rem; }
-.brand-mark { display: block; flex: none; width: 38px; height: 38px; border-radius: 11px; }
+.brand-mark { display: block; flex: none; width: 38px; height: 38px; }
 .sidebar nav { display: grid; gap: .3rem; }
 .sidebar nav button { display: flex; align-items: center; gap: .62rem; min-height: 44px; text-align: left; padding: .5rem .64rem; border: 0;
   border-radius: var(--radius-control); background: transparent; color: var(--sidebar-muted); font-size: .82rem; font-weight: 650;
@@ -383,21 +383,6 @@ fieldset[aria-busy="true"] { cursor: progress; }
   .app-layout { display: block; padding: max(.55rem, env(safe-area-inset-top)) clamp(.75rem, 3vw, 1.65rem) 0; }
   .sidebar, .topbar-location, .header-add { display: none; }
   .mobile-brand { display: inline-flex; min-height: var(--touch); }
-  .mobile-nav { position: fixed; z-index: 3; left: 50%; bottom: max(.55rem, env(safe-area-inset-bottom)); transform: translateX(-50%);
-    width: min(calc(100% - 1.2rem), 32rem); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) 50px minmax(0, 1.1fr) minmax(0, 1fr); gap: .1rem; padding: .3rem;
-    border: 1px solid var(--glass-edge); border-radius: 22px; background: var(--glass); box-shadow: inset 0 1px 0 var(--reflection), var(--float-shadow); backdrop-filter: blur(18px); }
-  .mobile-nav button { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: .2rem;
-    min-height: 49px; min-width: 0; padding: .2rem .05rem; border: 0; border-radius: var(--radius-control);
-    background: transparent; color: var(--muted); font-size: .75rem; font-weight: 700; }
-  .mobile-nav svg { width: 21px; height: 21px; }
-  .mobile-nav .mobile-add { width: 46px; height: 46px; min-height: 46px; justify-self: center; align-self: center;
-    transform: translateY(-5px); border-radius: 50%; color: #fff9f5; background: linear-gradient(145deg, #c55543, #9c332e);
-    border: 1px solid #f9b09b85; box-shadow: 0 4px 11px #6f231c55; }
-  .mobile-nav .mobile-add:hover { background: #a83c31; color: #fff9f5; }
-  .mobile-nav .mobile-add:active { transform: translateY(-4px) scale(.94); }
-  .mobile-nav .mobile-add svg { width: 25px; height: 25px; }
-
-  .mobile-nav [aria-current], .mobile-nav .selected, .mobile-nav button:hover { background: var(--accent-pale); color: var(--accent); }
   .workspace-content { padding-bottom: calc(var(--nav-height) + 1rem + env(safe-area-inset-bottom)); }
   .toast { bottom: calc(var(--nav-height) + env(safe-area-inset-bottom)); }
 }
@@ -422,7 +407,7 @@ fieldset[aria-busy="true"] { cursor: progress; }
 @media (max-width: 620px) {
   .topbar { min-height: 50px; padding-inline: 0; gap: .35rem; }
   .brand { gap: .36rem; font-size: .83rem; }
-  .brand-mark { width: 32px; height: 32px; border-radius: 8px; }
+  .brand-mark { width: 32px; height: 32px; }
   .topbar-actions { gap: .25rem; }
   .currency-picker select { width: 3.8rem; padding-inline: .3rem; }
   .workspace-content { padding-top: 1.02rem; }
@@ -475,11 +460,6 @@ fieldset[aria-busy="true"] { cursor: progress; }
 .diagnostic-results summary .check-tag { margin-left: auto; text-align: center; }
 .diagnostic-results p { color: var(--muted); font-size: var(--text-small); line-height: 1.6; padding: 0 .25rem .75rem; }
 .diagnostic-actions textarea { width: 100%; font: inherit; color: var(--ink); background: var(--surface); padding: .6rem; border: 1px solid var(--line); border-radius: var(--radius-control); }
-
-@media (max-width: 380px) {
-  .mobile-nav { grid-template-columns: minmax(0, 1fr) minmax(0, 1.36fr) 48px minmax(0, 1.1fr) minmax(0, 1fr); }
-  .mobile-nav button { font-size: .6875rem; }
-}
 
 .group-list { display: grid; gap: .85rem; }
 .group-form { display: grid; gap: .8rem; }

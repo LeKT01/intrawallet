@@ -14,7 +14,18 @@ for (const [width, height] of [[320, 568], [375, 812], [390, 844], [440, 956], [
     await page.goto('/?demo=1#overview')
     await expect(page.locator('.valuation-panel')).toBeVisible()
     const nav = page.locator('.mobile-nav')
+    const capsule = nav.locator('.mobile-nav-tabs')
+    const add = nav.getByRole('button', { name: 'Ouvrir les actions d’ajout' })
     const bounds = await nav.boundingBox()
+    await expect(capsule.getByRole('button')).toHaveText(['Accueil', 'Portefeuille', 'Analyses', 'Espace'])
+    await expect(capsule.getByRole('button', { name: 'Ouvrir les actions d’ajout' })).toHaveCount(0)
+    await expect(add).toBeInViewport({ ratio: 1 })
+    const capsuleBounds = (await capsule.boundingBox())!
+    const addBounds = (await add.boundingBox())!
+    expect(addBounds.x - (capsuleBounds.x + capsuleBounds.width)).toBeGreaterThanOrEqual(6)
+    expect(addBounds.width).toBeGreaterThanOrEqual(44)
+    expect(addBounds.width).toBe(addBounds.height)
+    expect(addBounds.y + addBounds.height / 2).toBe(capsuleBounds.y + capsuleBounds.height / 2)
     const original = (await nav.elementHandle())!
     const monitor = await nav.evaluateHandle(node => {
       const before = node.getBoundingClientRect()
@@ -52,7 +63,6 @@ for (const [width, height] of [[320, 568], [375, 812], [390, 844], [440, 956], [
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Espace')
     await page.goBack()
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Analyses')
-    const add = nav.getByRole('button', { name: 'Ouvrir les actions d’ajout' })
     await add.click()
     const menu = page.getByRole('dialog', { name: 'Ajouter', exact: true })
     await expect(menu).toBeVisible()
