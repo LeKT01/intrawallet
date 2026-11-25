@@ -40,14 +40,15 @@ function parseLatestTrade(html: string) {
 }
 
 async function fetchBody(url: string, accept: string) {
+  let response: Response
   try {
-    const response = await fetch(url, { headers: { Accept: accept }, signal: AbortSignal.timeout(7500) })
-    if (!response.ok) throw new Error('Tradegate HTTP ' + response.status)
-    return await response.text()
+    response = await fetch(url, { headers: { Accept: accept }, signal: AbortSignal.timeout(7500) })
   } catch (error) {
     if (process.platform !== 'win32') throw error
     return fetchWithWindows(url, false, { accept, maxBuffer: 2 * 1024 * 1024 })
   }
+  if (!response.ok) throw new Error('Tradegate HTTP ' + response.status)
+  return await response.text()
 }
 
 export function parseOrderBook(html: string) {

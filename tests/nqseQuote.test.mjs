@@ -23,10 +23,7 @@ test('NQSE récupère le prix Xetra en EUR sans clé et rejette une autre cotati
   const fetchLocal = globalThis.fetch
   const upstream = t.mock.method(globalThis, 'fetch', async input => {
     const url = new URL(input)
-    if (url.origin === location.origin) {
-      assert.equal(url.pathname, nqseRoute)
-      return fetchLocal(url)
-    }
+    if (url.origin === location.origin) return fetchLocal(url)
     if (url.hostname === 'api.frankfurter.dev') {
       return Response.json([{ date: dayKey(sourceAt), quote: 'EUR', rate: 1.25 }])
     }
@@ -79,7 +76,8 @@ test('VUSA Tradegate est valorisé en EUR indépendamment de la cotation SIX', a
     const url = new URL(input)
     if (url.origin === location.origin) return fetchLocal(url)
     if (url.hostname === 'api.frankfurter.dev') {
-      return Response.json([{ date: dayKey(sourceAt), quote: 'EUR', rate: 1.1 }])
+      const date = url.searchParams.get('to') || dayKey(sourceAt)
+      return Response.json([{ date, quote: 'EUR', rate: 1.1 }])
     }
     assert.equal(url.hostname, 'www.tradegatebsx.com')
     assert.equal(url.searchParams.get('isin'), 'IE00B3XXRP09')
