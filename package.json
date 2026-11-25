@@ -1,6 +1,6 @@
 {
   "name": "portefeuille-local",
-  "version": "0.3.0-beta.8",
+  "version": "1.0.1-beta.2",
   "description": "Suivi local d’un portefeuille personnel",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 4173 --strictPort",
