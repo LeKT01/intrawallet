@@ -1,7 +1,9 @@
 import { useLayoutEffect, useState } from 'react'
+import { setLauncherIcon } from './launcherIcon'
 
 const modes = ['light', 'dark', 'system'] as const
 const densities = ['comfortable', 'compact'] as const
+const launcherIcons = ['automatic', 'default', 'champagne', 'bleu', 'emeraude'] as const
 const lightVariants = ['coral', 'champagne'] as const
 const darkVariants = ['graphite', 'oled', 'bleu', 'emeraude'] as const
 const themeLabels = {
@@ -35,6 +37,7 @@ export function useAppearance() {
   const [light, setLight] = useState(() => readAppearancePreference('theme.light', lightVariants, 'coral'))
   const [dark, setDark] = useState(() => readAppearancePreference('theme.dark', darkVariants, 'graphite'))
   const [density, setDensity] = useState(() => readAppearancePreference('density', densities, 'comfortable'))
+  const [launcherIcon, setLauncherIconPreference] = useState(() => readAppearancePreference('launcher-icon', launcherIcons, 'automatic'))
 
   const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
   const theme = mode === 'system' ? (systemDark ? 'dark' : 'light') : mode
@@ -61,7 +64,14 @@ export function useAppearance() {
     }
   }, [theme, variant, density])
 
-  return { mode, setMode, theme, light, setLight, dark, setDark, density, setDensity, logo: themeLogo(variant) }
+  useLayoutEffect(() => {
+    const chosen = launcherIcon === 'automatic'
+      ? (variant === 'champagne' ? 'champagne' : variant === 'bleu' ? 'bleu' : variant === 'emeraude' ? 'emeraude' : 'default')
+      : launcherIcon
+    void setLauncherIcon(chosen)
+  }, [launcherIcon, variant])
+
+  return { mode, setMode, theme, light, setLight, dark, setDark, density, setDensity, launcherIcon, setLauncherIconPreference, logo: themeLogo(variant) }
 }
 
 export default function Appearance({ appearance }: { appearance: ReturnType<typeof useAppearance> }) {
@@ -81,6 +91,17 @@ export default function Appearance({ appearance }: { appearance: ReturnType<type
         appearance.setDensity(next)
       }}>
         <option value="comfortable">Confortable</option><option value="compact">Compacte</option>
+      </select></label>
+      <label>Icône Android<select aria-label="Icône Android" value={appearance.launcherIcon} onChange={event => {
+        const next = event.target.value as (typeof launcherIcons)[number]
+        saveAppearancePreference('launcher-icon', next)
+        appearance.setLauncherIconPreference(next)
+      }}>
+        <option value="automatic">Automatique selon le thème</option>
+        <option value="default">Signature</option>
+        <option value="champagne">Champagne</option>
+        <option value="bleu">Bleu Glacier</option>
+        <option value="emeraude">Émeraude</option>
       </select></label>
     </div>
     {appearance.theme === 'dark'
