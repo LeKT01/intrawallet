@@ -21,16 +21,16 @@
 
         </activity>
 
-        <activity-alias android:name=".LauncherDefault" android:enabled="true" android:exported="true" android:icon="@mipmap/ic_launcher_default" android:roundIcon="@mipmap/ic_launcher_default_round" android:label="@string/app_name" android:targetActivity=".MainActivity">
+        <activity-alias android:name=".LauncherDefault" android:enabled="true" android:exported="true" android:icon="@mipmap/ic_launcher_default" android:roundIcon="@mipmap/ic_launcher_default" android:label="@string/app_name" android:targetActivity=".MainActivity">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
         </activity-alias>
-        <activity-alias android:name=".LauncherChampagne" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_champagne" android:roundIcon="@mipmap/ic_launcher_champagne_round" android:label="@string/app_name" android:targetActivity=".MainActivity">
+        <activity-alias android:name=".LauncherChampagne" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_champagne" android:roundIcon="@mipmap/ic_launcher_champagne" android:label="@string/app_name" android:targetActivity=".MainActivity">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
         </activity-alias>
-        <activity-alias android:name=".LauncherBleu" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_bleu" android:roundIcon="@mipmap/ic_launcher_bleu_round" android:label="@string/app_name" android:targetActivity=".MainActivity">
+        <activity-alias android:name=".LauncherBleu" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_bleu" android:roundIcon="@mipmap/ic_launcher_bleu" android:label="@string/app_name" android:targetActivity=".MainActivity">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
         </activity-alias>
-        <activity-alias android:name=".LauncherEmeraude" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_emeraude" android:roundIcon="@mipmap/ic_launcher_emeraude_round" android:label="@string/app_name" android:targetActivity=".MainActivity">
+        <activity-alias android:name=".LauncherEmeraude" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_emeraude" android:roundIcon="@mipmap/ic_launcher_emeraude" android:label="@string/app_name" android:targetActivity=".MainActivity">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
         </activity-alias>
 
