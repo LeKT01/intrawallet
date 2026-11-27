@@ -1,5 +1,5 @@
 import { useLayoutEffect, useState } from 'react'
-import { setLauncherIcon } from './launcherIcon'
+import { canChangeLauncherIcon, setLauncherIcon } from './launcherIcon'
 
 const modes = ['light', 'dark', 'system'] as const
 const densities = ['comfortable', 'compact'] as const
@@ -92,7 +92,7 @@ export default function Appearance({ appearance }: { appearance: ReturnType<type
       }}>
         <option value="comfortable">Confortable</option><option value="compact">Compacte</option>
       </select></label>
-      <label>Icône Android<select aria-label="Icône Android" value={appearance.launcherIcon} onChange={event => {
+      {canChangeLauncherIcon && <label>Icône<select aria-label="Icône" value={appearance.launcherIcon} onChange={event => {
         const next = event.target.value as (typeof launcherIcons)[number]
         saveAppearancePreference('launcher-icon', next)
         appearance.setLauncherIconPreference(next)
@@ -102,7 +102,7 @@ export default function Appearance({ appearance }: { appearance: ReturnType<type
         <option value="champagne">Champagne</option>
         <option value="bleu">Bleu Glacier</option>
         <option value="emeraude">Émeraude</option>
-      </select></label>
+      </select></label>}
     </div>
     {appearance.theme === 'dark'
       ? <ThemeOptions label="Variantes sombres" variants={darkVariants} selected={appearance.dark} onSelect={variant => {
