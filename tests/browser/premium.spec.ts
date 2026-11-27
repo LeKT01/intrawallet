@@ -43,6 +43,7 @@ test('les logos suivent la variante active sur desktop et mobile', async ({ page
   const sidebar = page.locator('.sidebar .brand-mark')
   await page.getByLabel('Champagne').check()
   await expect(sidebar).toHaveAttribute('src', /intrawallet-champagne-192[.]png$/)
+  await expect(page.getByRole('combobox', { name: /^Icône(?: Android)?$/ })).toHaveCount(0)
 
   await page.emulateMedia({ colorScheme: 'dark' })
   await page.getByLabel('Bleu Glacier').check()
@@ -53,6 +54,7 @@ test('les logos suivent la variante active sur desktop et mobile', async ({ page
   await page.getByLabel('Émeraude').check()
   await page.reload()
   await expect(root).toHaveAttribute('data-variant', 'emeraude')
+  await expect(page.getByRole('combobox', { name: /^Icône(?: Android)?$/ })).toHaveCount(0)
   const mobileLogo = page.locator('.mobile-brand .brand-mark')
   await expect(mobileLogo).toHaveAttribute('src', /intrawallet-emeraude-192[.]png$/)
   await expect.poll(() => mobileLogo.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(192)
